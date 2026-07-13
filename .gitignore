@@ -1,0 +1,7 @@
+# レンダリング確認用の一時ファイル（スクショ・base64など）
+_*
+*.b64
+
+# OS / editor
+.DS_Store
+node_modules/

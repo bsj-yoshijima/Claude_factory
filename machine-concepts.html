@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Factory Machine Concepts</title>
+<style>
+  html,body{margin:0;background:#101418;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#e6fff4;}
+  #wrap{max-width:1152px;margin:0 auto;padding:14px 8px 40px;}
+  h1{font-size:16px;margin:6px 4px 2px;letter-spacing:.5px;}
+  p.sub{font-size:11px;margin:0 4px 12px;color:#9fdcc6;}
+  #stage{position:relative;display:block;}
+  canvas{
+    image-rendering:pixelated;image-rendering:crisp-edges;
+    width:100%;height:auto;display:block;
+    box-shadow:0 0 40px rgba(0,0,0,.55);border-radius:4px;
+  }
+  #labels{position:absolute;inset:0;pointer-events:none;}
+  .lbl{position:absolute;transform:translate(-50%,0);text-align:center;width:31%;}
+  .lbl .n{font-size:12px;font-weight:700;color:#20302b;
+    text-shadow:0 0 2px #eafff6,0 1px 0 #eafff6,1px 0 0 #eafff6,-1px 0 0 #eafff6;}
+  .lbl .d{display:block;font-size:9.5px;line-height:1.25;color:#33473f;margin-top:1px;
+    text-shadow:0 0 2px #eafff6,0 1px 0 #eafff6;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>工場マシン・配置物 コンセプトボード</h1>
+  <p class="sub">pixel-factory と同じ画風の候補カタログ（見本）。番号で「どれを入れるか」選んでください。動く物は軽くアニメしています。</p>
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="labels"></div>
+  </div>
+</div>
+<script>
+'use strict';
+/* grid: 3 columns x 5 rows, each tile TW x TH; 13 candidates */
+const COLS = 3, TW = 128, TH = 104;
+const ITEMS_N = 13, ROWS = Math.ceil(ITEMS_N/COLS);
+const W = COLS*TW, H = ROWS*TH;
+const cv = document.getElementById('c');
+cv.width = W; cv.height = H;
+let g = cv.getContext('2d');
+g.imageSmoothingEnabled = false;
+
+/* ---------------- palette (same as pixel-factory) ---------------- */
+const P = {
+  ink:'#3b4643', rTop:'#ffffff', rBody:'#f4f8f0', rShade:'#d5e4d7',
+  mint:'#b9ead2', mintD:'#8fd9bf',
+  f1a:'#8bd4b3', f1b:'#95dcbc',
+  sh:'#74c2a1', spl:'#7bd8c0',
+  cardT:'#f2d296', cardF:'#e8c07c', cardS:'#c79a55', tape:'#a97f3f', cardO:'#8a6534',
+  yT:'#fce87e', yF:'#f6d84a', yS:'#d9b32e',
+  beltT:'#5f6b7c', beltF:'#8794a6', beltS:'#4a5464',
+  grT:'#6db885', grF:'#4f9e6e', grS:'#3e845c',
+  navy:'#41526b', navyL:'#5d7091', water:'#9fe6d6',
+  coral:'#f08a68', red:'#e05a4e',
+  coralBody:'#c15f3c', coralShade:'#9d4527',
+  wallF:'#b7c2ba', wallD:'#98a49c', frameL:'#8a938b',
+  vend:'#d0584e', vendD:'#9e3d36', vendG:'#8fd9bf', lampG:'#ffe6a0',
+};
+const INK = P.ink;
+
+/* ---------------- helpers ---------------- */
+function rect(x,y,w,h,c){ g.fillStyle=c; g.fillRect(x|0,y|0,w|0,h|0); }
+function px(x,y,c){ rect(x,y,1,1,c); }
+function hline(x,y,w,c){ rect(x,y,w,1,c); }
+function vline(x,y,h,c){ rect(x,y,1,h,c); }
+function obox(x,y,w,h,fill){ rect(x,y,w,h,INK); rect(x+1,y+1,w-2,h-2,fill); }
+function cube(x,y,w,h,d,ct,cf,cs){
+  for(let i=1;i<=d;i++) hline(x+2*i, y-i, w, ct);
+  for(let i=1;i<=d;i++) rect(x+w+2*(i-1), y-i, 2, h, cs);
+  rect(x,y,w,h,cf);
+  vline(x+w, y-1, h, INK);
+  for(let i=1;i<=d;i++) hline(x+w+2*(i-1), y-i, 2, INK);
+  vline(x-1, y, h, INK);
+  hline(x-1, y+h, w+1, INK);
+  for(let i=1;i<=d;i++) hline(x+w+2*(i-1), y+h-i, 2, INK);
+  vline(x+w+2*d, y-d, h, INK);
+  hline(x+2*d-1, y-d-1, w+2, INK);
+  for(let i=1;i<=d;i++) hline(x+2*i-2, y-i, 2, INK);
+}
+function shadow(cx,fy,hw){ hline(cx-hw+1, fy-2, hw*2-2, P.sh); hline(cx-hw, fy-1, hw*2, P.sh); }
+function cbox(x,y,w,h,d){
+  cube(x,y,w,h,d,P.cardT,P.cardF,P.cardS);
+  const tx=x+(w>>1)-1; rect(tx,y+1,2,h-1,P.tape);
+  for(let i=1;i<=d;i++) rect(tx+2*i,y-i,2,1,P.cardS);
+}
+function ybox(x,y,w,h,d){ cube(x,y,w,h,d,P.yT,P.yF,P.yS); hline(x+1,y+2,w-2,P.yS); }
+function pline(x0,y0,x1,y1,c){
+  x0|=0;y0|=0;x1|=0;y1|=0;
+  const dx=Math.abs(x1-x0), dy=-Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1; let e=dx+dy;
+  for(;;){ px(x0,y0,c); if(x0===x1&&y0===y1)break; const e2=2*e; if(e2>=dy){e+=dy;x0+=sx;} if(e2<=dx){e+=dx;y0+=sy;} }
+}
+function fcircle(cx,cy,r,c){ for(let dy=-r;dy<=r;dy++){ const w=Math.floor(Math.sqrt(r*r-dy*dy)); for(let dx=-w;dx<=w;dx++) px(cx+dx,cy+dy,c);} }
+function ring(cx,cy,r,c){ for(let a=0;a<360;a+=5){ const rad=a*Math.PI/180; px(Math.round(cx+Math.cos(rad)*r),Math.round(cy+Math.sin(rad)*r),c);} }
+
+/* ================= candidate sprites (cx = tile centre, gy = ground line, t = frame) ================= */
+
+// ① 稼働メーター／制御盤
+function mControl(cx,gy,t){
+  const x=cx-26,y=gy-54;
+  obox(x,y,52,48,P.wallF); rect(x+2,y+2,48,9,P.beltT);
+  for(let i=0;i<9;i++) px(x+5+i*5,y+6,P.grF);
+  const gxc=cx-6, gyc=gy-14, r=16;
+  for(let a=180;a<=360;a+=5){ const rad=a*Math.PI/180; px(Math.round(gxc+Math.cos(rad)*r),Math.round(gyc+Math.sin(rad)*r),INK); }
+  for(let a=180;a<=360;a+=30){ const rad=a*Math.PI/180; px(Math.round(gxc+Math.cos(rad)*(r-3)),Math.round(gyc+Math.sin(rad)*(r-3)),INK); }
+  const busy=0.5+0.45*Math.sin(t*0.05), na=(180+busy*180)*Math.PI/180;
+  pline(gxc,gyc,Math.round(gxc+Math.cos(na)*(r-3)),Math.round(gyc+Math.sin(na)*(r-3)),P.red);
+  fcircle(gxc,gyc,2,INK);
+  const on=(t>>4)&1;
+  fcircle(cx+16,gy-42,3,on?P.yT:P.yS);
+  fcircle(cx+16,gy-32,3,on?P.grF:P.grS);
+  fcircle(cx+16,gy-22,3,P.red);
+}
+
+// ② 出荷ドック＋トラック
+function mDock(cx,gy,t){
+  const bob=Math.round(Math.sin(t*0.08));
+  cube(cx-42,gy-6,18,6,3,P.grT,P.grF,P.grS);
+  cbox(cx-40,gy-13,9,7,2); cbox(cx-29,gy-11,8,6,2);
+  const ty=gy-2+bob;
+  cube(cx-8,ty-22,30,20,3,P.rTop,P.rShade,'#c9d3cb');
+  rect(cx-6,ty-14,26,3,P.red);
+  cube(cx-22,ty-15,14,13,2,P.beltF,P.beltT,P.beltS);
+  rect(cx-20,ty-13,7,6,P.water);
+  fcircle(cx-15,gy,3,INK); fcircle(cx+3,gy,3,INK); fcircle(cx+16,gy,3,INK);
+  px(cx-15,gy,P.beltS); px(cx+3,gy,P.beltS); px(cx+16,gy,P.beltS);
+}
+
+// ③ プレス機／スタンプ機
+function mPress(cx,gy,t){
+  cube(cx-30,gy-4,60,5,3,P.beltT,P.beltF,P.beltS);
+  rect(cx-22,gy-46,5,42,P.beltS); rect(cx+18,gy-46,5,42,P.beltS);
+  obox(cx-26,gy-52,56,8,P.beltT);
+  const ph=Math.max(0,Math.sin(t*0.12)); const headY=gy-42+Math.round(ph*22);
+  obox(cx-16,headY,32,10,P.beltF); rect(cx-14,headY+10,28,2,P.beltS);
+  cbox(cx-7,gy-13,13,9,2);
+  if(headY>gy-26){ px(cx-11,gy-14,'#ffffff'); px(cx+11,gy-15,P.yT); px(cx,gy-19,P.yT); px(cx-6,gy-12,P.yT); }
+}
+
+// ④ モニター壁（管制室）
+function mMonitors(cx,gy,t){
+  cube(cx-28,gy-8,56,8,3,P.grT,P.grF,P.grS);
+  function crt(x,y,w,h,seed){
+    obox(x,y,w,h,P.beltT); rect(x+2,y+2,w-4,h-4,'#123038');
+    for(let i=0;i<Math.floor((w-6)/3);i++){ const bh=1+Math.round((Math.sin(t*0.12+i+seed)+1)*0.5*(h-7)); rect(x+3+i*3,y+h-3-bh,2,bh,(i%2)?P.grF:P.mintD); }
+    rect(x+2,y+2+((t>>1)%(h-4)),w-4,1,'rgba(255,255,255,0.16)');
+  }
+  crt(cx-27,gy-46,22,18,0); crt(cx-1,gy-46,24,18,3); crt(cx-14,gy-25,26,15,6);
+}
+
+// ⑤ ロボットアーム
+function mArm(cx,gy,t){
+  cube(cx-8,gy-12,16,12,2,P.beltF,P.beltT,P.beltS);
+  const sx=cx, sy=gy-13, sweep=Math.sin(t*0.05)*0.5;
+  const ex=Math.round(sx+Math.cos(-0.95+sweep)*20), ey=Math.round(sy+Math.sin(-0.95+sweep)*20);
+  for(let o=-1;o<=1;o++) pline(sx+o,sy,ex+o,ey,P.red);
+  const gx=Math.round(ex+Math.cos(0.5+sweep)*18), gyy=Math.round(ey+Math.sin(0.5+sweep)*18);
+  for(let o=-1;o<=1;o++) pline(ex,ey+o,gx,gyy+o,P.coralBody);
+  fcircle(sx,sy,3,INK); fcircle(ex,ey,2,INK);
+  const open=Math.sin(t*0.1)>0;
+  rect(gx-4,gyy+(open?1:2),3,2,INK); rect(gx+2,gyy+(open?1:2),3,2,INK);
+  cbox(gx-5,gyy+3,10,7,2);
+}
+
+// ⑥ 配管・ダクト
+function mPipes(cx,gy,t){
+  const py=gy-42;
+  rect(cx-30,py,60,7,P.beltT); hline(cx-30,py+1,60,P.beltF);
+  rect(cx+16,py,7,28,P.beltT); vline(cx+17,py,28,P.beltF); rect(cx+15,gy-14,10,6,P.beltT);
+  for(const fx of [cx-14,cx+4]) rect(fx,py-1,2,9,P.beltS);
+  ring(cx-24,py+3,5,P.red); pline(cx-29,py+3,cx-19,py+3,P.red); pline(cx-24,py-2,cx-24,py+8,P.red);
+  for(let k=0;k<4;k++){ const age=((t*0.7)+k*12)%40; if(age<28){ g.globalAlpha=Math.max(0,0.6-age/45); fcircle(cx+19,Math.round(py-4-age*0.6),1+Math.round(age/16),'#ffffff'); } }
+  g.globalAlpha=1;
+}
+
+// ⑦ フォークリフト
+function mFork(cx0,gy,t){
+  const cx=cx0+Math.round(Math.sin(t*0.04)*16), bob=Math.round(Math.sin(t*0.3));
+  rect(cx-8,gy-26+bob,3,24,P.beltS); rect(cx-4,gy-26+bob,2,24,P.beltS);
+  cube(cx-2,gy-15+bob,16,13,2,P.yT,P.yF,P.yS);
+  rect(cx+2,gy-13+bob,7,6,P.beltT); rect(cx+3,gy-12+bob,5,4,P.water);
+  rect(cx-15,gy-4+bob,9,2,P.beltS);
+  cbox(cx-15,gy-13+bob,10,9,2);
+  fcircle(cx+1,gy,3,INK); fcircle(cx+11,gy,3,INK); px(cx+1,gy,P.beltS); px(cx+11,gy,P.beltS);
+}
+
+// ⑧ 大型タンク／サイロ
+function mTank(cx,gy,t){
+  const top=gy-50;
+  rect(cx-13,gy-8,3,8,P.beltS); rect(cx+11,gy-8,3,8,P.beltS);
+  rect(cx-15,top,30,44,P.rShade); rect(cx-15,top,11,44,P.rBody); rect(cx+9,top,6,44,'#c2cdc5');
+  vline(cx-16,top,44,INK); vline(cx+15,top,44,INK); hline(cx-15,top+44,31,INK);
+  for(let dx=-15;dx<=15;dx++){ const h=Math.round(Math.sqrt(Math.max(0,1-(dx/15)**2))*5); rect(cx+dx,top-h,1,h+1, dx<0?P.rBody:P.rShade);}
+  for(let dx=-15;dx<=15;dx++){ const h=Math.round(Math.sqrt(Math.max(0,1-(dx/15)**2))*5); px(cx+dx,top-h,INK);}
+  hline(cx-15,top+14,31,INK); hline(cx-15,top+30,31,INK);
+  fcircle(cx,top+22,5,P.wallF); ring(cx,top+22,5,INK);
+  const na=(180+(0.5+0.4*Math.sin(t*0.06))*180)*Math.PI/180;
+  pline(cx,top+22,Math.round(cx+Math.cos(na)*4),Math.round(top+22+Math.sin(na)*4),P.red);
+}
+
+// ⑨ 吊り看板・安全標識＋ハザードストライプ床
+function mSigns(cx,gy,t){
+  for(let x=-36;x<36;x++){ for(let y=0;y<9;y++){ const s=Math.floor((x-y+120)/5)%2; px(cx+x,gy-2+y, s?P.yF:INK);} }
+  hline(cx-36,gy-3,72,INK); hline(cx-36,gy+7,72,INK);
+  vline(cx-16,gy-54,10,P.beltS); vline(cx+8,gy-54,10,P.beltS);
+  obox(cx-24,gy-44,48,15,P.grF);
+  rect(cx-20,gy-40,32,2,P.rTop); rect(cx-20,gy-36,24,2,P.rTop);
+  const tx=cx+16, ty=gy-16;
+  for(let i=0;i<9;i++) rect(tx-i,ty+i-9,2*i+1,1,P.yT);
+  pline(tx-9,ty,tx+9,ty,INK); pline(tx-9,ty,tx,ty-9,INK); pline(tx+9,ty,tx,ty-9,INK);
+  rect(tx,ty-6,1,3,INK); px(tx,ty-1,INK);
+}
+
+// ⑩ 換気ファン＋回転警告灯
+function mFan(cx,gy,t){
+  const fy=gy-22, r=17;
+  ring(cx,fy,r,INK); ring(cx,fy,r-1,P.beltS); fcircle(cx,fy,r-3,'#2c3a44');
+  const a=t*0.25;
+  for(let k=0;k<4;k++){ const ang=a+k*Math.PI/2;
+    pline(cx,fy,Math.round(cx+Math.cos(ang)*(r-4)),Math.round(fy+Math.sin(ang)*(r-4)),P.beltF);
+    pline(cx,fy,Math.round(cx+Math.cos(ang+0.35)*(r-4)),Math.round(fy+Math.sin(ang+0.35)*(r-4)),P.beltT); }
+  fcircle(cx,fy,2,INK);
+  const on=(t>>4)&1;
+  rect(cx-3,gy-46,6,3,P.beltS); fcircle(cx,gy-48,3,on?P.red:P.yT);
+  if(on){ g.globalAlpha=0.4; fcircle(cx,gy-48,7,P.red); g.globalAlpha=1; }
+}
+
+// ⑪ 充実した休憩室備品
+function mBreak(cx,gy,t){
+  cube(cx-30,gy-24,14,22,2,'#e07a70',P.vend,P.vendD); rect(cx-27,gy-21,8,8,P.vendG);
+  px(cx-20,gy-6,((t>>4)&1)?P.yT:P.yS);
+  rect(cx-3,gy-6,6,6,P.beltS); obox(cx-13,gy-25,26,17,P.beltT); rect(cx-11,gy-23,22,13,'#123038');
+  for(let i=0;i<7;i++){ const bh=Math.round((Math.sin(t*0.2+i)+1)*4); rect(cx-10+i*3,gy-12-bh,2,bh,P.grF); }
+  obox(cx+18,gy-15,10,13,P.red); rect(cx+20,gy-4,6,3,'#2a2f2c'); rect(cx+21,gy-2,4,2,P.cardF);
+  for(let k=0;k<3;k++){ const age=((t*0.6)+k*12)%24; g.globalAlpha=Math.max(0,0.6-age/24); px(cx+23,Math.round(gy-17-age*0.6),'#ffffff'); }
+  g.globalAlpha=1;
+  rect(cx+31,gy-6,5,6,P.cardF); fcircle(cx+33,gy-10,4,P.grF); px(cx+33,gy-14,P.grT);
+}
+
+// ⑫ 看板猫（工場ペット）
+function mCat(cx0,gy,t){
+  const cx=cx0+Math.round(Math.sin(t*0.03)*18), bob=Math.round(Math.abs(Math.sin(t*0.2)));
+  const y=gy-8-bob;
+  shadow(cx,gy,9);
+  rect(cx-8,y-4,16,8,P.cardT); hline(cx-8,y-4,16,P.rTop);
+  rect(cx-15,y-6,8,7,P.cardT); rect(cx-14,y-8,2,2,P.cardT); rect(cx-9,y-8,2,2,P.cardT);
+  px(cx-13,y-3,INK); px(cx-10,y-3,INK); px(cx-15,y-1,P.coral);
+  rect(cx-6,y+4,2,3,P.cardS); rect(cx+4,y+4,2,3,P.cardS);
+  const tw=Math.round(Math.sin(t*0.15)*3);
+  pline(cx+8,y-2,cx+13,y-6+tw,P.cardT); pline(cx+13,y-6+tw,cx+15,y-11+tw,P.cardT);
+  vline(cx-2,y-4,8,P.cardS); vline(cx+2,y-4,8,P.cardS);
+}
+
+// ⑬ 床の反射・影（before / after）
+function mReflect(cx,gy,t){
+  for(let y=gy-42;y<gy+8;y+=3) px(cx,y,P.mintD);
+  cbox(cx-30,gy-13,13,10,3);                 // left: flat, no shadow
+  shadow(cx+18,gy,11);                        // right: contact shadow
+  g.globalAlpha=0.22;                         // + faint reflection
+  for(let yy=0;yy<9;yy++) hline(cx+11,gy+1+yy,15,P.cardF);
+  g.globalAlpha=1;
+  cbox(cx+12,gy-13,13,10,3);
+  rect(cx-26,gy+5,7,1,P.beltS); fcircle(cx+24,gy+6,2,P.grF);
+}
+
+/* ================= catalog ================= */
+const ITEMS = [
+  {f:mControl,   n:'① 稼働メーター／制御盤', d:'針が忙しさを指す壁掛け計器＋ランプ'},
+  {f:mDock,      n:'② 出荷ドック＋トラック', d:'ベルト右端の集荷所と積込トラック'},
+  {f:mPress,     n:'③ プレス機／スタンプ機', d:'ベルト上でガッシャンと上下する加工機'},
+  {f:mMonitors,  n:'④ モニター壁（管制室）', d:'数値とグラフが流れるCRT群'},
+  {f:mArm,       n:'⑤ ロボットアーム',       d:'箱をつかんで置く関節アーム'},
+  {f:mPipes,     n:'⑥ 配管・ダクト',         d:'壁天井を這うパイプ、時々蒸気'},
+  {f:mFork,      n:'⑦ フォークリフト',       d:'荷物を運んで往復する運搬車'},
+  {f:mTank,      n:'⑧ 大型タンク／サイロ',   d:'ゲージ付き円筒タンク'},
+  {f:mSigns,     n:'⑨ 看板・標識＋ハザード床',d:'「稼働中」表示＋安全第一＋注意帯'},
+  {f:mFan,       n:'⑩ 換気ファン＋警告灯',   d:'回るファンと黄/赤の点滅ビーコン'},
+  {f:mBreak,     n:'⑪ 休憩室備品',           d:'TV・コーヒーの湯気・自販機・観葉'},
+  {f:mCat,       n:'⑫ 看板猫（工場ペット）', d:'工場をうろつくネコ'},
+  {f:mReflect,   n:'⑬ 床の反射・影（比較）', d:'左＝影なし ／ 右＝影＋反射'},
+];
+
+/* ---- background: mint iso floor + tile separators (baked once) ---- */
+const bg = document.createElement('canvas'); bg.width=W; bg.height=H;
+(function bake(){
+  const main=g; g=bg.getContext('2d');
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const u=Math.floor((x+2*y)/32), v=Math.floor((x-2*y+800)/32);
+    px(x,y, ((u+v)&1)===0 ? P.f1a : P.f1b);
+  }
+  for(let c=1;c<COLS;c++) for(let y=0;y<H;y++) if((y&1)) px(c*TW,y,P.mintD);
+  for(let r=1;r<ROWS;r++) for(let x=0;x<W;x++) if((x&1)) px(x,r*TH,P.mintD);
+  g=main;
+})();
+
+/* ---- HTML labels ---- */
+(function labels(){
+  const box=document.getElementById('labels');
+  ITEMS.forEach((it,i)=>{
+    const col=i%COLS, row=Math.floor(i/COLS);
+    const cx=col*TW+TW/2, ly=row*TH+TH-18;
+    const el=document.createElement('div'); el.className='lbl';
+    el.style.left=(cx/W*100)+'%'; el.style.top=(ly/H*100)+'%';
+    el.innerHTML=`<span class="n">${it.n}</span><span class="d">${it.d}</span>`;
+    box.appendChild(el);
+  });
+})();
+
+/* ---- animation loop ---- */
+let t=0;
+function frame(){
+  t++;
+  g.drawImage(bg,0,0);
+  ITEMS.forEach((it,i)=>{
+    const col=i%COLS, row=Math.floor(i/COLS);
+    const cx=col*TW+TW/2, gy=row*TH+72;      // ground line per tile
+    it.f(cx,gy,t);
+  });
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

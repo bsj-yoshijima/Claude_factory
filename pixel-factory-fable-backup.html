@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Pixel Factory</title>
+<style>
+  html,body{height:100%;margin:0}
+  body{
+    background:#101418;
+    display:flex;align-items:center;justify-content:center;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  #stage{position:relative;display:inline-block;line-height:0;
+         box-shadow:0 0 60px rgba(0,0,0,.6);}
+  canvas{
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    width:min(1344px,96vw);
+    height:auto;
+    display:block;
+  }
+  /* HUD counter (unobtrusive, top-left) */
+  #hud{
+    position:absolute;top:6px;left:8px;
+    font-size:12px;letter-spacing:.5px;
+    color:#e6fff4;background:rgba(18,28,26,.55);
+    padding:3px 8px;border-radius:5px;
+    pointer-events:none;white-space:nowrap;
+  }
+  #hud b{color:#ffd27a;font-weight:700}
+  #hud i{color:#9fdcc6;font-style:normal}
+  /* per-worker project labels overlay */
+  #labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+  .lbl{
+    position:absolute;transform:translate(-50%,0);
+    font-size:9px;line-height:1;
+    color:#243b34;max-width:66px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    text-align:center;
+    text-shadow:0 0 2px #eafff6,0 1px 0 #eafff6,1px 0 0 #eafff6,-1px 0 0 #eafff6;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="hud"></div>
+  <div id="labels"></div>
+</div>
+<script>
+'use strict';
+const W = 448, H = 256;                 // wider, more spacious factory (matches the reference proportions)
+const WALL_BASE = 42;                    // horizon: taller ceiling (pipes + windows) above, floor below
+const BREAK_TOP = 212;                   // charging-lane top; docks occupy below this
+const cv = document.getElementById('c');
+cv.width = W; cv.height = H;
+let g = cv.getContext('2d');            // `let` so we can retarget to the offscreen bg
+g.imageSmoothingEnabled = false;
+
+/* ---------------- palette (limited) ---------------- */
+const P = {
+  ink   : '#3b4643',
+  rTop  : '#ffffff', rBody : '#f4f8f0', rShade: '#d5e4d7',
+  mint  : '#b9ead2', mintD : '#8fd9bf',
+  f0a:'#79c6a4', f0b:'#83cead',
+  f1a:'#8bd4b3', f1b:'#95dcbc',
+  f2a:'#9de2c3', f2b:'#a8e9cc',
+  sh  : '#74c2a1', spl : '#7bd8c0', spl2: '#5ec9b2',
+  cardT:'#f2d296', cardF:'#e8c07c', cardS:'#c79a55',
+  tape :'#a97f3f', cardO:'#8a6534',
+  yT:'#fce87e', yF:'#f6d84a', yS:'#d9b32e',
+  beltT:'#5f6b7c', beltF:'#8794a6', beltS:'#4a5464',
+  grT:'#6db885', grF:'#4f9e6e', grS:'#3e845c',
+  navy:'#41526b', navyL:'#5d7091', water:'#9fe6d6',
+  coral:'#f08a68', red :'#e05a4e',
+  coralBody:'#c15f3c', coralShade:'#9d4527', coralLite:'#d67e57',
+  eye:'#241713',
+  // room shell
+  wallT:'#cdd6ce', wallF:'#b7c2ba', wallD:'#98a49c',   // wall top / face / lower
+  beam :'#7d8a82', beamD:'#5f6a63',                     // ceiling beams
+  frame:'#6b736c', frameL:'#8a938b',                    // window frame
+  lampM:'#2f3630', lampG:'#ffe6a0',                     // lamp metal / glow
+  // break room (legacy, kept for helpers)
+  rug:'#c9946a', rugD:'#a9764e', sofa:'#5b76a8', sofaD:'#41598a', sofaL:'#7d97c6',
+  vend:'#d0584e', vendD:'#9e3d36', vendG:'#8fd9bf',
+  // steel shelving / catwalk
+  shelfM:'#97a2ad', shelfL:'#b7c1cb', shelfD:'#5f6a76',
+  // charging lane + battery
+  dockR:'#b23f38', dockRD:'#7d2a25', dockRail:'#5a201d',
+  batt:'#66d98d', battD:'#2f7a4a', socket:'#39434f', cable:'#2b3138',
+  bayDark:'#141b22', bayLine:'#1f2833',
+};
+const INK = P.ink;
+/* active vs idle (dimmed / greyed) mascot colour sets */
+const COR = {body:P.coralBody, shade:P.coralShade, lite:P.coralLite};
+const DIM = {body:'#94766a',   shade:'#6c554b',    lite:'#ac9084'   };
+/* ---- tap-to-recolour presets (② click cycles these) ----
+   each preset carries a lit set + a derived dimmed set (idle mood). */
+const PRESETS = [
+  {name:'coral',  body:'#c15f3c', shade:'#9d4527', lite:'#d67e57'},
+  {name:'blue',   body:'#4f7fc4', shade:'#37588f', lite:'#7ba3df'},
+  {name:'green',  body:'#4fa564', shade:'#367b47', lite:'#7bc78d'},
+  {name:'purple', body:'#8a5fc0', shade:'#623f90', lite:'#ac86dc'},
+  {name:'yellow', body:'#e0b23a', shade:'#ad8327', lite:'#f2d06a'},
+  {name:'pink',   body:'#d86a9c', shade:'#a94773', lite:'#f094bc'},
+];
+/* mix() is a hoisted function declaration (defined further down) */
+const CSETS = PRESETS.map(p=>({
+  lit:{body:p.body, shade:p.shade, lite:p.lite},
+  dim:{body:mix(p.body,'#6e6e6e',0.42), shade:mix(p.shade,'#5a5a5a',0.42), lite:mix(p.lite,'#7a7a7a',0.42)},
+}));
+
+/* ---------------- tiny drawing helpers ---------------- */
+function rect(x,y,w,h,c){ g.fillStyle=c; g.fillRect(x,y,w,h); }
+function px(x,y,c){ rect(x,y,1,1,c); }
+function hline(x,y,w,c){ rect(x,y,w,1,c); }
+function vline(x,y,h,c){ rect(x,y,1,h,c); }
+function obox(x,y,w,h,fill){ rect(x,y,w,h,INK); rect(x+1,y+1,w-2,h-2,fill); }
+function sprite(x,y,rows,map){
+  for(let r=0;r<rows.length;r++){ const line=rows[r];
+    for(let c=0;c<line.length;c++){ const col=map[line[c]]; if(col) px(x+c,y+r,col); } }
+}
+/* oblique-iso cube */
+function cube(x,y,w,h,d,ct,cf,cs){
+  for(let i=1;i<=d;i++) hline(x+2*i, y-i, w, ct);
+  for(let i=1;i<=d;i++) rect(x+w+2*(i-1), y-i, 2, h, cs);
+  rect(x,y,w,h,cf);
+  vline(x+w, y-1, h, INK);
+  for(let i=1;i<=d;i++) hline(x+w+2*(i-1), y-i, 2, INK);
+  vline(x-1, y, h, INK);
+  hline(x-1, y+h, w+1, INK);
+  for(let i=1;i<=d;i++) hline(x+w+2*(i-1), y+h-i, 2, INK);
+  vline(x+w+2*d, y-d, h, INK);
+  hline(x+2*d-1, y-d-1, w+2, INK);
+  for(let i=1;i<=d;i++) hline(x+2*i-2, y-i, 2, INK);
+}
+function shadow(cx,fy,hw){
+  hline(cx-hw+1, fy-2, hw*2-2, P.sh);
+  hline(cx-hw,   fy-1, hw*2,   P.sh);
+}
+/* line + circle helpers (used by the added machines) */
+function pline(x0,y0,x1,y1,c){
+  x0|=0;y0|=0;x1|=0;y1|=0;
+  const dx=Math.abs(x1-x0), dy=-Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1; let e=dx+dy;
+  for(;;){ px(x0,y0,c); if(x0===x1&&y0===y1)break; const e2=2*e; if(e2>=dy){e+=dy;x0+=sx;} if(e2<=dx){e+=dx;y0+=sy;} }
+}
+function fcircle(cx,cy,r,c){ for(let dy=-r;dy<=r;dy++){ const w=Math.floor(Math.sqrt(r*r-dy*dy)); for(let dx=-w;dx<=w;dx++) px(cx+dx,cy+dy,c);} }
+function ring(cx,cy,r,c){ for(let a=0;a<360;a+=5){ const rad=a*Math.PI/180; px(Math.round(cx+Math.cos(rad)*r),Math.round(cy+Math.sin(rad)*r),c);} }
+
+/* ---------------- cardboard / crates ---------------- */
+function cbox(x,y,w,h,d){
+  cube(x,y,w,h,d,P.cardT,P.cardF,P.cardS);
+  const tx = x + (w>>1) - 1;
+  rect(tx, y+1, 2, h-1, P.tape);
+  for(let i=1;i<=d;i++) rect(tx+2*i, y-i, 2, 1, P.cardS);
+}
+function ybox(x,y,w,h,d){
+  cube(x,y,w,h,d,P.yT,P.yF,P.yS);
+  hline(x+1, y+2, w-2, P.yS);
+}
+function openBox(x,y,w,h,d){
+  obox(x+2*d+1, y-d-5, w-2, 6, P.cardT);
+  cube(x,y,w,h,d,P.cardT,P.cardF,P.cardS);
+  for(let i=1;i<=d;i++) hline(x+2*i+2, y-i, w-4, P.cardO);
+  px(x+2*d+3, y-d, P.coral); px(x+2*d+5, y-d, P.rBody);
+  px(x+2*d+6, y-d+1, P.navyL); px(x+2*d+4, y-d+1, P.yF);
+}
+
+/* ---------------- Claude mascot worker ---------------- */
+/* Coral square-ish creature: humped top, black square eyes, stubby legs.
+   (cx,fy)=bottom-centre on floor. bob = whole-body vertical hop (shadow stays put).
+   o:{pose,look,blink,tool,boxKind,badge,bucketHat,dim,swing,noShadow} */
+const MTOP = [3,2,1,1,0,0,1,2,3,3,2,1,0,0,1,1,2,3]; // top profile: 2 humps + centre dip
+function leg(x,fy,pal){ obox(x, fy-4, 3, 4, pal.shade); }
+function claudeBody(x0, topBase, bottomY, pal){
+  const w = 18, rows = bottomY - topBase + 1;
+  const isF = (i,r)=> i>=0 && i<w && r>=0 && r<rows && r >= MTOP[i];
+  for(let i=0;i<w;i++){
+    for(let r=0;r<rows;r++){
+      if(!isF(i,r)) continue;
+      const x=x0+i, y=topBase+r;
+      if(!isF(i-1,r)||!isF(i+1,r)||!isF(i,r-1)||!isF(i,r+1)){ px(x,y,INK); continue; }
+      let col = pal.body;
+      if(i>=w-5 || r>=rows-2) col = pal.shade;
+      else if(r === MTOP[i]+1) col = pal.lite;
+      px(x,y,col);
+    }
+  }
+}
+function robot(cx, fy, o={}, bob=0){
+  const pose = o.pose || 'idle';
+  const look = o.look || 0;
+  const cs   = o.cs || CSETS[0];        // per-worker colour set (tap to change)
+  const pal  = o.dim ? cs.dim : cs.lit;
+  const sw   = o.swing || 0;
+
+  if(!o.noShadow) shadow(cx, fy, 10);   // shadow on the ground (no bob)
+  g.save(); g.translate(0, bob);        // body hops
+
+  const x0 = cx-9;
+  const bottomY = (pose==='sit') ? fy-3 : fy-4;
+  const topBase = bottomY-14;
+  const armY = bottomY-11;
+
+  if(pose==='sit'){
+    obox(cx-6, fy-3, 5, 3, pal.shade);
+    obox(cx+1, fy-3, 5, 3, pal.shade);
+  }else{
+    leg(cx-7,fy,pal); leg(cx-2,fy,pal); leg(cx+4,fy,pal);
+  }
+  if(pose==='lift'){
+    obox(cx-11, fy-30, 3, 15, pal.shade);
+    obox(cx+8,  fy-30, 3, 15, pal.shade);
+  }
+
+  claudeBody(x0, topBase, bottomY, pal);
+
+  if(pose==='carry'){
+    obox(cx-11, armY, 3, 6, pal.shade); obox(cx+8, armY, 3, 6, pal.shade);
+  }else if(pose==='sweep'){
+    obox(cx+8, armY, 3, 6, pal.shade); obox(cx+10, armY+2, 3, 6, pal.shade);
+  }else if(pose==='sit'){
+    obox(cx-11, armY+2, 3, 5, pal.shade); obox(cx+8, armY+2, 3, 5, pal.shade);
+  }
+
+  const ey = topBase+4;
+  if(o.blink){ rect(cx-5+look,ey+1,2,1,P.eye); rect(cx+3+look,ey+1,2,1,P.eye); }
+  else       { rect(cx-5+look,ey,2,2,P.eye);   rect(cx+3+look,ey,2,2,P.eye);   }
+
+  if(o.badge) rect(cx-1, bottomY-5, 2, 2, P.coral);
+
+  if(o.bucketHat){
+    const hy = topBase;
+    rect(cx-6, hy-6, 12, 7, INK); rect(cx-5, hy-5, 10, 6, P.navy);
+    rect(cx-8, hy-1, 16, 3, INK); rect(cx-7, hy-1, 14, 2, P.navyL);
+  }
+
+  if(pose==='carry'){
+    if(o.boxKind==='y') ybox(cx-7, fy-11, 10, 7, 2); else cbox(cx-7, fy-11, 10, 7, 2);
+    rect(cx-9, fy-10, 2, 2, pal.body); rect(cx+7, fy-10, 2, 2, pal.body);
+  }
+  if(pose==='lift'){
+    if(o.boxKind==='y') ybox(cx-6, fy-33, 10, 7, 2); else cbox(cx-6, fy-33, 10, 7, 2);
+  }
+  if(pose==='sweep'){
+    for(let i=-3;i<=5;i++) px(cx+12+sw+i, fy-7+i, P.tape);
+    for(let i=-3;i<=5;i++) px(cx+13+sw+i, fy-7+i, P.tape);
+    if(o.tool==='mop'){
+      obox(cx+15+sw, fy-4, 9, 3, P.navy);
+      px(cx+17+sw,fy-1,P.water); px(cx+21+sw,fy-1,P.water); px(cx+24+sw,fy-2,P.water);
+    }else{
+      obox(cx+15+sw, fy-4, 9, 3, P.cardT);
+      for(let i=0;i<4;i++) px(cx+16+sw+i*2, fy-1, INK);
+      px(cx+26+sw,fy-2,P.cardS); px(cx+27+sw,fy-1,P.cardS);
+    }
+  }
+  g.restore();
+}
+
+/* ---------------- effect sprites ---------------- */
+function drawZ(x,y,c){ hline(x,y,3,c); px(x+1,y+1,c); hline(x,y+2,3,c); }
+function zzz(cx, headTop, t){                    // sleepy bubble for idle workers
+  const f = Math.floor(t*0.08);
+  for(let k=0;k<3;k++){
+    const yy = headTop - 4 - k*5 - ((f+k)%3);
+    const xx = cx + 5 + k*3;
+    rect(xx-1,yy-1,5,5,P.rTop);                   // white halo for contrast
+    drawZ(xx,yy,P.navy);
+  }
+}
+function sparks(x,y,t){                           // busy work sparks
+  const f=(t>>2)%3;
+  if(f===0){ px(x,y,'#ffffff'); px(x+2,y-2,P.yT); px(x-2,y-1,P.coral); }
+  else if(f===1){ px(x+1,y-1,P.yT); px(x-1,y+1,'#ffffff'); px(x+3,y,P.coral); }
+  else { px(x-2,y-2,'#ffffff'); px(x+2,y+1,P.yT); }
+}
+
+/* ---------------- small props ---------------- */
+const BUCKET = ['.kkkkkkk.','klwwwwwlk','klwwwwwlk','.knnnnnk.','.knnnnnk.','..knnnk..','..kkkkk..'];
+const BMAP = {k:INK, n:P.navy, l:P.navyL, w:P.water};
+const WRENCH = ['kk...kk','klk.klk','.klklk.','..klk..','..klk..','..klk..','..kkk..'];
+const WMAP = {k:INK, l:P.navyL};
+const HAMMER = ['.kkkk..','knnnnk.','.kkkkk.','...ktk.','...ktk.','...ktk.','....k..'];
+const HMAP = {k:INK, n:P.navy, t:P.tape};
+function papers(x,y){ obox(x,y,9,6,P.rTop); hline(x+2,y+2,5,P.rShade); hline(x+2,y+4,4,P.rShade); }
+function tray(x,y){ cube(x,y,16,2,2,P.navyL,P.navy,P.beltS); }
+function splat(x,y,big){
+  const c = big ? P.spl : P.spl2;
+  rect(x-3,y-1,7,3,c); rect(x-1,y-2,3,5,c);
+  px(x-5,y,c); px(x+4,y-2,c); px(x+2,y+3,c); px(x-4,y+2,c);
+  if(big){ rect(x+5,y,2,2,P.spl2); px(x-7,y+1,P.spl2); }
+}
+function toolbox(x,y){ cube(x,y,12,6,2,'#f6a488',P.coral,'#c96a4e'); hline(x+3,y-3,6,INK); px(x+3,y-2,INK); px(x+8,y-2,INK); }
+function poster(x,y){ obox(x,y,9,11,P.rTop); rect(x+2,y+2,5,2,P.red); hline(x+2,y+5,5,INK); hline(x+2,y+7,4,INK); px(x+3,y+9,P.red); px(x+5,y+9,P.red); }
+
+/* ================= static floor (baked once) ================= */
+function drawFloor(){
+  const horizon = WALL_BASE;
+  for(let y=0;y<H;y++){
+    // fake perspective: rows compress toward the back (near the horizon), expand toward the front,
+    // so the diamond grid recedes instead of tiling flat.
+    const d  = Math.max(0,(y-horizon))/(H-horizon);            // 0 back .. 1 front
+    const gy = horizon + (H-horizon)*(1 - Math.pow(1-d, 1.6)); // warped depth coord (dense at back)
+    const cols = d<0.26 ? [P.f0a,P.f0b] : d<0.60 ? [P.f1a,P.f1b] : [P.f2a,P.f2b];
+    for(let x=0;x<W;x++){
+      const u = Math.floor((x+2*gy)/30), v = Math.floor((x-2*gy+900)/30);
+      px(x,y, ((u+v)&1)===0 ? cols[0] : cols[1]);
+    }
+  }
+  // near-edge floor shadow (foreground weight / encloses the bottom)
+  for(let y=H-10;y<H;y++){ const a=(y-(H-10))/10; g.globalAlpha=a*0.32; hline(0,y,W,'#2c4740'); }
+  g.globalAlpha=1;
+}
+function drawSplashes(){
+  splat(104,168,1); splat(146,178,0); splat(126,162,0);
+  splat(196,176,1); splat(220,166,0); splat(84,180,0);
+  splat(252,182,1); splat(168,172,0); splat(292,168,0);
+}
+/* back decorations — a small packing bench at the back-centre (under the loading bay) */
+function drawBackDecor(){
+  cube(206,110,44,4,3,P.grT,P.grF,P.grS);
+  obox(210,115,4,10,P.grS); obox(244,115,4,10,P.grS);
+  cbox(212,102,10,7,2); ybox(228,101,10,7,2); papers(240,104);
+}
+const bg = document.createElement('canvas'); bg.width=W; bg.height=H;
+(function bake(){
+  const mainG = g;
+  g = bg.getContext('2d');
+  drawFloor(); drawSplashes();
+  g = mainG;
+})();
+
+/* ================= time of day → light environment ================= */
+function hx2rgb(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
+function mix(a,b,t){ const A=hx2rgb(a),B=hx2rgb(b); return `rgb(${Math.round(A[0]+(B[0]-A[0])*t)},${Math.round(A[1]+(B[1]-A[1])*t)},${Math.round(A[2]+(B[2]-A[2])*t)})`; }
+/* keyframes: sky, mul(ambient multiply tint), beam colour/strength, lamp strength, star strength, horizon glow */
+const SKYKEYS = [
+  {h:0,   sky:'#101f3e', mul:'#454f78', beam:'#000000', beamA:0,    lampA:1.0, starA:0.9, horz:'#1a2c52'},
+  {h:5,   sky:'#37456f', mul:'#5a6088', beam:'#7fa0d0', beamA:0.06, lampA:0.7, starA:0.4, horz:'#6d6a9c'},
+  {h:7,   sky:'#bcd0ea', mul:'#b7b3c6', beam:'#ffd9c0', beamA:0.13, lampA:0.15,starA:0.0, horz:'#f4c7b0'},
+  {h:9,   sky:'#93c3ef', mul:'#eef1f2', beam:'#fff5da', beamA:0.20, lampA:0.0, starA:0.0, horz:'#cfe6f6'},
+  {h:12,  sky:'#79b4f1', mul:'#ffffff', beam:'#ffffff', beamA:0.22, lampA:0.0, starA:0.0, horz:'#bfe0f7'},
+  {h:15,  sky:'#83bdee', mul:'#fbf2e6', beam:'#fff0cf', beamA:0.22, lampA:0.0, starA:0.0, horz:'#e8ddc4'},
+  {h:17.5,sky:'#f0975a', mul:'#ffca94', beam:'#ffb267', beamA:0.30, lampA:0.05,starA:0.0, horz:'#ffd98f'},
+  {h:19,  sky:'#8f5a90', mul:'#8f7a9c', beam:'#d0795a', beamA:0.13, lampA:0.45,starA:0.1, horz:'#c9738a'},
+  {h:20.5,sky:'#3b3a68', mul:'#5c5a8a', beam:'#a05a4a', beamA:0.04, lampA:0.85,starA:0.5, horz:'#5a4f7e'},
+  {h:22,  sky:'#152349', mul:'#48547e', beam:'#000000', beamA:0,    lampA:1.0, starA:0.85,horz:'#1e3057'},
+  {h:24,  sky:'#101f3e', mul:'#454f78', beam:'#000000', beamA:0,    lampA:1.0, starA:0.9, horz:'#1a2c52'},
+];
+function getEnv(hour){
+  let a=SKYKEYS[0], b=SKYKEYS[SKYKEYS.length-1];
+  for(let i=0;i<SKYKEYS.length-1;i++){ if(hour>=SKYKEYS[i].h && hour<=SKYKEYS[i+1].h){ a=SKYKEYS[i]; b=SKYKEYS[i+1]; break; } }
+  const t = (b.h===a.h)?0:(hour-a.h)/(b.h-a.h);
+  return {
+    sky : mix(a.sky,b.sky,t),  horz: mix(a.horz,b.horz,t),
+    mul : mix(a.mul,b.mul,t),  beam: mix(a.beam,b.beam,t),
+    beamA: a.beamA+(b.beamA-a.beamA)*t,
+    lampA: a.lampA+(b.lampA-a.lampA)*t,
+    starA: a.starA+(b.starA-a.starA)*t,
+  };
+}
+function currentHour(){
+  const q = new URLSearchParams(location.search).get('hour');
+  if(q!==null && q!=='') return Math.max(0,Math.min(24,parseFloat(q)));   // ?hour=17.5 override
+  const now = new Date();
+  const jst = new Date(now.getTime()+now.getTimezoneOffset()*60000+9*3600000);
+  return jst.getHours()+jst.getMinutes()/60;
+}
+
+/* ================= wall / windows / ceiling ================= */
+const WINDOWS = [ {x:28,w:40}, {x:150,w:40}, {x:308,w:40}, {x:404,w:40} ];  // x = left, on the wall
+const WIN_Y = 9, WIN_H = 19;
+const LAMPS = [ {x:96}, {x:224}, {x:360} ];      // ceiling lamp x positions
+const STARS = [ [36,13],[54,18],[66,12],[160,16],[178,13],[316,14],[334,19],[414,12],[300,21],[224,15],[122,17],[386,18] ];
+function drawWall(env){
+  // wall face
+  rect(0,0,W,WALL_BASE,P.wallF);
+  rect(0,WALL_BASE-6,W,6,P.wallD);                 // lower wall band
+  hline(0,WALL_BASE-1,W,P.beamD);                  // baseboard
+  for(let x=0;x<W;x++){ if(x%2){ px(x,WALL_BASE,P.sh);} } // contact shadow onto floor
+  // ceiling beam strip
+  rect(0,0,W,5,P.beam); hline(0,5,W,P.beamD);
+  for(let x=6;x<W;x+=24){ vline(x,0,5,P.beamD); }  // beam ribs
+  // windows
+  for(const win of WINDOWS){
+    const x=win.x, w=win.w, y=WIN_Y, h=WIN_H;
+    rect(x-1,y-1,w+2,h+2,P.frame);                 // outer frame
+    // sky gradient (top -> horizon)
+    for(let j=0;j<h;j++){ hline(x,y+j,w, mix(env.sky,env.horz, j/(h-1))); }
+    // mullions
+    const mx=x+(w>>1);
+    vline(mx,y,h,P.frameL); vline(mx-1,y,h,P.frame);
+    hline(x,y+(h>>1),w,P.frameL); hline(x,y+(h>>1)-1,w,P.frame);
+    rect(x-1,y-1,w+2,1,P.frameL);                  // frame highlight
+  }
+  // ceiling lamps (fixtures; glow handled in additive pass)
+  for(const L of LAMPS){
+    vline(L.x,5,3,P.lampM);                         // cord
+    rect(L.x-4,8,9,3,P.lampM);                       // shade
+    rect(L.x-3,11,7,1,mix(P.lampM,P.lampG,env.lampA*0.8));
+  }
+}
+/* daytime sun shafts from windows onto the floor (drawn on floor, under workers) */
+function drawSunbeams(env){
+  if(env.beamA<0.02) return;
+  const len = 46 + env.beamA*150;                   // evening = longer
+  for(const win of WINDOWS){
+    const x0=win.x, w=win.w, top=WIN_Y+WIN_H;
+    const dx=-len*0.35;                             // shafts fall down-left
+    g.save();
+    g.beginPath();
+    g.moveTo(x0, top); g.lineTo(x0+w, top);
+    g.lineTo(x0+w+dx, top+len); g.lineTo(x0+dx, top+len);
+    g.closePath();
+    const gr=g.createLinearGradient(0,top,0,top+len);
+    gr.addColorStop(0, env.beam); gr.addColorStop(1, env.beam);
+    g.globalAlpha=env.beamA; g.fillStyle=gr;
+    g.globalCompositeOperation='lighter';
+    g.fill();
+    g.globalCompositeOperation='source-over'; g.globalAlpha=1;
+    g.restore();
+  }
+}
+/* night lamp light pools on the floor (drawn on floor, under workers) */
+function drawLampFloor(env){
+  if(env.lampA<0.03) return;
+  for(const L of LAMPS){
+    const cy=140, r=64;
+    const gr=g.createRadialGradient(L.x,cy,4, L.x,cy,r);
+    gr.addColorStop(0, P.lampG); gr.addColorStop(1, 'rgba(255,230,160,0)');
+    g.save(); g.globalCompositeOperation='lighter'; g.globalAlpha=env.lampA*0.32;
+    g.fillStyle=gr; g.fillRect(L.x-r, cy-r*0.7, r*2, r*1.4);
+    g.globalCompositeOperation='source-over'; g.globalAlpha=1; g.restore();
+  }
+}
+/* ambient tint over the whole scene (multiply) for cohesion */
+function applyAmbient(env){
+  g.save(); g.globalCompositeOperation='multiply'; g.fillStyle=env.mul;
+  g.fillRect(0,0,W,H); g.globalCompositeOperation='source-over'; g.restore();
+}
+/* additive lights drawn AFTER ambient so they survive the darkening */
+function drawGlows(env){
+  g.save(); g.globalCompositeOperation='lighter';
+  // stars in the windows
+  if(env.starA>0.03){
+    for(const s of STARS){ g.globalAlpha=env.starA*(0.6+0.4*Math.sin(frameT*0.05+s[0])); px(s[0],s[1],'#ffffff'); }
+  }
+  // lamp fixture glow + soft halo
+  if(env.lampA>0.03){
+    for(const L of LAMPS){
+      g.globalAlpha=env.lampA*0.9; rect(L.x-3,11,7,1,P.lampG);
+      const gr=g.createRadialGradient(L.x,12,1,L.x,12,14);
+      gr.addColorStop(0,P.lampG); gr.addColorStop(1,'rgba(255,230,160,0)');
+      g.globalAlpha=env.lampA*0.5; g.fillStyle=gr; g.fillRect(L.x-14,4,28,20);
+    }
+  }
+  g.globalAlpha=1; g.globalCompositeOperation='source-over'; g.restore();
+}
+
+/* ---------------- conveyor = task flow (③ pseudo-progress) ----------------
+   Belt left edge = task START, right edge = task COMPLETE.
+   /api/sessions exposes NO real task %, so we approximate progress with how long
+   a worker has been busy. When real progress becomes available, replace ONLY
+   taskProgress() below — the START detection and x-mapping stay the same. */
+/* main belt lowered toward the front; ALL busy workers ride it L→R (drawn in drawBeltWorkers).
+   BELT_X0 = start (emerges from the tanks) · BELT_X1 = complete (right) · BELT_Y = worker foot line */
+const BELT_X0 = 8, BELT_X1 = 410, BELT_Y = 158;   // one continuous line, left edge → right
+const TASK_MS = 75000;                       // busy this long ⇒ reaches the right edge
+function startTask(k){
+  // seed a staggered start so the line looks populated immediately (pseudo, on first busy)
+  let h=0; for(let i=0;i<k.length;i++) h=(h*31+k.charCodeAt(i))>>>0;
+  taskStart[k] = performance.now() - (h % TASK_MS);
+}
+function taskProgress(k){                     // → 0..1 (≥1 = just completed)
+  const st = taskStart[k]; if(st===undefined) return null;
+  return (performance.now()-st)/TASK_MS;
+}
+function beltX(p){ return Math.round(BELT_X0 + Math.max(0,Math.min(1,p))*(BELT_X1-BELT_X0)); }
+let completePops = [];
+function burst(x,y,age){                       // finished-goods pop at the right edge
+  const c = age<9 ? '#ffffff' : P.lampG;
+  px(x+age,y-2,c); px(x-age+4,y+1,c); px(x+2,y-age,P.yT); px(x+4,y+age-6,P.coral);
+  if(age<9) cube(x-2, y-8-age, 7, 5, 1, P.cardT, P.cardF, P.cardS);
+}
+function drawConveyor(t){
+  const off = Math.floor(t*0.6);
+  const lx0 = BELT_X0-14, w = (BELT_X1-BELT_X0)+34;
+  cube(lx0, BELT_Y+3, w, 5, 3, P.beltT, P.beltF, P.beltS);
+  for(let lx=lx0+16; lx<lx0+w-8; lx+=56){ obox(lx, BELT_Y+8, 4, 12, P.beltS); hline(lx-1, BELT_Y+20, 6, P.sh); }
+  for(let i=0;i<Math.ceil(w/10);i++){ const x = lx0 + (((i*10)+off)%(w-4)); px(x+4, BELT_Y+1, P.beltS); } // seams
+  obox(BELT_X0+30, BELT_Y+4, 7, 3, P.navyL); px(BELT_X0+33, BELT_Y+5, P.red);
+  g.globalAlpha=0.18; rect(lx0, BELT_Y+22, w, 3, '#2c4740'); g.globalAlpha=1;  // cast shadow (grounds the belt)
+}
+/* left production line: green source machine → vertical belt (front→back) → tanks */
+function drawGreenMachine(x,gy){
+  cube(x, gy-12, 40, 12, 3, P.grT, P.grF, P.grS);
+  rect(x+3, gy-10, 11, 6, '#123038');                                  // screen
+  for(let i=0;i<4;i++) px(x+4+i*2, gy-8, ((frameT>>3)+i)&1?P.grF:P.mintD);
+  rect(x+17, gy-9, 18, 5, P.grS); px(x+30,gy-7,P.red); px(x+33,gy-7,P.yT);
+  rect(x+38, gy-16, 6, 9, P.beltS); hline(x+38, gy-16, 6, P.beltF);     // output chute to the belt
+  if((frameT%40)<20) cbox(x+39, gy-22, 8, 6, 1);                        // a fresh box popping out
+}
+/* receding feeder in perspective: connects the tank (far/high, small) down to the main belt
+   (near/low, wide). Boxes come DOWN toward the viewer (tank → main belt), growing as they near. */
+const VB = {fx:168, fy:152, bx:150, by:110, wF:9, wB:3, zN:1, zF:3.2};
+function vbAt(w){                                   // w:0(front/belt)→1(back/tank) → screen pos, half-width, scale
+  const z = VB.zN + (VB.zF-VB.zN)*w;
+  const s = (1/VB.zN - 1/z) / (1/VB.zN - 1/VB.zF);
+  return { x: VB.fx+(VB.bx-VB.fx)*s, y: VB.fy+(VB.by-VB.fy)*s, hw: VB.wF*(VB.zN/z), sc: VB.zN/z };
+}
+function drawVBelt(){
+  g.fillStyle=P.beltF; g.beginPath();
+  g.moveTo(VB.fx-VB.wF,VB.fy); g.lineTo(VB.bx-VB.wB,VB.by);
+  g.lineTo(VB.bx+VB.wB,VB.by); g.lineTo(VB.fx+VB.wF,VB.fy); g.closePath(); g.fill();
+  pline(VB.fx-VB.wF,VB.fy, VB.bx-VB.wB,VB.by, INK);
+  pline(VB.fx+VB.wF,VB.fy, VB.bx+VB.wB,VB.by, INK);
+  pline(VB.bx-VB.wB,VB.by, VB.bx+VB.wB,VB.by, INK);
+  pline(VB.fx-VB.wF+1,VB.fy, VB.bx-VB.wB+1,VB.by, P.beltT);   // steel rails (match the belt, converging)
+  pline(VB.fx+VB.wF-1,VB.fy, VB.bx+VB.wB-1,VB.by, P.beltS);
+  const roff=(frameT*0.012)%0.14;
+  for(let r=roff; r<1; r+=0.14){ const p=vbAt(r); pline(p.x-p.hw+1,p.y, p.x+p.hw-1,p.y, P.beltS); }
+  const boxes=[];
+  for(let i=0;i<4;i++){ boxes.push(1-(((frameT*0.004)+i/4)%1)); }   // flow back→front (tank→belt)
+  boxes.sort((a,b)=>b-a);                                            // far first
+  for(const w of boxes){ const p=vbAt(w); const bw=Math.max(2,Math.round(9*p.sc)), bh=Math.max(2,Math.round(7*p.sc));
+    cbox(Math.round(p.x-bw/2), Math.round(p.y-bh), bw, bh, Math.max(1,Math.round(2*p.sc))); }
+}
+/* ---- steel shelving with stored goods (right side) ---- */
+function drawShelf(x,gy){
+  const w=104;
+  vline(x,gy-48,48,P.shelfD); vline(x+w,gy-48,48,P.shelfD); vline(x+Math.floor(w/2),gy-48,48,P.shelfD);
+  for(let t=0;t<3;t++){ const sy=gy-14-t*16; rect(x,sy,w+1,2,P.shelfM); hline(x,sy+2,w+1,P.shelfD); }
+  hline(x,gy,w+1,P.shelfD);
+  // bottom tier: drums + buckets + a box
+  drawBarrel(x+13,gy-2,0.72); sprite(x+24,gy-9,BUCKET,BMAP); drawBarrel(x+42,gy-2,0.72);
+  sprite(x+58,gy-9,BUCKET,BMAP); cbox(x+72,gy-10,16,9,2);
+  // middle tier: boxes
+  cbox(x+5,gy-21,13,8,2); cbox(x+24,gy-21,15,9,2); ybox(x+48,gy-20,13,8,2); cbox(x+70,gy-21,16,9,2);
+  // top tier: boxes
+  cbox(x+8,gy-37,13,8,2); ybox(x+30,gy-36,12,7,2); cbox(x+50,gy-37,15,9,2); cbox(x+74,gy-36,13,8,2);
+}
+/* ---- elevated catwalk conveyor crossing the back (boxes ride it) ---- */
+function drawCatwalk(x0,x1,y){
+  const w=x1-x0;
+  for(let lx=x0+12; lx<x1-6; lx+=44){ rect(lx,y+4,3,46,P.shelfD); rect(lx-2,y+48,7,2,P.shelfD); } // legs + feet
+  cube(x0,y,w,4,3,P.beltT,P.beltF,P.beltS);                 // deck
+  for(let rx=x0; rx<x1; rx+=7) vline(rx,y-7,7,P.shelfD);    // back railing
+  hline(x0,y-7,w,P.shelfM);
+  const off=Math.floor(frameT*0.5), span=w-8;
+  for(let i=0;i<Math.floor(w/32);i++){ const bx=x0+3+(((i*32)+off)%span); cbox(bx,y-4,8,6,1); }
+}
+/* ---- dark loading bay door on the back wall ---- */
+function drawLoadingBay(x,y){
+  obox(x-1,y-1,44,32,P.beltS);
+  rect(x,y,42,30,P.bayDark);
+  for(let i=0;i<6;i++) hline(x,y+2+i*5,42,P.bayLine);
+  rect(x+7,y,28,2,P.beltS);                                  // lintel
+  px(x+38,y+26,P.batt); px(x+38,y+24,P.yT);                  // little status light
+}
+/* ---- battery gauge + charging bolt (charging lane) ---- */
+function drawBattery(cx,y,pct){
+  obox(cx-6,y,12,6,'#cdd7cf'); rect(cx+6,y+1,2,4,'#7a857d');    // light shell + terminal
+  const seg=Math.round(Math.max(0,Math.min(1,pct))*5);
+  for(let i=0;i<5;i++) rect(cx-5+i*2,y+1,1,4, i<seg ? (pct>=1?P.batt:mix(P.battD,P.batt,i/4)) : '#9aa69d');
+}
+function drawBolt(x,y,c){ px(x+1,y,c); px(x,y+1,c); px(x+1,y+1,c); px(x,y+2,c); px(x+2,y+2,c); px(x+1,y+3,c); }
+/* metal drum for foreground clutter */
+function drawBarrel(cx,gy,sc){
+  const w=Math.round(9*sc), h=Math.round(15*sc), top=gy-h;
+  rect(cx-w,top,w*2,h,P.beltF); rect(cx-w,top,Math.round(w*0.7),h,P.beltT); rect(cx+w-2,top,2,h,P.beltS);
+  vline(cx-w-1,top,h,INK); vline(cx+w,top,h,INK); hline(cx-w,gy,w*2,INK);
+  for(let dx=-w;dx<=w;dx++){ const hh=Math.round(Math.sqrt(Math.max(0,1-(dx/w)**2))*3); px(cx+dx,top-hh,INK);}
+  hline(cx-w,top+Math.round(h*0.28),w*2,P.beltS); hline(cx-w,top+Math.round(h*0.62),w*2,P.beltS);
+  rect(cx-Math.round(w*0.4),top+Math.round(h*0.38),Math.round(w*0.8),3,P.yF);   // hazard label
+}
+/* aerial perspective — lighten (day) / bluify (night) the far distance to push it back */
+function drawDepthHaze(env){
+  const night = env.lampA>0.4;
+  const c = night ? '80,98,142' : '216,239,229';
+  const a = night ? 0.36 : 0.30, yb = 150;
+  const gr=g.createLinearGradient(0,WALL_BASE,0,yb);
+  gr.addColorStop(0,`rgba(${c},${a})`); gr.addColorStop(1,`rgba(${c},0)`);
+  g.fillStyle=gr; g.fillRect(0,WALL_BASE,W,yb-WALL_BASE);
+}
+
+/* ================= added machines & decor (from the concept board) ================= */
+/* ⑧ big tanks / silos — background, behind the belt */
+function drawTank(cx,gy,sc){
+  sc = sc||1;
+  const rw=Math.round(14*sc), bh=Math.round(40*sc), top=gy-bh, lw=Math.round(10*sc), gr=Math.max(3,Math.round(5*sc));
+  rect(cx-rw+2,gy-Math.round(8*sc),3,Math.round(8*sc),P.beltS); rect(cx+rw-4,gy-Math.round(8*sc),3,Math.round(8*sc),P.beltS); // legs
+  rect(cx-rw,top,rw*2,bh,P.rShade); rect(cx-rw,top,lw,bh,P.rBody); rect(cx+rw-Math.round(6*sc),top,Math.round(6*sc),bh,'#c2cdc5');
+  vline(cx-rw-1,top,bh,INK); vline(cx+rw,top,bh,INK); hline(cx-rw,top+bh,rw*2+1,INK);
+  for(let dx=-rw;dx<=rw;dx++){ const h=Math.round(Math.sqrt(Math.max(0,1-(dx/rw)**2))*gr); rect(cx+dx,top-h,1,h+1, dx<0?P.rBody:P.rShade); px(cx+dx,top-h,INK);} // domed top
+  hline(cx-rw,top+Math.round(bh*0.33),rw*2+1,INK); hline(cx-rw,top+Math.round(bh*0.7),rw*2+1,INK); // bands
+  const gcy=top+Math.round(bh*0.5), gcr=Math.max(3,Math.round(5*sc));
+  fcircle(cx,gcy,gcr,P.wallF); ring(cx,gcy,gcr,INK);                    // gauge
+  const na=(180+(0.5+0.4*Math.sin(frameT*0.05+cx))*180)*Math.PI/180;
+  pline(cx,gcy,Math.round(cx+Math.cos(na)*(gcr-1)),Math.round(gcy+Math.sin(na)*(gcr-1)),P.red);
+}
+/* ⑥ pipes/ducts — several parallel runs crossing the ceiling with drops + a steaming valve */
+function drawPipes(){
+  const py=30;
+  rect(0,py,W,4,P.beltT);   hline(0,py,W,P.beltF);       // main pipe
+  rect(0,py+7,W,3,P.beltS);                               // second (thin) pipe
+  for(let fx=14;fx<W;fx+=40) rect(fx,py-1,2,12,P.beltS);  // brackets
+  rect(70,py+10,3,26,P.beltT); vline(71,py+10,26,P.beltF); // drop to left tank
+  rect(154,py+10,3,26,P.beltT); vline(155,py+10,26,P.beltF); // drop to right tank
+  ring(300,py+1,3,P.red); pline(295,py+1,305,py+1,P.red);  // valve
+  for(let k=0;k<4;k++){ const age=((frameT*0.6)+k*11)%40; if(age<28){ g.save(); g.globalAlpha=Math.max(0,0.55-age/45); fcircle(300,Math.round(py-3-age*0.5),1+Math.round(age/16),'#ffffff'); g.globalAlpha=1; g.restore(); } }
+}
+/* ⑩ wall ventilation fans (blades spin) */
+function drawWallFan(cx,cy){
+  const r=11; ring(cx,cy,r,INK); ring(cx,cy,r-1,P.beltS); fcircle(cx,cy,r-3,'#2c3a44');
+  const a=frameT*0.25;
+  for(let k=0;k<4;k++){ const ang=a+k*Math.PI/2;
+    pline(cx,cy,Math.round(cx+Math.cos(ang)*(r-3)),Math.round(cy+Math.sin(ang)*(r-3)),P.beltF);
+    pline(cx,cy,Math.round(cx+Math.cos(ang+0.35)*(r-3)),Math.round(cy+Math.sin(ang+0.35)*(r-3)),P.beltT); }
+  fcircle(cx,cy,2,INK);
+}
+/* ① control panel — needle = utilisation (busy/total); lamps red when saturated, green when idle */
+function drawControlPanel(bx,by,ratio){
+  obox(bx,by,58,28,P.wallD);
+  rect(bx+2,by+2,54,5,P.beltT);
+  for(let i=0;i<11;i++) px(bx+5+i*5,by+4,(i/11<ratio)?P.grF:P.grS);   // load bar
+  const gx=bx+17,gy=by+24,r=13;
+  for(let a=180;a<=360;a+=6){ const rad=a*Math.PI/180; px(Math.round(gx+Math.cos(rad)*r),Math.round(gy+Math.sin(rad)*r),INK); }
+  for(let a=180;a<=360;a+=45){ const rad=a*Math.PI/180; px(Math.round(gx+Math.cos(rad)*(r-3)),Math.round(gy+Math.sin(rad)*(r-3)),INK); }
+  const na=(180+Math.max(0,Math.min(1,ratio))*180)*Math.PI/180;        // ← data connected
+  pline(gx,gy,Math.round(gx+Math.cos(na)*(r-2)),Math.round(gy+Math.sin(na)*(r-2)),P.red);
+  fcircle(gx,gy,2,INK);
+  const on=(frameT>>4)&1, hot=ratio>0.8, cold=ratio<0.3;
+  fcircle(bx+44,by+12,3, hot?(on?P.red:'#7a2a24'):P.yS);
+  fcircle(bx+44,by+21,3, cold?(on?P.grF:P.grS):(hot?P.yS:(on?P.yT:P.yS)));
+  rect(bx+50,by+9,5,15,'#123038');                                     // side readout
+  for(let j=0;j<3;j++) hline(bx+51,by+11+j*4,3, (frameT>>(2+j))&1?P.mintD:P.grS);
+}
+/* ⑩ warning beacon — busier ⇒ redder & faster blink (drawn after ambient for punch) */
+function drawBeacon(cx,cy,ratio){
+  rect(cx-3,cy,6,3,P.beltS); rect(cx-4,cy+3,8,1,P.beltS);
+  const period=8+Math.round((1-ratio)*26), on=(frameT%period)<period/2;
+  const col=ratio>0.5?P.red:P.yT;
+  fcircle(cx,cy-2,3, on?col:mix(col,'#101010',0.6));
+  if(on){ g.save(); g.globalCompositeOperation='lighter'; g.globalAlpha=0.3+ratio*0.4; fcircle(cx,cy-2,6+Math.round(ratio*4),col); g.globalAlpha=1; g.restore(); }
+}
+/* ⑤ robot arm beside the belt — reacts to the busy flow */
+function drawRobotArm(bx,gy,active){
+  cube(bx-6,gy-10,14,10,2,P.beltF,P.beltT,P.beltS);
+  const sx=bx, sy=gy-11, sweep=active?Math.sin(frameT*0.06)*0.5:-0.15;
+  const ex=Math.round(sx+Math.cos(-1.05+sweep)*18), ey=Math.round(sy+Math.sin(-1.05+sweep)*18);
+  for(let o=-1;o<=1;o++) pline(sx+o,sy,ex+o,ey,P.red);
+  const gxx=Math.round(ex+Math.cos(0.5+sweep)*16), gyy=Math.round(ey+Math.sin(0.5+sweep)*16);
+  for(let o=-1;o<=1;o++) pline(ex,ey+o,gxx,gyy+o,P.coralBody);
+  fcircle(sx,sy,3,INK); fcircle(ex,ey,2,INK);
+  const open=active?(Math.sin(frameT*0.12)>0):true;
+  rect(gxx-4,gyy+(open?1:2),3,2,INK); rect(gxx+2,gyy+(open?1:2),3,2,INK);
+}
+/* decorative conveyors (NOT data-connected) — thinner + yellow rails to differ from the main belt */
+function drawDecoBelt(x0,x1,y,dir){
+  const w=x1-x0;
+  cube(x0,y,w,3,2,P.beltS,P.beltF,P.beltS);
+  hline(x0,y-1,w,P.yF); hline(x0,y+3,w,P.yS);
+  obox(x0+6,y+3,3,7,P.beltS); obox(x1-9,y+3,3,7,P.beltS);
+  const off=Math.floor(frameT*0.5)*dir, span=w-8;
+  for(let i=0;i<Math.floor(w/26);i++){ const bx=x0+3+((((i*26)+off)%span)+span)%span; cbox(bx,y-4,7,5,1); }
+}
+/* ⑫ factory cat — slowly patrols the front floor, pausing to flick its tail */
+let cat={x:120, dir:1, pause:60};
+function updateCat(){
+  if(cat.pause>0){ cat.pause--; return; }
+  cat.x += cat.dir*0.35;
+  if(cat.x>388){ cat.dir=-1; cat.pause=140; }
+  else if(cat.x<58){ cat.dir=1; cat.pause=140; }
+  else if(Math.random()<0.004){ cat.pause=100; }
+}
+function drawCat(gy){
+  const cx=Math.round(cat.x), moving=cat.pause===0, d=cat.dir;         // d=+1 right, -1 left
+  const bob=moving?Math.round(Math.abs(Math.sin(frameT*0.2))):0;
+  const y=gy-8-bob;
+  shadow(cx,gy,8);
+  rect(cx-8,y-4,16,8,P.cardT); hline(cx-8,y-4,16,P.rTop);              // body
+  vline(cx-2,y-4,8,P.cardS); vline(cx+2,y-4,8,P.cardS);                // stripes
+  rect(cx-6,y+4,2,3,P.cardS); rect(cx+4,y+4,2,3,P.cardS);              // legs
+  const hx=cx+11*d;                                                    // head LEADS travel direction
+  rect(hx-3,y-6,7,7,P.cardT); rect(hx-2,y-8,2,2,P.cardT); rect(hx+2,y-8,2,2,P.cardT); // ears
+  px(hx-1,y-3,INK); px(hx+2,y-3,INK); px(hx+4*d,y-2,P.coral);          // eyes + nose (front)
+  const tw=Math.round(Math.sin(frameT*0.15)*3);                        // tail trails BEHIND
+  pline(cx-8*d,y-2, cx-13*d,y-6+tw, P.cardT); pline(cx-13*d,y-6+tw, cx-15*d,y-11+tw, P.cardT);
+}
+
+/* ================= stations (fixed posts) ================= */
+/* slots 0..12 = the 13 hand-placed posts; job sets the pose, working sets the mood */
+const STATIONS = [
+  {x:60,  y:86,  job:'conveyor', o:{pose:'carry', boxKind:'y', noShadow:true}},
+  {x:140, y:86,  job:'conveyor', o:{pose:'idle',  look:1, noShadow:true}},
+  {x:205, y:86,  job:'stack',    o:{pose:'lift',  boxKind:'y', noShadow:true, badge:P.coral}},
+  {x:302, y:92,  job:'idle',     o:{pose:'idle',  look:-1}},
+  {x:95,  y:132, job:'sweep',    o:{pose:'sweep'}},
+  {x:140, y:128, job:'carry',    o:{pose:'carry'}},
+  {x:292, y:128, job:'carry',    o:{pose:'carry', look:1}},
+  {x:228, y:152, job:'stack',    o:{pose:'lift',  boxKind:'y', look:1}},
+  {x:80,  y:178, job:'pack',     o:{pose:'sit',   look:-1}},
+  {x:150, y:172, job:'chat',     o:{pose:'idle',  look:1}},
+  {x:172, y:176, job:'chat',     o:{pose:'idle',  look:-1, badge:P.coral}},
+  {x:210, y:182, job:'mop',      o:{pose:'sweep', tool:'mop'}},
+  {x:278, y:168, job:'helmet',   o:{pose:'idle',  bucketHat:true, look:-1}},
+];
+/* extra WORK posts for when >13 workers are busy at once (right + left strips) */
+const WORK_OF = [];
+for(const y of [58,86,114,142,170,196]) WORK_OF.push({x:362,y});   // right strip
+for(const y of [120,152]) WORK_OF.push({x:22,y});                  // left strip
+const OF_POSES = [
+  {pose:'idle'}, {pose:'carry'}, {pose:'sweep'}, {pose:'idle',look:1},
+  {pose:'carry',boxKind:'y'}, {pose:'sit'}, {pose:'idle',look:-1},
+];
+function workPos(s){ return s<STATIONS.length ? STATIONS[s] : (WORK_OF[s-STATIONS.length] || WORK_OF[WORK_OF.length-1]); }
+function workOpts(s){ return s<STATIONS.length ? STATIONS[s].o : OF_POSES[(s-STATIONS.length)%OF_POSES.length]; }
+function workJob(s){ return s<STATIONS.length ? STATIONS[s].job : OF_POSES[(s-STATIONS.length)%OF_POSES.length].pose; }
+
+/* ================= charging lane (② idle agents dock & charge here) ================= */
+/* docking slots grid-pack along the bottom red lane; extra rows stack upward when crowded */
+const DOCK_COLS = 9, DOCK_X0 = 32, DOCK_DX = 46;
+function breakPos(i){                                   // (name kept) → a charging dock slot
+  const col = i % DOCK_COLS, row = Math.floor(i / DOCK_COLS);
+  return { x: DOCK_X0 + col*DOCK_DX, y: 244 - row*20 };
+}
+function drawChargeStation(){
+  // red charging lane platform
+  rect(0, BREAK_TOP, W, H-BREAK_TOP, P.dockR);
+  rect(0, BREAK_TOP, W, 3, P.dockRD); rect(0, H-3, W, 3, P.dockRD);
+  hline(0, BREAK_TOP+4, W, P.dockRail);
+  for(let x=4;x<W;x+=8) px(x, H-5, P.dockRD);          // floor scuff
+  // controller cabinet at the far left (replaces the old red vending box)
+  obox(6, BREAK_TOP+8, 18, 22, P.shelfD); rect(9, BREAK_TOP+11, 12, 8, '#123038');
+  for(let i=0;i<4;i++) px(11+i*2, BREAK_TOP+14, ((frameT>>3)+i)&1?P.batt:P.battD);
+  drawBolt(13, BREAK_TOP+21, P.yT);
+  // charging ports (sockets on the lane) at each dock column
+  for(let i=0;i<DOCK_COLS*2;i++){ const p=breakPos(i); if(p.y>H-8) continue;
+    rect(p.x-10, p.y-13, 5, 7, P.socket); rect(p.x-9, p.y-12, 3, 2, P.batt);       // socket box
+    px(p.x-9, p.y-8, P.yT);
+  }
+}
+
+/* ================= data / stable assignment ================= */
+let state = null;              // last successful (or dummy) worker array
+let curWorkers = [];           // workers currently rendered
+let postSlotOf = {};           // key -> work post slot (stable home)
+let breakSlotOf = {};          // key -> break-room seat (stable)
+let usedPost = new Set(), usedBreak = new Set();
+let slotOwner = {};            // post slot -> worker
+let colorOverride = {};        // key -> preset index (② tap colour, persisted)
+let taskStart = {};            // key -> performance.now() of busy onset (③)
+let prevBusy = {};             // key -> was busy last poll (edge detection)
+let wpos = {}, pop = {};       // key -> {x,y} render pos ; key -> pop frame
+let idleSince = {};            // key -> frame when the agent went idle (battery fill)
+let completed = 0;             // finished tasks counter
+function keyOf(w){ return String(w.sessionId != null ? w.sessionId : w.pid); }
+function lowestFree(set){ let s=0; while(set.has(s)) s++; return s; }
+
+function reconcile(workers){
+  const present = new Set(workers.map(keyOf));
+  for(const k of Object.keys(postSlotOf)){
+    if(!present.has(k)){
+      usedPost.delete(postSlotOf[k]); usedBreak.delete(breakSlotOf[k]);
+      delete postSlotOf[k]; delete breakSlotOf[k];
+      delete wpos[k]; delete taskStart[k]; delete prevBusy[k]; delete colorOverride[k]; delete idleSince[k];
+    }
+  }
+  const fresh = workers.filter(w=>!(keyOf(w) in postSlotOf)).sort((a,b)=> keyOf(a)<keyOf(b)?-1:1);
+  for(const w of fresh){
+    const k = keyOf(w);
+    const ps = lowestFree(usedPost);  usedPost.add(ps);   postSlotOf[k] = ps;   // stable home post
+    const bs = lowestFree(usedBreak); usedBreak.add(bs);  breakSlotOf[k] = bs;  // stable break seat
+  }
+}
+function applyState(workers){
+  reconcile(workers);
+  curWorkers = workers;
+  for(const w of workers){
+    const k = keyOf(w);
+    if(w.working){ if(!prevBusy[k]) startTask(k); delete idleSince[k]; }   // idle→busy: task begins (③)
+    else { delete taskStart[k];
+      if(idleSince[k]===undefined){ let h=0; for(let i=0;i<k.length;i++) h=(h*31+k.charCodeAt(i))>>>0; idleSince[k]=frameT-(h%2700); } } // idle→dock & charge (staggered initial battery)
+    prevBusy[k] = !!w.working;
+    if(!wpos[k]){                                      // spawn at the right place
+      if(w.working){ const p=Math.max(0,taskProgress(k)||0); wpos[k]={x:beltX(p), y:BELT_Y}; }
+      else { const tp=breakPos(breakSlotOf[k]); wpos[k]={x:tp.x, y:tp.y}; }
+    }
+  }
+  syncLabels(workers);
+  state = workers;
+}
+/* one label element per worker, reused; positions are updated each frame to follow the mascot */
+let labelEls = {};
+function syncLabels(workers){
+  const box = document.getElementById('labels');
+  const present = new Set(workers.map(keyOf));
+  for(const k of Object.keys(labelEls)){ if(!present.has(k)){ labelEls[k].remove(); delete labelEls[k]; } }
+  for(const w of workers){
+    const k = keyOf(w), name = w.project||w.name||'';
+    if(!name){ if(labelEls[k]){ labelEls[k].remove(); delete labelEls[k]; } continue; }
+    let el = labelEls[k];
+    if(!el){ el = document.createElement('span'); el.className='lbl'; box.appendChild(el); labelEls[k]=el; }
+    el.textContent = name;
+  }
+}
+function positionLabels(){
+  for(const k of Object.keys(labelEls)){
+    const s = wpos[k]; if(!s) continue;
+    const el = labelEls[k];
+    el.style.left = (s.x / W * 100) + '%';
+    el.style.top  = ((s.y + 3) / H * 100) + '%';
+  }
+}
+function hud(){
+  const busy = curWorkers.filter(w=>w.working).length, total = curWorkers.length;
+  document.getElementById('hud').innerHTML =
+    `稼働中 <b>${busy}</b>　休憩中 <i>${total-busy}</i>　合計 ${total}　完了 <b>${completed}</b>`;
+}
+
+/* fallback dummy set (used only while the server is unreachable) */
+const DUMMY = [
+  {sessionId:'dummy-1',pid:59721,project:'eventos-customize-rules',working:true},
+  {sessionId:'dummy-2',pid:59722,project:'eventos-api',working:true},
+  {sessionId:'dummy-3',pid:59723,project:'metabase-sync',working:false},
+  {sessionId:'dummy-4',pid:59724,project:'shibuya-stamprally',working:false},
+  {sessionId:'dummy-5',pid:59725,project:'olc-fw-2026',working:false},
+  {sessionId:'dummy-6',pid:59726,project:'checkin-seed',working:false},
+  {sessionId:'dummy-7',pid:59727,project:'eventnews',working:false},
+  {sessionId:'dummy-8',pid:59728,project:'greeting-bot',working:false},
+];
+function makeDummy(){
+  const n = +new URLSearchParams(location.search).get('dummy');   // ?dummy=N for previewing crowds
+  if(n){
+    const names=['eventos-customize-rules','eventos-api','metabase-sync','shibuya-stamprally','olc-fw-2026','checkin-seed','eventnews','greeting-bot'];
+    const a=[]; for(let i=0;i<n;i++) a.push({sessionId:'dummy-'+i,pid:60000+i,project:names[i%names.length],working:i%4===0});
+    return a;
+  }
+  return DUMMY;
+}
+async function poll(){
+  try{
+    const r = await fetch('/api/sessions',{cache:'no-store'});
+    if(!r.ok) throw 0;
+    const d = await r.json();
+    if(Array.isArray(d.workers)) applyState(d.workers);
+  }catch(e){
+    if(!state) applyState(makeDummy());   // keep previous state on failure; dummy only if never loaded
+  }
+}
+setInterval(poll, 1000);
+poll();
+
+/* ================= per-worker draw =================
+   busy → ride the MAIN belt L→R by pseudo-progress; idle → relax in the break room.
+   Render pos eases toward the target so busy⇄idle transitions read as a little walk. */
+const WALKSPD = 2.4;
+let hitboxes = [];                               // rebuilt each frame for click hit-testing
+/* varied "working" poses for belt riders (no 'sit', all look active) */
+const BELT_POSES = [
+  {pose:'carry'}, {pose:'sweep'}, {pose:'carry',boxKind:'y'},
+  {pose:'lift',boxKind:'y'}, {pose:'idle',look:1}, {pose:'sweep',tool:'mop'},
+];
+function popBob(k){ const pk=pop[k]; if(pk===undefined) return 0; const age=frameT-pk; if(age<14) return -Math.round(Math.sin(age/14*Math.PI)*4); delete pop[k]; return 0; }
+
+/* ⑦ ALL busy workers ride the main belt, flowing left→right, completing at the right end */
+function drawBeltWorkers(){
+  const busy = curWorkers.filter(w=>w.working);
+  const draws = [];
+  for(const w of busy){
+    const k = keyOf(w);
+    let p = taskProgress(k); if(p===null){ startTask(k); p = Math.max(0, taskProgress(k)); }
+    if(p>=1){ completed++; completePops.push({t0:frameT}); taskStart[k]=performance.now(); p=0; } // complete → count + loop from left
+    const slot = postSlotOf[k]||0, lane = slot%3;
+    const bx = BELT_X0 + p*(BELT_X1-BELT_X0) + (lane-1)*3;
+    const by = BELT_Y + (lane-1)*5;             // small lane stagger so a crowd doesn't fully overlap
+    let s = wpos[k] || (wpos[k]={x:bx,y:by});
+    if(Math.abs(s.y-by)<14 && s.x-bx>50) s.x = bx;   // looped right→left: snap (no backward walk)
+    const dx = bx-s.x, dy = by-s.y, dist = Math.hypot(dx,dy);
+    const walking = dist>3;                          // still walking up from the break room
+    if(walking){ const st=Math.min(WALKSPD,dist); s.x+=dx/dist*st; s.y+=dy/dist*st; } else { s.x=bx; s.y=by; }
+    draws.push({k, slot, walking, dx, cx:Math.round(s.x), cy:Math.round(s.y)});
+  }
+  draws.sort((a,b)=> a.cy-b.cy || a.cx-b.cx);        // painter's order across lanes
+  for(const d of draws){
+    const cs = CSETS[(colorOverride[d.k]||0)%CSETS.length], phase = d.slot*1.7;
+    let o, bob;
+    if(d.walking){ o={pose:'idle', look:(d.dx<0?-1:1), cs, noShadow:true}; bob=-Math.round(Math.abs(Math.sin(frameT*0.45))*2); }
+    else { o=Object.assign({}, BELT_POSES[d.slot%BELT_POSES.length], {cs, noShadow:true}); o.swing=Math.round(Math.sin(frameT*0.30+phase)*2); bob=Math.round(Math.sin(frameT*0.18+phase)*1.4)-1; }
+    o.blink = ((frameT+d.slot*29)%210) < 7;
+    bob += popBob(d.k);
+    robot(d.cx, d.cy, o, bob);
+    hitboxes.push({key:d.k, x:d.cx-11, y:d.cy-30, w:22, h:32});
+  }
+  completePops = completePops.filter(pp=> frameT-pp.t0 < 18);
+  for(const pp of completePops) burst(BELT_X1+6, BELT_Y-4, frameT-pp.t0);
+}
+
+/* ② idle agents walk to a charging dock and charge (battery fills, ⚡ while charging, zzz when full) */
+const CHARGE_SEC = 45;                    // seconds of idle → full battery
+function drawChargingWorkers(){
+  const idle = curWorkers.filter(w=>!w.working);
+  idle.sort((a,b)=> ((wpos[keyOf(a)]||{y:0}).y) - ((wpos[keyOf(b)]||{y:0}).y));
+  for(const w of idle){
+    const k = keyOf(w), tgt = breakPos(breakSlotOf[k]);
+    let s = wpos[k] || (wpos[k]={x:tgt.x,y:tgt.y});
+    const dx = tgt.x-s.x, dy = tgt.y-s.y, dist = Math.hypot(dx,dy);
+    const walking = dist>2.5;
+    if(walking){ const st=Math.min(WALKSPD,dist); s.x+=dx/dist*st; s.y+=dy/dist*st; } else { s.x=tgt.x; s.y=tgt.y; }
+    const cx = Math.round(s.x), cy = Math.round(s.y);
+    const cs = CSETS[(colorOverride[k]||0)%CSETS.length], slot = postSlotOf[k]||0;
+    let o, bob=0;
+    if(walking){ o={pose:'idle', look:(dx<0?-1:1), cs}; bob=-Math.round(Math.abs(Math.sin(frameT*0.45))*2); }
+    else { o={pose:'idle', look:0, cs, dim:true}; o.blink=((frameT+slot*29)%210)<7; }
+    bob += popBob(k);
+    if(!walking){                                    // cable from the wall socket to the docked agent
+      pline(cx-10, cy-10, cx-4, cy-7, P.cable); pline(cx-4, cy-7, cx-1, cy-5, P.cable);
+    }
+    robot(cx, cy, o, bob);
+    if(!walking){
+      const secs = (w.idleSec!=null ? w.idleSec : (frameT-(idleSince[k]||frameT))/60);
+      const pct = Math.max(0, Math.min(1, secs/CHARGE_SEC));
+      drawBattery(cx, cy-26, pct);                   // battery gauge above head
+      if(pct<1){ if((frameT>>3)&1) drawBolt(cx+8, cy-27, P.yT); }  // ⚡ blinks while charging
+      else { zzz(cx, cy-20, frameT+slot*13); }                     // full → nap
+    }
+    hitboxes.push({key:k, x:cx-11, y:cy-30, w:22, h:32});
+  }
+}
+
+/* ================= ② tap to recolour ================= */
+cv.addEventListener('click', (e)=>{
+  const r = cv.getBoundingClientRect();
+  const bx = (e.clientX-r.left)/r.width*W;        // display → internal buffer coords
+  const by = (e.clientY-r.top)/r.height*H;
+  for(let i=hitboxes.length-1;i>=0;i--){          // topmost (last drawn) wins
+    const h = hitboxes[i];
+    if(bx>=h.x && bx<=h.x+h.w && by>=h.y && by<=h.y+h.h){
+      colorOverride[h.key] = ((colorOverride[h.key]||0)+1) % CSETS.length;  // cycle preset, persisted by key
+      pop[h.key] = frameT;
+      break;
+    }
+  }
+});
+
+/* ================= frame loop ================= */
+let frameT = 0;
+function frame(){
+  frameT++;
+  const t = frameT;
+  const env = getEnv(currentHour());
+  hitboxes = [];
+
+  // utilisation ratio drives the control-panel needle and the warning beacon
+  const total = curWorkers.length, busy = curWorkers.filter(w=>w.working).length;
+  const ratio = total ? busy/total : 0;
+
+  g.drawImage(bg, 0, 0);                        // baked (perspective) floor + splashes
+  drawWall(env);                                // wall + windows + ceiling
+  drawWallFan(96,18); drawWallFan(376,18);      // ⑩ two big ventilation fans
+  drawLoadingBay(254,9);                        // dark loading bay (back wall, centre)
+  drawControlPanel(192,9,ratio);                // ① utilisation gauge beside the bay
+  drawPipes();                                  // ⑥ pipes crossing the ceiling + drops
+  drawBackDecor();                              // packing bench under the bay
+  // BACK layer (far, smaller): 3 legged silos + steel shelving + elevated catwalk
+  drawShelf(306,126);                           // right steel rack, stored boxes/buckets/drums
+  drawCatwalk(158,306,72);                      // elevated conveyor crossing the back
+  drawTank(66,124,0.82); drawTank(110,128,1.0); drawTank(152,120,0.78);   // ⑧ 3 tanks
+  drawVBelt();                                  // receding feeder: tank → main belt
+  drawSunbeams(env);                            // daytime shafts (under workers)
+  drawLampFloor(env);                           // night lamp pools (under workers)
+
+  // MAIN belt — one continuous line left→right, ALL busy workers riding it, then the arm
+  drawConveyor(t);
+  drawBeltWorkers();
+  drawRobotArm(392,176, busy>0);                // ⑤ picks finished items off the flow
+
+  // FOREGROUND (near = larger + strong shadow → depth); storage now lives on the shelves
+  shadow(360,190,16); drawBarrel(360,190,1.2); drawBarrel(378,192,0.95);
+  sprite(150,190,BUCKET,BMAP); sprite(163,194,BUCKET,BMAP);
+  toolbox(96,192); splat(120,198,0); splat(300,196,0);
+  updateCat(); drawCat(184);
+
+  // CHARGING lane + docked idle agents (nearest plane)
+  drawChargeStation();
+  drawChargingWorkers();
+
+  positionLabels();                             // labels follow their mascot (belt or dock)
+
+  // environment light passes (over everything, for cohesion)
+  applyAmbient(env);
+  drawDepthHaze(env);                           // aerial perspective on the far distance
+  drawGlows(env);
+  drawBeacon(228,6,ratio);                      // ⑩ warning beacon (punchy over ambient)
+  hud();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

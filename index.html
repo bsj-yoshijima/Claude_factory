@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🏭 Claude Factory</title>
+<style>
+  :root{
+    --coral:#C15F3C; --coral-lt:#d1774f; --coral-dk:#9d4527;
+    --floor1:#8fce9e; --floor2:#7cc08c; --ink:#1f2a22; --cream:#f3efe3;
+    --busy:#2fa84f; --idle:#9aa39a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    color:var(--ink); background:#25302a; overflow:hidden;
+    image-rendering:auto;
+  }
+  /* ===== ヘッダー / カウンター ===== */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:20;
+    display:flex;align-items:center;gap:18px;padding:12px 20px;
+    background:linear-gradient(#2b362f,rgba(43,54,47,.75) 70%,transparent);
+    color:#f3efe3;
+  }
+  h1{font-size:20px;margin:0;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+  h1 small{font-weight:400;font-size:12px;opacity:.7}
+  .counters{display:flex;gap:10px;margin-left:auto}
+  .kpi{background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);border-radius:12px;
+    padding:7px 15px;text-align:center;min-width:78px;backdrop-filter:blur(4px)}
+  .kpi .n{font-size:24px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .kpi .l{font-size:10px;opacity:.72;margin-top:3px;letter-spacing:.1em}
+  .kpi.busy .n{color:#7ff29a}.kpi.total .n{color:#f0a884}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#7ff29a;margin-right:5px;
+    box-shadow:0 0 8px #7ff29a;animation:blink 1.3s infinite}
+  @keyframes blink{50%{opacity:.35}}
+
+  /* ===== 工場フロア（アイソメ） ===== */
+  #scene{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  #floor{
+    position:relative;
+    transform:rotateX(55deg) rotateZ(-45deg);
+    transform-style:preserve-3d;
+    transition:transform .4s;
+  }
+  .grid{display:grid;gap:6px;}
+  .tile{
+    width:120px;height:120px;border-radius:10px;position:relative;
+    background:
+      linear-gradient(135deg,rgba(255,255,255,.10),rgba(0,0,0,.06)),
+      repeating-linear-gradient(0deg,var(--floor1) 0 30px,var(--floor2) 30px 60px);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);
+  }
+  .tile.empty{opacity:.5}
+  /* 作業員は床に対して立たせる（アイソメを打ち消す） */
+  .worker{
+    position:absolute;left:50%;top:50%;
+    transform:translate(-50%,-60%) rotateZ(45deg) rotateX(-55deg);
+    transform-origin:center bottom;
+    display:flex;flex-direction:column;align-items:center;
+    transition:filter .3s;
+  }
+  .worker.idle{filter:grayscale(.5) brightness(.9)}
+  .shadow{position:absolute;bottom:-6px;width:44px;height:14px;border-radius:50%;
+    background:rgba(0,0,0,.22);filter:blur(2px)}
+
+  /* マスコット本体（bob） */
+  .mascot{position:relative;z-index:2}
+  .working .mascot{animation:bob .8s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+
+  /* 作業台 & 小物 */
+  .bench{width:56px;height:10px;border-radius:3px;margin-top:-4px;z-index:1;
+    background:linear-gradient(var(--coral-lt),var(--coral-dk));box-shadow:0 3px 0 #6d2f18}
+  .prop{position:absolute;font-size:18px;z-index:3}
+  .prop.box{right:-16px;bottom:6px}
+  .prop.tool{left:-4px;bottom:20px;transform-origin:bottom center;opacity:0}
+  .working .prop.tool{opacity:1;animation:tool .5s ease-in-out infinite}
+  @keyframes tool{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(-48deg)}}
+  .spark{position:absolute;left:-8px;bottom:14px;font-size:12px;opacity:0;z-index:3}
+  .working .spark{animation:spark .5s ease-in-out infinite}
+  @keyframes spark{0%,40%{opacity:0}55%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-8px) scale(.6)}}
+  .zzz{position:absolute;top:-12px;right:-14px;font-size:15px;color:#5a6b5c;opacity:0}
+  .idle .zzz{animation:zzz 3s ease-in-out infinite}
+  @keyframes zzz{0%{opacity:0;transform:translate(0,0) scale(.6)}35%{opacity:.9}100%{opacity:0;transform:translate(9px,-16px) scale(1.1)}}
+
+  /* ネームプレート（アイソメ打ち消し済みなので水平） */
+  .plate{margin-top:8px;background:rgba(20,28,22,.9);color:#f3efe3;border-radius:8px;
+    padding:4px 8px;text-align:center;min-width:96px;max-width:150px;box-shadow:0 3px 8px rgba(0,0,0,.3);z-index:4}
+  .plate .nm{font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .plate .pj{font-size:9px;color:#f0a884;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .plate .st{font-size:9px;opacity:.8;margin-top:1px}
+  .light{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--idle);margin-right:4px;vertical-align:middle}
+  .working .light{background:var(--busy);box-shadow:0 0 6px var(--busy)}
+  .badge-you{position:absolute;top:-8px;left:50%;transform:translateX(-50%);font-size:8px;
+    background:var(--coral);color:#fff;padding:1px 7px;border-radius:20px;letter-spacing:.08em;z-index:5}
+
+  /* ===== ベルトコンベア（画面下・非アイソメの装飾帯） ===== */
+  .belt{position:fixed;left:0;right:0;bottom:0;height:52px;background:#1b241d;overflow:hidden;
+    border-top:3px solid #0e130f;z-index:15}
+  .belt .track{position:absolute;inset:0;background-image:repeating-linear-gradient(90deg,#2a352c 0 24px,#1b241d 24px 48px)}
+  .belt.run .track{animation:roll 1.1s linear infinite}
+  @keyframes roll{to{background-position:48px 0}}
+  .belt .items{position:absolute;top:9px;white-space:nowrap;font-size:24px;opacity:.9}
+  .belt.run .items{animation:carry 7s linear infinite}
+  @keyframes carry{from{transform:translateX(-12%)}to{transform:translateX(102vw)}}
+  .belt .cap{position:absolute;right:14px;top:16px;color:#cbb8a8;font-size:11px;letter-spacing:.12em}
+
+  #empty{position:fixed;inset:0;display:none;align-items:center;justify-content:center;color:#cfe0d2;
+    font-size:16px;z-index:10;text-align:center;padding:40px}
+</style>
+</head>
+<body>
+  <header>
+    <h1>🏭 Claude Factory <small>動いている Claude たちの工場</small></h1>
+    <div class="counters">
+      <div class="kpi busy"><div class="n"><span class="dot"></span><span id="c-busy">0</span></div><div class="l">稼働中</div></div>
+      <div class="kpi"><div class="n" id="c-idle">0</div><div class="l">待機中</div></div>
+      <div class="kpi total"><div class="n" id="c-total">0</div><div class="l">合計</div></div>
+    </div>
+  </header>
+
+  <div id="scene"><div id="floor"><div class="grid" id="grid"></div></div></div>
+  <div id="empty">工場は今、誰もいません。<br>別のディレクトリで <code>claude</code> を起動すると作業員が現れます 👷</div>
+
+  <div class="belt" id="belt">
+    <div class="track"></div>
+    <div class="items">📦🧩⚙️🔧📦🧩⚙️🔧📦🧩⚙️🔧📦🧩⚙️🔧📦🧩⚙️🔧📦🧩⚙️🔧</div>
+    <div class="cap" id="belt-cap">STANDBY</div>
+  </div>
+
+<script>
+const grid = document.getElementById('grid');
+const nodes = new Map();
+
+/* Claude Code のピクセルマスコット（コーラル色・目2つ・脚） */
+function mascot(){
+  const C='#C15F3C', D='#9d4527', E='#1b1b1b';
+  // 16x14 のピクセルグリッドを rect で構築
+  const px=[];
+  const put=(x,y,w,h,c)=>px.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}"/>`);
+  // 上の2つのコブ
+  put(3,0,4,2,C); put(9,0,4,2,C);
+  // 頭〜胴
+  put(1,2,14,3,C);
+  put(0,5,16,4,C);
+  put(1,9,14,2,C);
+  // 目
+  put(4,4,2,2,E); put(10,4,2,2,E);
+  // 口元のうっすら影
+  put(6,7,4,1,D);
+  // 脚（3本、隙間あり）
+  put(2,11,3,2,C); put(7,11,3,2,C); put(12,11,2,2,C);
+  return `<svg class="mascot" width="66" height="58" viewBox="0 0 16 14" shape-rendering="crispEdges"
+    xmlns="http://www.w3.org/2000/svg">${px.join('')}</svg>`;
+}
+
+/* busy時の作業内容を pid で固定（毎tick変わらないように） */
+const JOBS=[
+  {tool:'🔨', box:'📦'}, {tool:'🔧', box:'🧩'}, {tool:'⌨️', box:'💻'},
+  {tool:'🖌️', box:'🎨'}, {tool:'🔩', box:'⚙️'}, {tool:'✂️', box:'📄'},
+];
+function jobFor(pid){ return JOBS[Math.abs(pid)%JOBS.length]; }
+
+function statusLabel(w){
+  if(w.working) return '🟢 作業中';
+  const s=w.idleSec;
+  if(s==null) return '💤 待機';
+  if(s<60) return `💤 待機 ${s}s`;
+  if(s<3600) return `💤 ${Math.round(s/60)}分`;
+  if(s<86400) return `💤 ${Math.round(s/3600)}h`;
+  return `💤 ${Math.round(s/86400)}日`;
+}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function tileFor(w){
+  const job=jobFor(w.pid);
+  const tile=document.createElement('div');
+  tile.className='tile';
+  tile.innerHTML=`
+    <div class="worker ${w.working?'working':'idle'}">
+      ${w.isYou?'<span class="badge-you">YOU</span>':''}
+      <div class="shadow"></div>
+      <span class="zzz">z</span>
+      ${mascot()}
+      <span class="prop tool">${job.tool}</span>
+      <span class="spark">✨</span>
+      <span class="prop box">${w.working?job.box:'📦'}</span>
+      <div class="bench"></div>
+      <div class="plate">
+        <div class="nm">${esc(w.name)}</div>
+        <div class="pj" title="${esc(w.cwd)}">📁 ${esc(w.project)}</div>
+        <div class="st"><span class="light"></span>${statusLabel(w)}</div>
+      </div>
+    </div>`;
+  return tile;
+}
+
+/* セッション数に応じて正方形に近いグリッド列数を決める */
+function cols(n){ return Math.max(1, Math.ceil(Math.sqrt(n))); }
+
+async function tick(){
+  let data;
+  try{ data=await (await fetch('/api/sessions',{cache:'no-store'})).json(); }catch{ return; }
+
+  document.getElementById('c-busy').textContent=data.busy;
+  document.getElementById('c-idle').textContent=data.idle;
+  document.getElementById('c-total').textContent=data.total;
+  const belt=document.getElementById('belt');
+  belt.classList.toggle('run',data.busy>0);
+  document.getElementById('belt-cap').textContent=data.busy>0?`PRODUCING ×${data.busy}`:'STANDBY';
+  document.getElementById('empty').style.display=data.total===0?'flex':'none';
+
+  grid.style.gridTemplateColumns=`repeat(${cols(data.total)},120px)`;
+
+  const seen=new Set();
+  for(const w of data.workers){
+    const key=w.sessionId||('pid'+w.pid);
+    seen.add(key);
+    const prev=nodes.get(key);
+    const sig=`${w.working}|${w.idleSec}`;
+    if(!prev){
+      const el=tileFor(w); el.dataset.sig=sig;
+      nodes.set(key,el); grid.appendChild(el);
+    }else if(prev.dataset.sig!==sig){
+      const el=tileFor(w); el.dataset.sig=sig;
+      grid.replaceChild(el,prev); nodes.set(key,el);
+    }
+  }
+  for(const [key,el] of nodes){ if(!seen.has(key)){ el.remove(); nodes.delete(key);} }
+}
+tick();
+setInterval(tick,1000);
+</script>
+</body>
+</html>
