@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🏭 Claude Factory</title>
+<style>
+  :root{ --ink:#e6fff4; --gold:#ffd27a; --mint:#9fdcc6; --panel:rgba(16,24,26,.72); --edge:#2c4740; }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:radial-gradient(120% 120% at 50% 30%,#1b232b 0%,#0c1014 70%);
+    display:flex;align-items:center;justify-content:center;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:var(--ink);overflow:hidden;
+  }
+  #stage{position:relative;display:inline-block;line-height:0;
+         box-shadow:0 24px 80px rgba(0,0,0,.6);border-radius:8px;}
+  canvas{
+    image-rendering:pixelated;image-rendering:crisp-edges;
+    width:min(1300px,96vw);height:auto;display:block;border-radius:8px;
+    cursor:pointer;
+  }
+  /* ---- top bar: room tabs + build toggle ---- */
+  #topbar{position:absolute;top:8px;left:50%;transform:translateX(-50%);
+          display:flex;gap:6px;align-items:center;z-index:6;font-size:12px;}
+  .tab{background:var(--panel);color:var(--mint);border:1px solid var(--edge);
+       border-radius:8px;padding:5px 12px;cursor:pointer;user-select:none;
+       backdrop-filter:blur(3px);transition:.12s;white-space:nowrap;}
+  .tab:hover{border-color:var(--mint)}
+  .tab.active{background:var(--gold);color:#243b34;border-color:var(--gold);font-weight:700}
+  .tab.build.active{background:#78d0a6;border-color:#78d0a6}
+  /* ---- dashboard (育成: busy-time production) ---- */
+  #dash{position:absolute;top:8px;right:10px;z-index:6;background:var(--panel);
+        border:1px solid var(--edge);border-radius:8px;padding:8px 11px;font-size:11px;
+        line-height:1.65;min-width:150px;backdrop-filter:blur(3px);}
+  #dash .row{display:flex;justify-content:space-between;gap:12px}
+  #dash .k{color:var(--mint)} #dash .v{color:var(--gold);font-weight:700}
+  #dash .title{color:#cfeee0;font-weight:700;margin-bottom:4px;letter-spacing:.5px;
+               border-bottom:1px solid var(--edge);padding-bottom:4px}
+  /* ---- live counters (bottom-left) ---- */
+  #hud{position:absolute;left:10px;bottom:10px;z-index:6;background:var(--panel);
+       border:1px solid var(--edge);border-radius:8px;padding:5px 10px;font-size:12px;
+       backdrop-filter:blur(3px);white-space:nowrap;}
+  #hud b{color:var(--gold)} #hud i{color:var(--mint);font-style:normal}
+  #clock{color:#9fb0c0}
+  /* ---- build palette ---- */
+  #palette{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:6;
+           display:none;gap:5px;background:var(--panel);border:1px solid var(--edge);
+           padding:6px 8px;border-radius:10px;backdrop-filter:blur(3px);}
+  #palette.show{display:flex}
+  .pitem{width:40px;height:42px;display:flex;flex-direction:column;align-items:center;
+         justify-content:center;gap:1px;font-size:18px;background:#16211d;
+         border:1px solid var(--edge);border-radius:7px;cursor:pointer;color:var(--mint);transition:.1s;}
+  .pitem:hover{border-color:var(--mint)}
+  .pitem.active{border-color:var(--gold);background:#243b34;box-shadow:0 0 0 1px var(--gold) inset}
+  .pitem small{font-size:7px;color:#8fbfad;line-height:1}
+  .pitem.danger.active{border-color:#e05a4e;box-shadow:0 0 0 1px #e05a4e inset}
+  /* ---- worker name labels overlay ---- */
+  #labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+  .lbl{position:absolute;transform:translate(-50%,0);font-size:9px;line-height:1;
+       color:#eafff6;max-width:78px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+       text-align:center;text-shadow:0 1px 2px #000,0 0 3px #000;}
+  #hint{position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:6;
+        font-size:10px;color:#bfe0d2;background:rgba(16,24,26,.6);padding:3px 9px;
+        border-radius:6px;display:none;pointer-events:none;}
+  #hint.show{display:block}
+  /* ---- gacha / dex / friends overlays ---- */
+  .tab.gacha.active{background:#f6c04a;border-color:#f6c04a;color:#243b34}
+  #overlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;
+           background:rgba(6,10,12,.72);backdrop-filter:blur(4px)}
+  #overlay.show{display:flex}
+  #panel{position:relative;background:#12181c;border:1px solid var(--edge);border-radius:12px;
+         padding:18px 20px;max-width:min(700px,92vw);max-height:88vh;overflow:auto}
+  #panel h2{margin:0 0 8px;font-size:16px;color:var(--gold)}
+  #panel .close{position:absolute;top:8px;right:14px;font-size:20px;color:#9fb0c0;cursor:pointer;line-height:1}
+  .rowline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;font-size:12px}
+  .btn{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,66px);gap:8px;margin-top:6px}
+  .cell{width:66px;height:80px;border-radius:8px;border:2px solid #333;background:#0e1417;
+        display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:28px;position:relative}
+  .cell small{font-size:8px;margin-top:1px} .cell .cnt{position:absolute;bottom:2px;right:5px;font-size:9px;color:#fff}
+  .cardwrap{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;min-height:100px;align-items:center;margin:6px 0}
+  .card{width:72px;height:94px;border-radius:8px;display:flex;flex-direction:column;align-items:center;
+        justify-content:center;font-size:32px;border:2px solid #fff;animation:cardpop .45s ease both}
+  .card small{font-size:9px;font-weight:700;margin-top:2px}
+  @keyframes cardpop{0%{transform:scale(.2) rotate(-8deg);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+  #palette{flex-wrap:wrap;max-width:min(940px,94vw)}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="topbar">
+    <div class="tab active" data-view="factory">🏭 工場</div>
+    <div class="tab" data-view="lounge">☕ 休憩室</div>
+    <div class="tab build" id="buildBtn">🔧 設置</div>
+    <div class="tab gacha" id="gachaBtn">🎁 ガチャ</div>
+    <div class="tab" id="dexBtn">📖 図鑑</div>
+    <div class="tab" id="friendBtn">👥 フレンド</div>
+  </div>
+  <div id="hint">タイルをクリックして設置 / もう一度で撤去モード</div>
+  <div id="dash">
+    <div class="title">📊 生産ダッシュボード</div>
+    <div class="row"><span class="k">今日の生産</span><span class="v" id="dToday">0</span></div>
+    <div class="row"><span class="k">今日の稼働</span><span class="v" id="dDur">0分</span></div>
+    <div class="row"><span class="k">稼働中</span><span class="v" id="dBusy">0 / 0</span></div>
+    <div class="row"><span class="k">累計生産</span><span class="v" id="dTotal">0</span></div>
+    <div class="row"><span class="k">ガチャ石</span><span class="v" id="dStone" style="color:#7fe6ff">0</span></div>
+  </div>
+  <div id="palette"></div>
+  <div id="hud"></div>
+  <div id="labels"></div>
+  <div id="overlay"><div id="panel"></div></div>
+</div>
+<script>
+'use strict';
+/* ============================================================
+   Claude Factory — 稼働中の Claude セッションを工場で可視化するゲーム
+   ・busy → 工場で作業  ・idle → 休憩室で休む
+   ・背景は stitch 生成の空部屋(朝/夕/夜)を JST 実時刻でクロスフェード
+   ・設置モードで床タイルに自分のオブジェクトを配置(localStorage保存)
+   ・育成: busy の合計時間を「生産量」としてダッシュボード表示
+   ============================================================ */
+const W = 1376, H = 768;                // 内部解像度=背景ネイティブ(等倍描画で劣化なし)
+const cv = document.getElementById('c');
+cv.width = W; cv.height = H;
+let g = cv.getContext('2d');                 // let: 一時的にオフスクリーン層へ切替える
+g.imageSmoothingEnabled = false;
+const mainCtx = g;
+/* 設置物・キャラを描くオフスクリーン層(時間帯の色でまとめて色調補正するため) */
+const fx = document.createElement('canvas'); fx.width = W; fx.height = H;
+const fg = fx.getContext('2d'); fg.imageSmoothingEnabled = false;
+
+/* ---------------- 背景画像(朝/夕/夜) ---------------- */
+const BG = {};
+function loadImg(src){ const im = new Image(); im.src = src + (src.indexOf('?')<0?'?':'&') + 't=' + Date.now(); return im; } // ?t= でキャッシュ回避
+BG.morning = loadImg('assets/factory-morning.jpg');
+BG.evening = loadImg('assets/factory-evening.jpg');
+BG.night   = loadImg('assets/factory-night.jpg');
+/* Stitch 生成の立体3Dマシン(1体まるごとのアイソメ・4方向 d0..d3。同一機械を回した4枚なので矛盾なし) */
+const MIMG = {};
+for(const id of ['m_red','m_blue','m_green','m_yellow']){ MIMG[id]=[];
+  for(let d=0;d<4;d++) MIMG[id][d]=loadImg(`assets/obj_${id}_d${d}.png`); }
+const FBELT = { top:loadImg('assets/face_belt_top.png'), side:loadImg('assets/face_belt_side.png') };
+/* 装飾スプライト(単一向き) */
+const DEC = {};
+for(const id of ['crate','drum','plant','pallet','sign']) DEC[id]=loadImg('assets/obj_'+id+'.png');
+
+/* ============================================================
+   パレット & 描画ヘルパー(pixel-factory から流用・簡略化)
+   ============================================================ */
+const P = {
+  ink:'#3b4643', rTop:'#ffffff', rBody:'#f4f8f0', rShade:'#d5e4d7',
+  cardT:'#f2d296', cardF:'#e8c07c', cardS:'#c79a55', tape:'#a97f3f', cardO:'#8a6534',
+  yT:'#fce87e', yF:'#f6d84a', yS:'#d9b32e',
+  beltT:'#5f6b7c', beltF:'#8794a6', beltS:'#4a5464',
+  navy:'#41526b', navyL:'#5d7091', water:'#9fe6d6',
+  coral:'#f08a68', red:'#e05a4e', eye:'#241713',
+  sh:'#20303a',
+  grT:'#6db885', grF:'#4f9e6e', grS:'#3e845c',
+  // lounge
+  rug:'#c9946a', rugD:'#a9764e', rugL:'#e0b489',
+  sofa:'#5b76a8', sofaD:'#41598a', sofaL:'#7d97c6',
+  vend:'#d0584e', vendD:'#9e3d36', vendG:'#8fd9bf',
+  wood:'#b98d57', woodD:'#8f6a3e', woodL:'#cda472',
+  batt:'#66d98d', battD:'#2f7a4a',
+};
+const INK = P.ink;
+const PRESETS = [
+  {body:'#c15f3c', shade:'#9d4527', lite:'#d67e57'}, // coral
+  {body:'#4f7fc4', shade:'#37588f', lite:'#7ba3df'}, // blue
+  {body:'#4fa564', shade:'#367b47', lite:'#7bc78d'}, // green
+  {body:'#8a5fc0', shade:'#623f90', lite:'#ac86dc'}, // purple
+  {body:'#e0b23a', shade:'#ad8327', lite:'#f2d06a'}, // yellow
+  {body:'#d86a9c', shade:'#a94773', lite:'#f094bc'}, // pink
+];
+function hx2rgb(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
+function mix(a,b,t){ const A=hx2rgb(a),B=hx2rgb(b); return `rgb(${Math.round(A[0]+(B[0]-A[0])*t)},${Math.round(A[1]+(B[1]-A[1])*t)},${Math.round(A[2]+(B[2]-A[2])*t)})`; }
+const CSETS = PRESETS.map(p=>({
+  lit:{body:p.body, shade:p.shade, lite:p.lite},
+  dim:{body:mix(p.body,'#6e6e6e',0.40), shade:mix(p.shade,'#5a5a5a',0.40), lite:mix(p.lite,'#7a7a7a',0.40)},
+}));
+
+function rect(x,y,w,h,c){ g.fillStyle=c; g.fillRect(x|0,y|0,w|0,h|0); }
+function px(x,y,c){ rect(x,y,1,1,c); }
+function hline(x,y,w,c){ rect(x,y,w,1,c); }
+function vline(x,y,h,c){ rect(x,y,1,h,c); }
+function obox(x,y,w,h,fill){ rect(x,y,w,h,INK); rect(x+1,y+1,w-2,h-2,fill); }
+function pline(x0,y0,x1,y1,c){
+  x0|=0;y0|=0;x1|=0;y1|=0;
+  const dx=Math.abs(x1-x0), dy=-Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1; let e=dx+dy;
+  for(;;){ px(x0,y0,c); if(x0===x1&&y0===y1)break; const e2=2*e; if(e2>=dy){e+=dy;x0+=sx;} if(e2<=dx){e+=dx;y0+=sy;} }
+}
+function fcircle(cx,cy,r,c){ for(let dy=-r;dy<=r;dy++){ const w=Math.floor(Math.sqrt(r*r-dy*dy)); for(let dx=-w;dx<=w;dx++) px(cx+dx,cy+dy,c);} }
+/* oblique-iso cube (top-left x,y ; face w×h ; depth d) */
+function cube(x,y,w,h,d,ct,cf,cs){
+  for(let i=1;i<=d;i++) hline(x+2*i, y-i, w, ct);
+  for(let i=1;i<=d;i++) rect(x+w+2*(i-1), y-i, 2, h, cs);
+  rect(x,y,w,h,cf);
+  vline(x+w, y-1, h, INK); vline(x-1, y, h, INK); hline(x-1, y+h, w+1, INK);
+  for(let i=1;i<=d;i++) hline(x+w+2*(i-1), y-i, 2, INK);
+  for(let i=1;i<=d;i++) hline(x+w+2*(i-1), y+h-i, 2, INK);
+  vline(x+w+2*d, y-d, h, INK); hline(x+2*d-1, y-d-1, w+2, INK);
+  for(let i=1;i<=d;i++) hline(x+2*i-2, y-i, 2, INK);
+}
+function shadow(cx,fy,hw){ g.globalAlpha=0.28; hline(cx-hw+1, fy-1, hw*2-2, P.sh); hline(cx-hw, fy, hw*2, P.sh); g.globalAlpha=1; }
+
+/* ---- props (placeable) ---- */
+function cbox(x,y,w,h,d){ cube(x,y,w,h,d,P.cardT,P.cardF,P.cardS); const tx=x+(w>>1)-1; rect(tx,y+1,2,h-1,P.tape); }
+function ybox(x,y,w,h,d){ cube(x,y,w,h,d,P.yT,P.yF,P.yS); hline(x+1,y+2,w-2,P.yS); }
+function drawBarrel(cx,gy,sc){
+  const w=Math.round(9*sc), h=Math.round(15*sc), top=gy-h;
+  rect(cx-w,top,w*2,h,P.beltF); rect(cx-w,top,Math.round(w*0.7),h,P.beltT); rect(cx+w-2,top,2,h,P.beltS);
+  vline(cx-w-1,top,h,INK); vline(cx+w,top,h,INK); hline(cx-w,gy,w*2,INK);
+  for(let dx=-w;dx<=w;dx++){ const hh=Math.round(Math.sqrt(Math.max(0,1-(dx/w)**2))*3); px(cx+dx,top-hh,INK);}
+  hline(cx-w,top+Math.round(h*0.3),w*2,P.beltS); hline(cx-w,top+Math.round(h*0.64),w*2,P.beltS);
+  rect(cx-Math.round(w*0.4),top+Math.round(h*0.4),Math.round(w*0.8),3,P.yF);
+}
+function drawTank(cx,gy,sc){
+  const rw=Math.round(13*sc), bh=Math.round(34*sc), top=gy-bh, gr=Math.max(3,Math.round(5*sc));
+  rect(cx-rw+2,gy-6,3,6,P.beltS); rect(cx+rw-4,gy-6,3,6,P.beltS);
+  rect(cx-rw,top,rw*2,bh,P.rShade); rect(cx-rw,top,Math.round(rw*0.7),bh,P.rBody);
+  vline(cx-rw-1,top,bh,INK); vline(cx+rw,top,bh,INK); hline(cx-rw,top+bh,rw*2+1,INK);
+  for(let dx=-rw;dx<=rw;dx++){ const h=Math.round(Math.sqrt(Math.max(0,1-(dx/rw)**2))*gr); rect(cx+dx,top-h,1,h+1, dx<0?P.rBody:P.rShade); px(cx+dx,top-h,INK);}
+  hline(cx-rw,top+Math.round(bh*0.34),rw*2+1,INK); hline(cx-rw,top+Math.round(bh*0.7),rw*2+1,INK);
+  const gcy=top+Math.round(bh*0.5); fcircle(cx,gcy,gr-1,P.rBody); px(cx,gcy,P.red);
+}
+function drawPlant(cx,gy){
+  obox(cx-4,gy-6,8,6,P.cardF); rect(cx-3,gy-6,6,1,'#5a4632');
+  const gr=P.grF, grL='#7bc78d', grD=P.grS;
+  vline(cx,gy-13,7,grD);
+  const leaves=[[-3,-9],[3,-10],[-4,-12],[4,-13],[-2,-15],[2,-16],[0,-18],[-1,-11],[1,-12]];
+  for(const [dx,dy] of leaves){ px(cx+dx,gy+dy,gr); px(cx+dx,gy+dy-1,grL); px(cx+dx+(dx<0?-1:1),gy+dy,grD); }
+}
+
+/* ---- Claude マスコット ---- */
+const MTOP=[3,2,1,1,0,0,1,2,3,3,2,1,0,0,1,1,2,3];
+function claudeBody(x0,topBase,bottomY,pal){
+  const w=18, rows=bottomY-topBase+1;
+  const isF=(i,r)=> i>=0&&i<w&&r>=0&&r<rows&&r>=MTOP[i];
+  for(let i=0;i<w;i++) for(let r=0;r<rows;r++){
+    if(!isF(i,r)) continue; const x=x0+i,y=topBase+r;
+    if(!isF(i-1,r)||!isF(i+1,r)||!isF(i,r-1)||!isF(i,r+1)){ px(x,y,INK); continue; }
+    let col=pal.body; if(i>=w-5||r>=rows-2) col=pal.shade; else if(r===MTOP[i]+1) col=pal.lite;
+    px(x,y,col);
+  }
+}
+/* (cx,fy)=床の接地中心。o:{pose,look,blink,cs,dim,swing,noShadow} */
+function robot(cx,fy,o={},bob=0){
+  const pose=o.pose||'idle', look=o.look||0, cs=o.cs||CSETS[0], pal=o.dim?cs.dim:cs.lit, sw=o.swing||0;
+  if(!o.noShadow) shadow(cx,fy,9);
+  g.save(); g.translate(0,bob);
+  const x0=cx-9, bottomY=(pose==='sit')?fy-3:fy-4, topBase=bottomY-14, armY=bottomY-11;
+  if(pose==='sit'){ obox(cx-6,fy-3,5,3,pal.shade); obox(cx+1,fy-3,5,3,pal.shade); }
+  else { obox(cx-7,fy-4,3,4,pal.shade); obox(cx-2,fy-4,3,4,pal.shade); obox(cx+4,fy-4,3,4,pal.shade); }
+  claudeBody(x0,topBase,bottomY,pal);
+  if(pose==='carry'){ obox(cx-11,armY,3,6,pal.shade); obox(cx+8,armY,3,6,pal.shade); }
+  else if(pose==='work'){ obox(cx+8,armY+sw,3,6,pal.shade); obox(cx-11,armY-sw,3,6,pal.shade); }
+  const ey=topBase+4;
+  if(o.blink){ rect(cx-5+look,ey+1,2,1,P.eye); rect(cx+3+look,ey+1,2,1,P.eye); }
+  else       { rect(cx-5+look,ey,2,2,P.eye);   rect(cx+3+look,ey,2,2,P.eye);   }
+  if(pose==='carry'){ cbox(cx-7,fy-11,10,7,2); }
+  g.restore();
+}
+/* ---- effects ---- */
+function drawZ(x,y,c){ hline(x,y,3,c); px(x+1,y+1,c); hline(x,y+2,3,c); }
+function zzz(cx,headTop,t){ const f=Math.floor(t*0.08); for(let k=0;k<3;k++){ const yy=headTop-4-k*5-((f+k)%3), xx=cx+5+k*3; rect(xx-1,yy-1,5,5,P.rTop); drawZ(xx,yy,P.navy); } }
+function sparks(x,y,t){ const f=(t>>2)%3;
+  if(f===0){ px(x,y,'#fff'); px(x+2,y-2,P.yT); px(x-2,y-1,P.coral); }
+  else if(f===1){ px(x+1,y-1,P.yT); px(x-1,y+1,'#fff'); px(x+3,y,P.coral); }
+  else { px(x-2,y-2,'#fff'); px(x+2,y+1,P.yT); } }
+
+/* ============================================================
+   アイソメトリック床マッピング(背景画像の床タイルに合わせて推定)
+   B=奥角, uVec=B→右角, vVec=B→左角。u,v∈[0,1] が床平面。
+   ============================================================ */
+/* 背景画像(assets/factory-morning.jpg)から実測した床の3隅で確定:
+   F(手前)=0.514,0.967 / L(左)=0.174,0.654 / R(右)=0.826,0.682 → u∥(F-L), v∥(F-R) */
+const ISO = { Bx:0.4858, By:0.3685, ux:0.3398, uy:0.3138, vx:-0.3121, vy:0.2852 };
+const ISO_DET = ISO.ux*ISO.vy - ISO.vx*ISO.uy;
+function isoToScreen(u,v){ return { x:(ISO.Bx+u*ISO.ux+v*ISO.vx)*W, y:(ISO.By+u*ISO.uy+v*ISO.vy)*H }; }
+function screenToIso(sx,sy){
+  const nx=sx/W-ISO.Bx, ny=sy/H-ISO.By;
+  return { u:(nx*ISO.vy - ISO.vx*ny)/ISO_DET, v:(ISO.ux*ny - nx*ISO.uy)/ISO_DET };
+}
+function depthScale(u,v){ return 0.72 + 0.5*((u+v)/2); }   // 手前ほど大きく(キャラのみ)
+
+/* --- アイソメ整合の箱: 稜線を床の u/v 軸に平行に描く(壁・床と平行線になる) --- */
+function floorPt(uc,vc,du,dv){ return isoToScreen(uc+du, vc+dv); }
+function poly(pts,fill,stroke){ g.beginPath(); g.moveTo(pts[0].x,pts[0].y);
+  for(let i=1;i<pts.length;i++) g.lineTo(pts[i].x,pts[i].y); g.closePath();
+  if(fill){ g.fillStyle=fill; g.fill(); } if(stroke){ g.strokeStyle=stroke; g.lineWidth=1; g.stroke(); } }
+function facePt(f,fx,fy){ const a=f[0],b=f[1],tb=f[2],ta=f[3];
+  const bx=a.x+(b.x-a.x)*fx, by=a.y+(b.y-a.y)*fx, tx=ta.x+(tb.x-ta.x)*fx, ty=ta.y+(tb.y-ta.y)*fx;
+  return { x:bx+(tx-bx)*fy, y:by+(ty-by)*fy }; }
+function seg(a,b,c,w){ g.strokeStyle=c; g.lineWidth=w||1; g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b.x,b.y); g.stroke(); }
+/* c,r=セル / fu,fv=フットプリント(タイル比) / h=高さpx。窓側(faceU)を明るく、右壁側(faceV)を陰に */
+function isoBox(c,r,fu,fv,h,ct,cf,cs,detail){
+  const uc=(c+0.5)/GU, vc=(r+0.5)/GV, hu=fu/(GU*2), hv=fv/(GV*2);
+  h=Math.round(h);
+  const R_=p=>({x:Math.round(p.x), y:Math.round(p.y)});
+  const P00=R_(floorPt(uc,vc,-hu,-hv)), P10=R_(floorPt(uc,vc,hu,-hv)), P11=R_(floorPt(uc,vc,hu,hv)), P01=R_(floorPt(uc,vc,-hu,hv));
+  const U=p=>({x:p.x, y:p.y-h});
+  const T00=U(P00),T10=U(P10),T11=U(P11),T01=U(P01);
+  const faceU=[P01,P11,T11,T01], faceV=[P10,P11,T11,T10], top=[T00,T10,T11,T01];
+  poly(faceV,cs,INK); poly(faceU,cf,INK); poly(top,ct,INK);
+  seg(T01,T11, mix(ct,'#ffffff',0.35), 1);      // 上辺(窓側)ハイライトで立体感
+  if(detail) detail({faceU,faceV,top,P00,P10,P11,P01,T00,T10,T11,T01});
+}
+/* 円柱・有機物などは回転対称なのでスプライトをそのままセル中心に(遠近スケールなし) */
+function spriteAtCell(c,r,scale,fn){ const p=isoToScreen((c+0.5)/GU,(r+0.5)/GV);
+  g.save(); g.translate(Math.round(p.x),Math.round(p.y)); g.scale(scale,scale); fn(); g.restore(); }
+/* 画像スプライトをセルの床点に接地(幅=wCellsマス、アスペクト維持) */
+function imgCell(c,r,img,wCells,yNudge,alpha){
+  if(!img || !img.complete || !img.naturalWidth) return;
+  const p=isoToScreen((c+0.5)/GU,(r+0.5)/GV);
+  const dw=Math.round(wCells*CELL), dh=Math.round(dw*img.naturalHeight/img.naturalWidth);
+  g.imageSmoothingEnabled=true; if(alpha!=null) g.globalAlpha=alpha;
+  g.drawImage(img, Math.round(p.x-dw/2), Math.round(p.y-dh+(yNudge||0)), dw, dh);
+  g.globalAlpha=1; g.imageSmoothingEnabled=false;
+}
+/* 高さ基準(machine=縦2マス) */
+function imgCellH(c,r,img,hCells,yNudge,alpha){
+  if(!img || !img.complete || !img.naturalWidth) return;
+  const p=isoToScreen((c+0.5)/GU,(r+0.5)/GV);
+  const dh=Math.round(hCells*CELL), dw=Math.round(dh*img.naturalWidth/img.naturalHeight);
+  g.imageSmoothingEnabled=true; if(alpha!=null) g.globalAlpha=alpha;
+  g.drawImage(img, Math.round(p.x-dw/2), Math.round(p.y-dh+(yNudge||0)), dw, dh);
+  g.globalAlpha=1; g.imageSmoothingEnabled=false;
+}
+
+/* ===== テクスチャ貼り付け式アイソメBOX(回転で見せる面を出し分け) =====
+   平面の面テクスチャ(正方形)を各面の平行四辺形にアフィン変換で貼る。
+   アイソメは平行投影なので歪みなく貼れる → 向きが変わってもデザイン矛盾ゼロ。 */
+function boxCorners(c,r,fu,fv,h){
+  const uc=(c+0.5)/GU, vc=(r+0.5)/GV, hu=fu/(GU*2), hv=fv/(GV*2);
+  const P00=floorPt(uc,vc,-hu,-hv),P10=floorPt(uc,vc,hu,-hv),P11=floorPt(uc,vc,hu,hv),P01=floorPt(uc,vc,-hu,hv);
+  const U=p=>({x:p.x,y:p.y-h});
+  return {P00,P10,P11,P01,T00:U(P00),T10:U(P10),T11:U(P11),T01:U(P01)};
+}
+/* 接地影(立体感・グラウンディング) */
+function contactShadow(c,r,fu,fv){ const K=boxCorners(c,r,fu*1.18,fv*1.18,0);
+  g.fillStyle='rgba(0,0,0,0.24)'; g.beginPath();
+  g.moveTo(K.P00.x,K.P00.y+3); g.lineTo(K.P10.x,K.P10.y+3); g.lineTo(K.P11.x,K.P11.y+3); g.lineTo(K.P01.x,K.P01.y+3); g.closePath(); g.fill(); }
+/* 画像矩形(0,0,w,h)を平行四辺形 O(左上),X(右上),Y(左下) へ貼る */
+function affineImg(img,O,X,Y){ const w=img&&img.naturalWidth, hh=img&&img.naturalHeight; if(!w) return;
+  g.save(); g.imageSmoothingEnabled=true;
+  g.setTransform((X.x-O.x)/w,(X.y-O.y)/w,(Y.x-O.x)/hh,(Y.y-O.y)/hh,O.x,O.y);
+  g.drawImage(img,0,0); g.restore(); }
+function quad(pts,fill){ g.beginPath(); g.moveTo(pts[0].x,pts[0].y); for(let i=1;i<pts.length;i++) g.lineTo(pts[i].x,pts[i].y); g.closePath(); g.fillStyle=fill; g.fill(); }
+function edge(a,b){ g.strokeStyle=INK; g.lineWidth=1; g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b.x,b.y); g.stroke(); }
+function hline2(a,b,c,w){ g.strokeStyle=c; g.lineWidth=w||1; g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b.x,b.y); g.stroke(); }
+function lerpP(a,b,t){ return {x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t}; }
+/* 面の下側を暗くする擬似AO(bl,br=底辺, tl,tr=上辺) */
+function faceAO(bl,br,tr,tl,strength){
+  const m1=0.55, m2=0.28;
+  quad([bl,br,lerpP(br,tr,m2),lerpP(bl,tl,m2)],`rgba(0,0,0,${strength})`);
+  quad([bl,br,lerpP(br,tr,m1),lerpP(bl,tl,m1)],`rgba(0,0,0,${strength*0.5})`);
+}
+/* fs={front,side,back,top} / rot 0..3 / fu,fv フットプリント / hCells 高さ */
+function drawTexBox(c,r,fs,rot,fu,fv,hCells,alpha){
+  rot=((rot|0)%4+4)%4;
+  const h=Math.round(hCells*CELL), K=boxCorners(c,r,fu,fv,h);
+  // 面の割当: 右=side(特徴あり) / 左=back(無地) にして特徴が両側に出る矛盾を防ぐ
+  const A=[fs.front,fs.back,fs.back,fs.side][rot];   // faceU(窓側/明) に出す面
+  const B=[fs.side,fs.front,fs.back,fs.back][rot];   // faceV(右側/陰) に出す面
+  g.save(); if(alpha!=null) g.globalAlpha=alpha;
+  contactShadow(c,r,fu,fv);                                                              // 接地影
+  quad([K.T00,K.T10,K.P10,K.P11,K.P01,K.T01],'#14171c');                                 // シルエット塗り(継ぎ目の隙間を殺す)
+  affineImg(B, K.T10,K.T11,K.P10); quad([K.P10,K.P11,K.T11,K.T10],'rgba(0,0,0,0.22)');  // 右面(陰・テクスチャの陰影を活かし控えめ)
+  faceAO(K.P10,K.P11,K.T11,K.T10,0.12);
+  affineImg(A, K.T01,K.T11,K.P01);                                                       // 窓側面(明・素のまま)
+  faceAO(K.P01,K.P11,K.T11,K.T01,0.07);
+  const tm=[[K.T00,K.T10,K.T01],[K.T01,K.T00,K.T11],[K.T11,K.T01,K.T10],[K.T10,K.T11,K.T00]][rot];
+  affineImg(fs.top, tm[0],tm[1],tm[2]); quad([K.T00,K.T10,K.T11,K.T01],'rgba(255,255,255,0.13)'); // 上面(明)
+  // 稜線 + 上辺ハイライト(光を受ける前上辺)
+  edge(K.P01,K.P11); edge(K.P10,K.P11); edge(K.P01,K.T01); edge(K.P11,K.T11); edge(K.P10,K.T10);
+  edge(K.T00,K.T10); edge(K.T10,K.T11); edge(K.T11,K.T01); edge(K.T01,K.T00);
+  hline2(K.T01,K.T11,'rgba(255,255,255,0.5)',1); hline2(K.T00,K.T01,'rgba(255,255,255,0.28)',1);
+  g.restore(); g.globalAlpha=1;
+}
+
+/* ===== コンベア(手続き描画・矢印は流れる向きにアニメ) =====
+   dir 0=右下(+u) / 1=左下(+v) / 2=左上(-u) / 3=右上(-v)。矢印本数は常に一定。 */
+function beltPt(uc,vc,dir,s,w,h){          // s=流れ方向(-0.5..0.5), w=幅方向
+  let du,dv;
+  if(dir===0){ du= s/GU; dv= w/GV; }       // +u
+  else if(dir===2){ du=-s/GU; dv= w/GV; }  // -u
+  else if(dir===1){ dv= s/GV; du= w/GU; }  // +v
+  else { dv=-s/GV; du= w/GU; }             // -v
+  const p=isoToScreen(uc+du,vc+dv); return {x:p.x,y:p.y-h};
+}
+function drawBeltProc(c,r,dir,alpha){
+  dir=((dir|0)%4+4)%4;
+  const h=Math.round(0.42*CELL), K=boxCorners(c,r,0.98,0.98,h);
+  const uc=(c+0.5)/GU, vc=(r+0.5)/GV;
+  g.save(); if(alpha!=null) g.globalAlpha=alpha;
+  contactShadow(c,r,0.98,0.98);
+  quad([K.T00,K.T10,K.P10,K.P11,K.P01,K.T01],'#15181d');                                          // シルエット塗り
+  affineImg(FBELT.side, K.T10,K.T11,K.P10); quad([K.P10,K.P11,K.T11,K.T10],'rgba(0,0,0,0.38)'); // 右フレーム
+  affineImg(FBELT.side, K.T01,K.T11,K.P01); quad([K.P01,K.P11,K.T11,K.T01],'rgba(0,0,0,0.06)'); // 窓側フレーム
+  quad([K.T00,K.T10,K.T11,K.T01],'#22262c');                                                    // ベルト面(暗)
+  // 流れるシェブロン(常に3本・流れ方向にアニメ)
+  const N=3, t=(frameT*0.02)%1;
+  g.strokeStyle='#5fe6e6'; g.lineWidth=3; g.lineJoin='round'; g.lineCap='round';
+  for(let k=0;k<N;k++){
+    const s=-0.42 + (((k/N)+t)%1)*0.84;
+    const tip=beltPt(uc,vc,dir,s+0.12,0,h+1), a=beltPt(uc,vc,dir,s-0.06,-0.30,h+1), b=beltPt(uc,vc,dir,s-0.06,0.30,h+1);
+    g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(tip.x,tip.y); g.lineTo(b.x,b.y); g.stroke();
+  }
+  g.lineCap='butt'; g.lineJoin='miter';
+  edge(K.P01,K.P11); edge(K.P10,K.P11); edge(K.P01,K.T01); edge(K.P11,K.T11); edge(K.P10,K.T10);
+  edge(K.T00,K.T10); edge(K.T10,K.T11); edge(K.T11,K.T01); edge(K.T01,K.T00);
+  g.restore(); g.globalAlpha=1;
+}
+
+/* ============================================================
+   設置オブジェクト(カタログ)
+   draw は (0,0) を接地中心とする1スプライト。
+   ============================================================ */
+const GU = 12, GV = 12;                       // 床グリッド分割数(12×12)
+/* 1マスの寸法・スケール(すべてマス基準で描く) */
+const cellUlen = Math.hypot(ISO.ux*W/GU, ISO.uy*H/GU);
+const cellVlen = Math.hypot(ISO.vx*W/GV, ISO.vy*H/GV);
+const CELL = (cellUlen+cellVlen)/2;           // 1マスの辺長(px)
+const SC = W/512;                             // 旧512基準の座標(休憩室)を流用するための倍率
+const SC_CHAR = 1.5*CELL/21;                  // キャラ = 縦横1.5マス
+
+/* --- 面上のヘルパ / ギア --- */
+function facePanel(F,u0,u1,v0,v1,col,stroke){ poly([facePt(F,u0,v0),facePt(F,u1,v0),facePt(F,u1,v1),facePt(F,u0,v1)],col,stroke); }
+function dot(p,s,c){ g.fillStyle=c; g.fillRect(Math.round(p.x-s/2),Math.round(p.y-s/2),s,s); }
+function gear(cx,cy,rad,col){ const a=frameT*0.05;
+  for(let k=0;k<8;k++){ const ang=a+k*Math.PI/4; g.fillStyle=col; g.fillRect(Math.round(cx+Math.cos(ang)*rad)-1,Math.round(cy+Math.sin(ang)*rad)-1,3,3); }
+  fcircle(Math.round(cx),Math.round(cy),Math.round(rad*0.8),col); fcircle(Math.round(cx),Math.round(cy),Math.round(rad*0.34),'#2c3a44'); }
+
+/* --- 製造マシン(幅1マス × 高さ2マス) 4種 --- */
+function machineBody(c,r,ct,cf,cs,decorate){
+  isoBox(c,r,0.82,0.82,2*CELL,ct,cf,cs,({faceU})=>{
+    facePanel(faceU,0.16,0.84,0.62,0.90,'#1a2a2e',INK);    // 上部パネル(暗)
+    facePanel(faceU,0.20,0.80,0.30,0.56,'#0e2530',INK);    // 画面枠
+    if(decorate) decorate(faceU);
+    facePanel(faceU,0.10,0.90,0.06,0.14, mix(cs,'#000',0.25), INK); // 脚元のダクト帯
+  });
+}
+const MACHINES = {
+  m_red:  {icon:'🟥', name:'抽出機', ct:'#f0958a', cf:'#d0584e', cs:'#9e3d36', deco:(F)=>{
+     for(let i=0;i<4;i++){ dot(facePt(F,0.28+i*0.13,0.43), 3, ((frameT>>3)+i)%4? '#f6d84a':'#e05a4e'); }   // 画面ランプ
+     gear(facePt(F,0.86,0.78).x, facePt(F,0.86,0.78).y, 4, '#f0a54a'); }},                                  // 側面ギア
+  m_blue: {icon:'🟦', name:'演算機', ct:'#7ba3df', cf:'#4f7fc4', cs:'#37588f', deco:(F)=>{
+     for(let row=0;row<3;row++){ const y=0.38+row*0.06; let x=0.24;
+       for(let s=0;s<4;s++){ const w=0.06+((frameT>>3)+row+s)%3*0.03; if(((frameT>>3)+s)%5) facePanel(F,x,x+w,y,y+0.03,'#57e08a'); x+=w+0.03; if(x>0.78)break; } } }},  // スクロール
+  m_green:{icon:'🟩', name:'成形機', ct:'#6db885', cf:'#4f9e6e', cs:'#3e845c', deco:(F)=>{
+     for(let i=0;i<3;i++) dot(facePt(F,0.30+i*0.15,0.44), 4, ((frameT>>4)+i)&1?'#8fd9bf':'#2f7a4a');
+     facePanel(F,0.30,0.70,0.16,0.24,'#2c3a44',INK); }},                                                     // 排出口
+  m_yellow:{icon:'🟨', name:'選別機', ct:'#f2d06a', cf:'#e0b23a', cs:'#ad8327', deco:(F,B)=>{
+     dot(facePt(F,0.5,0.44), 5, (frameT>>3)&1?'#fff':'#e0b23a');
+     facePanel(F,0.34,0.66,0.42,0.48, (frameT>>2)&1?'#ff7':'#d9b32e'); }},                                   // スキャン光
+};
+function drawMachine(c,r,key){ const m=MACHINES[key]; machineBody(c,r,m.ct,m.cf,m.cs,m.deco);
+  if(key==='m_yellow'){ // 上部ホッパー(漏斗)
+    const uc=(c+0.5)/GU, vc=(r+0.5)/GV, hu=0.5/GU, hv=0.5/GV, topY=2*CELL+6;
+    const p=(du,dv,hh)=>{ const s=floorPt(uc,vc,du,dv); return {x:Math.round(s.x),y:Math.round(s.y-hh)}; };
+    poly([p(-hu*0.4,-hv*0.4,topY+8),p(hu*0.4,hv*0.4,topY+8),p(hu*0.7,hv*0.7,topY),p(-hu*0.7,-hv*0.7,topY)], '#c99a2e', INK);
+  }
+}
+
+/* --- ベルトコンベア(幅1マス × 高さ1マス相当・チェーン可) --- */
+function drawBelt(c,r){
+  isoBox(c,r,0.96,0.72,1.0*CELL,'#8794a6','#5f6b7c','#4a5464',({faceU,faceV,top})=>{
+    facePanel(faceU,0.04,0.96,0.06,0.62, '#3a4350', INK);            // 下部フレーム(脚)
+    facePanel(faceV,0.06,0.94,0.06,0.60, '#2f3742', INK);
+    seg(facePt(faceU,0,0.74),facePt(faceU,1,0.74),P.yF,2);           // 黄ライン(ベルト縁)
+    dot(facePt(faceU,0.12,0.84),3,'#2c3a44'); dot(facePt(faceU,0.88,0.84),3,'#2c3a44'); // ローラー端
+    const off=(frameT*0.03)%0.24;                                    // 流れるチェブロン
+    for(let u=off;u<1;u+=0.24){ const a=facePt(top,u,0.26),b=facePt(top,u+0.05,0.5),cc=facePt(top,u,0.74);
+      seg(a,b,'#cdd6e0',2); seg(b,cc,'#cdd6e0',2); }
+  });
+}
+
+const CATALOG = [
+  {id:'m_red',   icon:'🟥', name:'抽出機', dirs:true, render:(c,r,d,a)=>imgCellH(c,r,MIMG.m_red[d&3],2.0,0,a)},
+  {id:'m_blue',  icon:'🟦', name:'演算機', dirs:true, render:(c,r,d,a)=>imgCellH(c,r,MIMG.m_blue[d&3],2.0,0,a)},
+  {id:'m_green', icon:'🟩', name:'成形機', dirs:true, render:(c,r,d,a)=>imgCellH(c,r,MIMG.m_green[d&3],2.0,0,a)},
+  {id:'m_yellow',icon:'🟨', name:'選別機', dirs:true, render:(c,r,d,a)=>imgCellH(c,r,MIMG.m_yellow[d&3],2.0,0,a)},
+  {id:'belt',    icon:'🟰', name:'コンベア', dirs:true, render:(c,r,d,a)=>drawBeltProc(c,r,d,a)},
+  {id:'crate',   icon:'📦', name:'木箱',   render:(c,r,d,a)=>imgCell(c,r,DEC.crate,1.05,0,a)},
+  {id:'drum',    icon:'🛢', name:'ドラム', render:(c,r,d,a)=>imgCell(c,r,DEC.drum,0.9,0,a)},
+  {id:'pallet',  icon:'🪵', name:'パレット', render:(c,r,d,a)=>imgCell(c,r,DEC.pallet,1.2,0,a)},
+  {id:'sign',    icon:'🚧', name:'標識',   render:(c,r,d,a)=>imgCell(c,r,DEC.sign,0.85,0,a)},
+  {id:'plant',   icon:'🪴', name:'観葉',   render:(c,r,d,a)=>imgCell(c,r,DEC.plant,1.0,0,a)},
+];
+const CAT = Object.fromEntries(CATALOG.map(o=>[o.id,o]));
+const PLACED_KEY = 'cf-placed-v1';
+let placed = [];                              // [{type, c, r}]
+try{ placed = JSON.parse(localStorage.getItem(PLACED_KEY)) || []; }catch(_){ placed=[]; }
+/* ?demo=1: 未配置なら見本レイアウトを一時表示(localStorageには保存しない) */
+if(new URLSearchParams(location.search).get('demo') && placed.length===0){
+  placed = [{type:'m_red',c:3,r:2,d:0},{type:'m_blue',c:5,r:2,d:1},{type:'m_green',c:7,r:2,d:0},{type:'m_yellow',c:9,r:2,d:1},
+            {type:'belt',c:3,r:5,d:0},{type:'belt',c:4,r:5,d:0},{type:'belt',c:5,r:5,d:0},{type:'belt',c:6,r:5,d:0},{type:'belt',c:7,r:5,d:0},{type:'belt',c:8,r:5,d:0},
+            {type:'crate',c:2,r:8},{type:'drum',c:10,r:7},{type:'sign',c:10,r:9},{type:'pallet',c:4,r:9},{type:'plant',c:1,r:10},
+            {type:'p_crown',c:6,r:9},{type:'p_dragon',c:2,r:6}];
+}
+function savePlaced(){ try{ localStorage.setItem(PLACED_KEY, JSON.stringify(placed)); }catch(_){} }
+function cellUV(c,r){ return { u:(c+0.5)/GU, v:(r+0.5)/GV }; }
+function drawAt(u,v,baseScale,fn){
+  const p=isoToScreen(u,v), s=baseScale*depthScale(u,v);
+  g.save(); g.translate(Math.round(p.x),Math.round(p.y)); g.scale(s,s); fn(); g.restore();
+  return p;
+}
+
+/* ============================================================
+   時刻 → 背景ブレンド(JST)
+   ============================================================ */
+function currentHour(){
+  const q=new URLSearchParams(location.search).get('hour');
+  if(q!==null&&q!=='') return Math.max(0,Math.min(24,parseFloat(q)));
+  const now=new Date(), jst=new Date(now.getTime()+now.getTimezoneOffset()*60000+9*3600000);
+  return jst.getHours()+jst.getMinutes()/60;
+}
+const BGKEYS=[
+  {h:0,img:'night'},{h:5,img:'night'},{h:8,img:'morning'},{h:15,img:'morning'},
+  {h:17.5,img:'evening'},{h:19.5,img:'evening'},{h:22,img:'night'},{h:24,img:'night'},
+];
+function drawBackground(hour){
+  let a=BGKEYS[0], b=BGKEYS[BGKEYS.length-1];
+  for(let i=0;i<BGKEYS.length-1;i++){ if(hour>=BGKEYS[i].h&&hour<=BGKEYS[i+1].h){ a=BGKEYS[i]; b=BGKEYS[i+1]; break; } }
+  const t=(b.h===a.h)?0:(hour-a.h)/(b.h-a.h);
+  const imgB=BG[b.img], imgA=BG[a.img];
+  rect(0,0,W,H,'#0c1014');
+  if(imgB.complete&&imgB.naturalWidth) g.drawImage(imgB,0,0,W,H);
+  if(a.img!==b.img && imgA.complete&&imgA.naturalWidth){ g.globalAlpha=1-t; g.drawImage(imgA,0,0,W,H); g.globalAlpha=1; }
+}
+/* おおまかな明るさ(0夜〜1昼): 影の濃さやランプ演出に使う */
+function daylight(hour){
+  if(hour>=8&&hour<=15) return 1; if(hour<5||hour>=22) return 0;
+  if(hour<8) return (hour-5)/3; if(hour<17.5) return 1-(hour-15)*0.4;
+  if(hour<19.5) return 0.4-(hour-17.5)*0.2; return Math.max(0,0.2-(hour-19.5)*0.08);
+}
+/* 時間帯のライティング(スプライトだけを背景の色合いに合わせて色調補正) */
+const GRADE=[
+  {h:0,  c:'#12203f', a:0.50},{h:5,  c:'#3a3766', a:0.42},{h:7,  c:'#ffd9a6', a:0.18},
+  {h:9,  c:'#ffffff', a:0.00},{h:15, c:'#fff1d6', a:0.06},{h:17.5,c:'#ff9a4e', a:0.32},
+  {h:19.5,c:'#6b487e', a:0.40},{h:22, c:'#12203f', a:0.50},{h:24, c:'#12203f', a:0.50},
+];
+function gradeFor(hour){ let a=GRADE[0],b=GRADE[GRADE.length-1];
+  for(let i=0;i<GRADE.length-1;i++){ if(hour>=GRADE[i].h&&hour<=GRADE[i+1].h){ a=GRADE[i]; b=GRADE[i+1]; break; } }
+  const t=(b.h===a.h)?0:(hour-a.h)/(b.h-a.h);
+  return { c:mix(a.c,b.c,t), a:a.a+(b.a-a.a)*t };
+}
+function gradeLayer(ctx,hour){ const gr=gradeFor(hour); if(gr.a<=0.004) return;
+  ctx.save(); ctx.globalCompositeOperation='source-atop'; ctx.globalAlpha=gr.a; ctx.fillStyle=gr.c;
+  ctx.fillRect(0,0,W,H); ctx.restore(); ctx.globalAlpha=1; }
+
+/* ============================================================
+   データ(全 Claude セッション)
+   ============================================================ */
+let curWorkers=[];
+let postSlotOf={}, usedPost=new Set();        // key -> 作業スポット index(安定)
+let loungeSlotOf={}, usedLounge=new Set();    // key -> 休憩室シート(安定)
+let colorOverride={};                         // key -> preset index(タップ色替え)
+let wpos={};                                  // key -> 現在描画位置(補間用)
+let roam={};                                  // key -> {u,v,pause} うろうろ目標
+
+/* ===== ガチャ / コレクション データ & ロジック(Phase1) ===== */
+const RAR={1:{n:'N',c:'#9fb0c0',w:58},2:{n:'R',c:'#5fa8e0',w:27},3:{n:'SR',c:'#b57be0',w:11},4:{n:'SSR',c:'#f6c04a',w:3.2},5:{n:'UR',c:'#ff5d6c',w:0.8}};
+const PRIZES=[
+  {id:'p_bolt',e:'🔩',n:'謎のボルト',r:1},{id:'p_clip',e:'📎',n:'クリップ',r:1},{id:'p_cone',e:'🚧',n:'コーン',r:1},{id:'p_seed',e:'🌱',n:'観葉の芽',r:1},
+  {id:'p_guitar',e:'🎸',n:'ギター',r:2},{id:'p_lamp',e:'💡',n:'ランプ',r:2},{id:'p_bronze',e:'🥉',n:'銅トロフィー',r:2},
+  {id:'p_robot',e:'🤖',n:'ロボ人形',r:3},{id:'p_arcade',e:'🕹️',n:'アーケード',r:3},{id:'p_gold',e:'🥇',n:'金メダル',r:3},
+  {id:'p_crystal',e:'💎',n:'クリスタル',r:4},{id:'p_rocket',e:'🚀',n:'ロケット',r:4},
+  {id:'p_crown',e:'👑',n:'王冠',r:5},{id:'p_dragon',e:'🐉',n:'ドラゴン像',r:5},
+];
+const PRIZEMAP=Object.fromEntries(PRIZES.map(p=>[p.id,p]));
+const TOKENS_PER_STONE=50000;
+let totalTokens=0;
+let G={baseline:null, bonus:30, spent:0, inv:{}, pity:0};   // ガチャ進捗(サーバ保存)
+function earnedStones(){ const grow=(G.baseline==null)?0:Math.floor(Math.max(0,totalTokens-G.baseline)/TOKENS_PER_STONE); return G.bonus+grow; }
+function stones(){ return Math.max(0, earnedStones()-G.spent); }
+let saveTimer=null;
+function saveGame(){ if(saveTimer)clearTimeout(saveTimer); saveTimer=setTimeout(()=>{ const body=JSON.stringify(G);
+  try{ fetch('/api/save',{method:'POST',body}); }catch(_){} try{ localStorage.setItem('cf-gacha',body); }catch(_){} },400); }
+async function loadGame(){ let s=null;
+  try{ const r=await fetch('/api/save',{cache:'no-store'}); s=await r.json(); }catch(_){}
+  if(!s||!s.inv){ try{ s=JSON.parse(localStorage.getItem('cf-gacha')); }catch(_){} }
+  if(s&&typeof s==='object') G=Object.assign(G,s); if(!G.inv)G.inv={}; }
+function rollRarity(){ if(G.pity>=9){ const x=Math.random(); return x<0.78?3:(x<0.95?4:5); }   // 天井:10連続でSR以上確定
+  let x=Math.random()*100, acc=0; for(const k of [1,2,3,4,5]){ acc+=RAR[k].w; if(x<acc) return k; } return 1; }
+function pullOne(){ const rr=rollRarity(); G.pity = rr>=3?0:G.pity+1;
+  const pool=PRIZES.filter(p=>p.r===rr); const pz=pool[Math.floor(Math.random()*pool.length)];
+  G.inv[pz.id]=(G.inv[pz.id]||0)+1; return pz; }
+function doPull(n){ if(stones()<n) return null; G.spent+=n; const got=[]; for(let i=0;i<n;i++) got.push(pullOne()); saveGame(); buildPalette(); return got; }
+let taskPhase={};                             // key -> 作業アニメ位相
+function keyOf(w){ return String(w.sessionId!=null?w.sessionId:w.pid); }
+function lowestFree(set){ let s=0; while(set.has(s)) s++; return s; }
+
+function reconcile(workers){
+  const present=new Set(workers.map(keyOf));
+  for(const k of Object.keys(postSlotOf)){
+    if(!present.has(k)){
+      usedPost.delete(postSlotOf[k]); usedLounge.delete(loungeSlotOf[k]);
+      delete postSlotOf[k]; delete loungeSlotOf[k]; delete wpos[k]; delete colorOverride[k]; delete roam[k];
+    }
+  }
+  const fresh=workers.filter(w=>!(keyOf(w) in postSlotOf)).sort((a,b)=>keyOf(a)<keyOf(b)?-1:1);
+  for(const w of fresh){ const k=keyOf(w);
+    postSlotOf[k]=lowestFree(usedPost); usedPost.add(postSlotOf[k]);
+    loungeSlotOf[k]=lowestFree(usedLounge); usedLounge.add(loungeSlotOf[k]);
+  }
+}
+/* fallback dummy(サーバ未接続時のプレビュー) */
+function makeDummy(){
+  const n=+new URLSearchParams(location.search).get('dummy');
+  const names=['eventos-api','metabase-sync','shibuya-stamprally','olc-fw-2026','checkin-seed','eventnews','greeting-bot','claude-factory'];
+  if(n){ const a=[]; for(let i=0;i<n;i++) a.push({sessionId:'d'+i,pid:60000+i,project:names[i%names.length],working:i%3!==0}); return a; }
+  return names.map((p,i)=>({sessionId:'d'+i,pid:60000+i,project:p,working:i<4}));
+}
+let everLoaded=false;
+async function poll(){
+  try{
+    const r=await fetch('/api/sessions',{cache:'no-store'}); if(!r.ok) throw 0;
+    const d=await r.json();
+    if(Array.isArray(d.workers)){ everLoaded=true; apply(d.workers); }
+  }catch(_){ if(!everLoaded) apply(makeDummy()); }
+}
+function apply(workers){ reconcile(workers); curWorkers=workers; syncLabels(workers); }
+setInterval(poll,1500); poll();
+
+/* ============================================================
+   ラベル(プロジェクト名)
+   ============================================================ */
+let labelEls={};
+function syncLabels(workers){
+  const box=document.getElementById('labels'), present=new Set(workers.map(keyOf));
+  for(const k of Object.keys(labelEls)){ if(!present.has(k)){ labelEls[k].remove(); delete labelEls[k]; } }
+  for(const w of workers){ const k=keyOf(w), name=w.project||w.name||'';
+    let el=labelEls[k]; if(!el){ el=document.createElement('span'); el.className='lbl'; box.appendChild(el); labelEls[k]=el; } el.textContent=name;
+  }
+}
+let screenPos={};   // key -> {x,y} その視点での描画位置(ラベル追従)
+function positionLabels(){
+  for(const k of Object.keys(labelEls)){ const s=screenPos[k], el=labelEls[k];
+    if(!s){ el.style.display='none'; continue; }
+    el.style.display='block';
+    el.style.left=(s.x/W*100)+'%'; el.style.top=((s.y+3)/H*100)+'%';
+  }
+}
+
+/* ============================================================
+   育成: busy 合計時間 → 生産量ダッシュボード(JST日付ごと localStorage)
+   ============================================================ */
+function jstDate(){ const n=new Date(), j=new Date(n.getTime()+n.getTimezoneOffset()*60000+9*3600000);
+  return `${j.getFullYear()}-${String(j.getMonth()+1).padStart(2,'0')}-${String(j.getDate()).padStart(2,'0')}`; }
+let prod = (()=>{ try{ return JSON.parse(localStorage.getItem('cf-prod'))||null; }catch(_){ return null; } })()
+           || {date:'', busySec:0, jobs:0};
+let prodTotal = +(localStorage.getItem('cf-prod-total')||0);
+function prodRoll(){ const d=jstDate();
+  if(prod.date && prod.date!==d){ prodTotal += units(prod.busySec); }   // 日付が変わったら累計へ繰り越し
+  if(prod.date!==d){ prod={date:d,busySec:0}; saveProd(); }
+}
+let saveTick=0;
+function accrue(busy,dt){ prodRoll(); prod.busySec+=busy*dt; if(++saveTick%40===0) saveProd(); }
+function saveProd(){ try{ localStorage.setItem('cf-prod',JSON.stringify(prod)); localStorage.setItem('cf-prod-total',String(prodTotal)); }catch(_){} }
+/* 生産量 = 稼働30分ごとに 1個(眺めていて数字が伸びる粒度) */
+function units(sec){ return Math.floor(sec/1800); }
+function fmtDur(sec){ const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60); return h>0?`${h}時間${m}分`:`${m}分`; }
+function updateDash(){
+  const busy=curWorkers.filter(w=>w.working).length, total=curWorkers.length;
+  document.getElementById('dToday').textContent = `${units(prod.busySec)}個`;
+  document.getElementById('dDur').textContent   = fmtDur(prod.busySec);
+  document.getElementById('dBusy').textContent  = `${busy} / ${total}`;
+  document.getElementById('dTotal').textContent = `${units(prod.busySec)+prodTotal}個`;
+  const st=document.getElementById('dStone'); if(st) st.textContent = `💎 ${stones()}`;
+  const hour=currentHour(), hh=Math.floor(hour), mm=Math.floor((hour-hh)*60);
+  document.getElementById('hud').innerHTML =
+    `稼働 <b>${busy}</b>　休憩 <i>${total-busy}</i>　合計 ${total}　<span id="clock">🕐${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} JST</span>`;
+}
+
+/* ============================================================
+   工場ビュー: 設置オブジェクト + busy エージェントが作業
+   ============================================================ */
+/* busy 用の作業スポット(床グリッド上、手前ほど後で描画) */
+const WORK_CELLS=[];
+for(const r of [2,5,8,10]) for(const c of [2,5,8,10]) WORK_CELLS.push({c,r});
+function workCell(slot){ return WORK_CELLS[slot%WORK_CELLS.length]; }
+/* うろうろ移動: 目標へ歩き、着いたら少し留まり、次のランダム床点へ */
+function stepRoam(k, iu, iv, speed){
+  if(!roam[k]) roam[k]={u:iu, v:iv, pause:40+Math.floor(Math.random()*120)};
+  const R=roam[k], tgt=isoToScreen(R.u,R.v);
+  let pos=wpos[k]||(wpos[k]={x:tgt.x,y:tgt.y});
+  const dx=tgt.x-pos.x, dy=tgt.y-pos.y, dist=Math.hypot(dx,dy), walking=dist>2.5*SC;
+  if(walking){ const st=Math.min((speed||2.0)*SC,dist); pos.x+=dx/dist*st; pos.y+=dy/dist*st; }
+  else { pos.x=tgt.x; pos.y=tgt.y;
+    if(R.pause>0) R.pause--;
+    else { R.u=0.15+Math.random()*0.70; R.v=0.15+Math.random()*0.70; R.pause=80+Math.floor(Math.random()*180); }
+  }
+  return {pos,dx,walking};
+}
+let hitboxes=[];
+function drawFactory(hour){
+  const draws=[];   // {y, fn} 深さ順に描画
+  // 設置オブジェクト(床の u/v 軸に整合)
+  for(const o of placed){ const def=toolDef(o.type); if(!def) continue; const {u,v}=cellUV(o.c,o.r);
+    draws.push({y:isoToScreen(u,v).y, fn:()=>def.render(o.c,o.r,o.d||0)});
+  }
+  // busy エージェント
+  const busy=curWorkers.filter(w=>w.working);
+  for(const w of busy){ const k=keyOf(w), cell=workCell(postSlotOf[k]||0), c0=cellUV(cell.c,cell.r);
+    const s=SC_CHAR;                                        // キャラは常に1.5マス
+    const {pos,dx,walking}=stepRoam(k, c0.u, c0.v, 2.2);   // 工場内を歩き回る
+    const cs=CSETS[(colorOverride[k]||0)%CSETS.length];
+    const ph=(taskPhase[k]||(taskPhase[k]=(postSlotOf[k]||0)*1.3));
+    draws.push({y:pos.y, key:k, fn:()=>{
+      const cx=Math.round(pos.x), cy=Math.round(pos.y);
+      let o,bob;
+      if(walking){ o={pose:'idle',look:dx<0?-1:1,cs,noShadow:false}; bob=-Math.round(Math.abs(Math.sin(frameT*0.4))*2); }
+      else { o={pose:'work',cs,swing:Math.round(Math.sin(frameT*0.3+ph)*2)}; bob=Math.round(Math.sin(frameT*0.18+ph)*1.2)-1; }
+      o.blink=((frameT+(postSlotOf[k]||0)*29)%210)<7;
+      g.save(); g.translate(cx,cy); g.scale(s,s); g.translate(-cx,-cy);
+      robot(cx,cy,o,bob);
+      if(!walking) sparks(cx+9,cy-22,frameT+((postSlotOf[k]||0)*7));   // 火花(スケール内)
+      g.restore();
+      screenPos[k]={x:cx,y:cy-Math.round(24*s)};
+      hitboxes.push({key:k,x:cx-11*s,y:cy-30*s,w:22*s,h:32*s});
+    }});
+  }
+  draws.sort((a,b)=>a.y-b.y);
+  for(const d of draws) d.fn();
+}
+
+/* ============================================================
+   休憩室ビュー: 同じ部屋を暖色に落とし、ソファ+idleエージェント
+   ============================================================ */
+const SEATS=[];  // ソファ席(手前2列)
+for(const [sx,sy] of [[150,150],[196,150],[242,150],[300,168],[346,168],[392,168]]) SEATS.push({x:sx,y:sy});
+function loungeSeat(slot){ return SEATS[slot%SEATS.length]; }
+function drawSofa(cx,gy,w){
+  const x=cx-w/2;
+  cube(x,gy-10,w,7,2,P.sofaL,P.sofa,P.sofaD);            // 座面
+  rect(x-1,gy-18,3,10,P.sofaD); rect(x+w-2,gy-18,3,10,P.sofaD); // アーム
+  cube(x,gy-20,w,6,1,P.sofaL,P.sofa,P.sofaD);            // 背もたれ
+  hline(x,gy-3,w,P.sofaD);
+}
+function drawRug(cx,cy){
+  for(let i=0;i<4;i++){ const rw=54-i*4, rh=20-i*2; g.globalAlpha=1;
+    g.fillStyle=[P.rugD,P.rug,P.rugL,P.rug][i];
+    // ひし形ラグ
+    g.beginPath(); g.moveTo(cx,cy-rh/2); g.lineTo(cx+rw/2,cy); g.lineTo(cx,cy+rh/2); g.lineTo(cx-rw/2,cy); g.closePath(); g.fill();
+  }
+}
+function drawVending(cx,gy){
+  const x=cx-11,y=gy-34;
+  obox(x,y,22,34,P.vendD); rect(x+2,y+2,13,20,'#123038');
+  for(let i=0;i<3;i++) for(let j=0;j<2;j++) rect(x+3+j*6,y+3+i*6,4,4,[P.vendG,P.yF,P.coral][(i+j)%3]);
+  rect(x+16,y+4,4,10,'#2b333a'); rect(x+3,y+26,16,5,P.vend); px(x+6,y+31,P.vendG);
+}
+function drawLounge(hour){
+  // 背景(同じ部屋)を暖かく暗めに
+  drawBackground(hour);
+  g.globalAlpha=0.34; rect(0,0,W,H, hour>=6&&hour<18?'#c98a4a':'#2a1d3a'); g.globalAlpha=1; // 暖色 or 夜紫
+  g.globalAlpha=0.16; rect(0,0,W,H,'#000'); g.globalAlpha=1;
+  // 家具は 512 基準座標を SC 倍で描く
+  g.save(); g.scale(SC,SC);
+  drawRug(250,205);
+  const furn=[{y:150,fn:()=>drawSofa(196,150,150)},{y:168,fn:()=>drawSofa(346,168,150)},
+              {y:196,fn:()=>drawVending(60,196)},{y:210,fn:()=>drawPlant(430,210)}];
+  furn.sort((a,b)=>a.y-b.y); for(const f of furn) f.fn();
+  g.restore();
+  // idle エージェント(SC_CHAR, 絶対座標)
+  const idle=curWorkers.filter(w=>!w.working);
+  const draws=[];
+  for(const w of idle){ const k=keyOf(w), slot=loungeSlotOf[k]||0;
+    const {pos,dx,walking}=stepRoam(k, 0.3+(slot%3)*0.2, 0.55, 1.5);   // 休憩室をゆっくり歩き回る
+    const cs=CSETS[(colorOverride[k]||0)%CSETS.length];
+    draws.push({y:pos.y, key:k, fn:()=>{
+      const cx=Math.round(pos.x), cy=Math.round(pos.y), s=SC_CHAR;
+      let o,bob=0;
+      if(walking){ o={pose:'idle',look:dx<0?-1:1,cs}; bob=-Math.round(Math.abs(Math.sin(frameT*0.4))*2); }
+      else { o={pose:'idle',look:0,cs,dim:true}; o.blink=((frameT+slot*29)%210)<7; }
+      g.save(); g.translate(cx,cy); g.scale(s,s); g.translate(-cx,-cy);
+      robot(cx,cy,o,bob);
+      if(!walking && ((frameT+slot*40)%320)<160) zzz(cx,cy-18,frameT+slot*13);
+      g.restore();
+      screenPos[k]={x:cx,y:cy-Math.round(22*s)};
+      hitboxes.push({key:k,x:cx-11*s,y:cy-30*s,w:22*s,h:32*s});
+    }});
+  }
+  draws.sort((a,b)=>a.y-b.y);
+  for(const d of draws) d.fn();
+}
+
+/* ============================================================
+   UI: タブ / 設置モード / パレット
+   ============================================================ */
+let view='factory', buildMode=false, selectedTool=null, brushDir=0;  // selectedTool: type id | 'erase' | null / brushDir: 0..3
+const paletteEl=document.getElementById('palette'), hintEl=document.getElementById('hint');
+function buildPalette(){
+  paletteEl.innerHTML='';
+  for(const o of CATALOG){ const el=document.createElement('div'); el.className='pitem'; el.dataset.tool=o.id;
+    el.innerHTML=`<span>${o.icon}</span><small>${o.name}</small>`; paletteEl.appendChild(el); }
+  // 集めた景品(コレクション)を飾れる
+  for(const p of PRIZES){ if(!(G.inv&&G.inv[p.id])) continue; const el=document.createElement('div'); el.className='pitem'; el.dataset.tool=p.id;
+    el.style.borderColor=RAR[p.r].c; el.innerHTML=`<span>${p.e}</span><small>${p.n}</small>`; paletteEl.appendChild(el); }
+  const er=document.createElement('div'); er.className='pitem danger'; er.dataset.tool='erase';
+  er.innerHTML=`<span>🗑️</span><small>撤去</small>`; paletteEl.appendChild(er);
+  refreshPalette();
+}
+function refreshPalette(){ for(const it of paletteEl.children) it.classList.toggle('active', it.dataset.tool===selectedTool); }
+paletteEl.addEventListener('click',e=>{ const it=e.target.closest('.pitem'); if(!it) return;
+  selectedTool = (selectedTool===it.dataset.tool)?null:it.dataset.tool; refreshPalette(); });
+buildPalette();
+
+function setView(v){ view=v; if(v!=='factory'&&buildMode) toggleBuild(false);
+  for(const t of document.querySelectorAll('.tab[data-view]')) t.classList.toggle('active', t.dataset.view===v); }
+function toggleBuild(on){ buildMode=(on===undefined)?!buildMode:on;
+  if(buildMode && view!=='factory') setView('factory');
+  document.getElementById('buildBtn').classList.toggle('active',buildMode);
+  paletteEl.classList.toggle('show',buildMode); hintEl.classList.toggle('show',buildMode);
+  if(buildMode) updateHint();
+  if(!buildMode){ selectedTool=null; refreshPalette(); }
+}
+for(const t of document.querySelectorAll('.tab[data-view]')) t.addEventListener('click',()=>setView(t.dataset.view));
+document.getElementById('buildBtn').addEventListener('click',()=>toggleBuild());
+
+/* クリック: 設置モードなら配置/撤去、そうでなければエージェント色替え */
+cv.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect(), sx=(e.clientX-r.left)/r.width*W, sy=(e.clientY-r.top)/r.height*H;
+  if(buildMode && view==='factory'){
+    const {u,v}=screenToIso(sx,sy);
+    if(u<0||u>=1||v<0||v>=1) return;                 // 床の外は無視
+    const c=Math.floor(u*GU), rr=Math.floor(v*GV);
+    if(selectedTool==='erase'){ placed=placed.filter(o=>!(o.c===c&&o.r===rr)); savePlaced(); return; }
+    if(selectedTool){ placed=placed.filter(o=>!(o.c===c&&o.r===rr));
+      placed.push({type:selectedTool,c,r:rr, d: CAT[selectedTool]&&CAT[selectedTool].dirs ? brushDir : 0}); savePlaced(); }
+    return;
+  }
+  for(let i=hitboxes.length-1;i>=0;i--){ const h=hitboxes[i];
+    if(sx>=h.x&&sx<=h.x+h.w&&sy>=h.y&&sy<=h.y+h.h){ colorOverride[h.key]=((colorOverride[h.key]||0)+1)%CSETS.length; break; }
+  }
+});
+
+function cellAt(e){ const r=cv.getBoundingClientRect(), sx=(e.clientX-r.left)/r.width*W, sy=(e.clientY-r.top)/r.height*H;
+  const {u,v}=screenToIso(sx,sy); return (u>=0&&u<1&&v>=0&&v<1)?{c:Math.floor(u*GU),r:Math.floor(v*GV)}:null; }
+const DIRNAMES=['右前','左前','左後','右後'];
+function updateHint(){ if(!hintEl) return;
+  hintEl.textContent = `クリックで設置 ・ 右クリック/Rキーで回転（向き:${DIRNAMES[brushDir]}） ・ 🗑️で撤去`; }
+/* R キー: 設置向きを回転 */
+window.addEventListener('keydown',e=>{ if((e.key==='r'||e.key==='R') && buildMode){ brushDir=(brushDir+1)%4; updateHint(); } });
+/* 右クリック: そのマスの設置物を回転 */
+cv.addEventListener('contextmenu',e=>{ if(!(buildMode&&view==='factory')) return; e.preventDefault();
+  const cell=cellAt(e); if(!cell) return;
+  const o=placed.find(o=>o.c===cell.c&&o.r===cell.r);
+  if(o && CAT[o.type] && CAT[o.type].dirs){ o.d=((o.d||0)+1)%4; savePlaced(); } });
+
+/* 設置プレビュー(ホバー中のタイル + ゴースト) */
+let hoverCell=null;
+cv.addEventListener('mousemove',e=>{ hoverCell = buildMode ? cellAt(e) : null; });
+cv.addEventListener('mouseleave',()=>hoverCell=null);
+function drawHover(){
+  if(!hoverCell) return;
+  const c=hoverCell.c, r=hoverCell.r;
+  const p0=isoToScreen(c/GU,r/GV), p1=isoToScreen((c+1)/GU,r/GV), p2=isoToScreen((c+1)/GU,(r+1)/GV), p3=isoToScreen(c/GU,(r+1)/GV);
+  g.save(); g.globalAlpha=0.30; g.fillStyle=selectedTool==='erase'?'#e05a4e':'#ffd27a';
+  g.beginPath(); g.moveTo(p0.x,p0.y); g.lineTo(p1.x,p1.y); g.lineTo(p2.x,p2.y); g.lineTo(p3.x,p3.y); g.closePath(); g.fill();
+  g.globalAlpha=0.9; g.strokeStyle='#fff'; g.lineWidth=1; g.stroke(); g.restore();
+  // ゴースト(設置予定の見た目・半透明)
+  const def=(selectedTool&&selectedTool!=='erase')?toolDef(selectedTool):null;
+  if(def && def.render) def.render(c,r, def.dirs?brushDir:0, 0.55);
+}
+
+/* ===== 景品の描画(台座＋絵文字フィギュア＋レア発光) ===== */
+function drawPrizeCell(c,r,prize,alpha){
+  const p=isoToScreen((c+0.5)/GU,(r+0.5)/GV), col=RAR[prize.r].c, A=(alpha!=null?alpha:1);
+  g.save();
+  g.globalCompositeOperation='lighter'; g.globalAlpha=A*(prize.r>=3?0.5:0.28); g.fillStyle=col;   // 床のレア発光
+  g.beginPath(); g.ellipse(p.x,p.y,15,7,0,0,Math.PI*2); g.fill();
+  g.globalCompositeOperation='source-over'; g.globalAlpha=A;
+  const K=boxCorners(c,r,0.36,0.36,0.32*CELL);                                                    // 台座
+  quad([K.T00,K.T10,K.P10,K.P11,K.P01,K.T01],'#2b3138');
+  quad([K.P10,K.P11,K.T11,K.T10],'rgba(0,0,0,0.35)'); quad([K.T00,K.T10,K.T11,K.T01],'#454e58');
+  edge(K.P01,K.P11);edge(K.P10,K.P11);edge(K.P01,K.T01);edge(K.P11,K.T11);edge(K.P10,K.T10);
+  edge(K.T00,K.T10);edge(K.T10,K.T11);edge(K.T11,K.T01);edge(K.T01,K.T00);
+  const fy=p.y-0.32*CELL-2, fs=Math.round(CELL*0.95);                                             // 絵文字フィギュア
+  g.textAlign='center'; g.textBaseline='alphabetic'; g.font=fs+'px serif';
+  g.globalCompositeOperation='lighter'; g.globalAlpha=A*(prize.r>=4?0.55:0.3); g.fillStyle=col; g.fillText(prize.e,p.x,fy);
+  g.globalCompositeOperation='source-over'; g.globalAlpha=A; g.fillText(prize.e,p.x,fy-1);
+  g.textAlign='left'; g.restore(); g.globalAlpha=1;
+}
+function toolDef(id){ if(CAT[id]) return CAT[id]; const pz=PRIZEMAP[id];
+  return pz? {prize:true, render:(c,r,d,a)=>drawPrizeCell(c,r,pz,a)} : null; }
+
+/* ===== オーバーレイUI: ガチャ / 図鑑 / フレンド ===== */
+const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
+function closeOverlay(){ overlay.classList.remove('show'); }
+function openOverlay(html){ panel.innerHTML='<span class="close">✕</span>'+html;
+  panel.querySelector('.close').onclick=closeOverlay; overlay.classList.add('show'); }
+overlay.addEventListener('click',e=>{ if(e.target===overlay) closeOverlay(); });
+function openGacha(){
+  openOverlay(`<h2>🎁 ガチャ</h2>
+    <div class="rowline">所持 <b id="gStone" style="color:#7fe6ff;font-size:18px">💎 ${stones()}</b>
+      <span style="color:#9fb0c0">実トークン ${(totalTokens/1e6).toFixed(1)}M・${TOKENS_PER_STONE/1000}kトークンで1石</span></div>
+    <div class="rowline"><button class="btn" id="p1">1回 (1💎)</button>
+      <button class="btn" id="p10">10連 (10💎)</button>
+      <span style="color:#9fb0c0">天井: あと${Math.max(0,10-G.pity)}回でSR以上確定</span></div>
+    <div class="cardwrap" id="reveal"><span style="color:#9fb0c0">引いてみよう！</span></div>
+    <div class="rowline" style="font-size:10px;color:#9fb0c0">排出率 ${[2,3,4,5].map(k=>RAR[k].n+' '+RAR[k].w+'%').join(' / ')}</div>`);
+  const rv=panel.querySelector('#reveal');
+  const run=n=>{ const got=doPull(n); if(!got){ rv.innerHTML='<span style="color:#e05a4e">💎が足りません</span>'; return; }
+    rv.innerHTML=''; got.sort((a,b)=>b.r-a.r).forEach((p,i)=>{ const col=RAR[p.r].c, el=document.createElement('div');
+      el.className='card'; el.style.borderColor=col; el.style.boxShadow=`0 0 14px ${col}`;
+      el.style.background=`linear-gradient(160deg,#0e1417,${col}44)`; el.style.animationDelay=(i*0.05)+'s';
+      el.innerHTML=`${p.e}<small style="color:${col}">${RAR[p.r].n}</small><small style="color:#cfeee0">${p.n}</small>`;
+      rv.appendChild(el); });
+    panel.querySelector('#gStone').textContent='💎 '+stones(); updateDash(); };
+  panel.querySelector('#p1').onclick=()=>run(1);
+  panel.querySelector('#p10').onclick=()=>run(10);
+}
+function openDex(){
+  const owned=PRIZES.filter(p=>G.inv[p.id]).length;
+  const cells=PRIZES.map(p=>{ const have=G.inv[p.id]||0, col=RAR[p.r].c;
+    return have? `<div class="cell" style="border-color:${col}">${p.e}<small style="color:${col}">${RAR[p.r].n}</small><span class="cnt">×${have}</span></div>`
+               : `<div class="cell" style="opacity:.45">❓<small style="color:#9fb0c0">${RAR[p.r].n}</small></div>`; }).join('');
+  openOverlay(`<h2>📖 コレクション図鑑 <span style="font-size:12px;color:#9fb0c0">${owned}/${PRIZES.length}</span></h2>
+    <div class="grid">${cells}</div>
+    <div class="rowline" style="font-size:11px;color:#9fb0c0">集めた景品は「🔧設置」パレット末尾から部屋に飾れます</div>`);
+}
+function openFriends(){
+  const mock=[['aya',312,'👑','#ff5d6c'],['ken',188,'💎','#f6c04a'],['rio',96,'🤖','#b57be0'],['あなた',stones(),'✨','#7fe6ff']];
+  openOverlay(`<h2>👥 フレンド <span style="font-size:11px;color:#9fb0c0">(Phase2で実サーバ連携予定・今はサンプル表示)</span></h2>
+    ${mock.map(f=>`<div class="rowline" style="justify-content:space-between;border-bottom:1px solid #223a33;padding:5px 2px">
+      <b>${f[0]}</b><span style="color:#9fb0c0">💎 ${f[1]}</span><span>最新 <span style="color:${f[3]};font-size:16px">${f[2]}</span></span></div>`).join('')}`);
+}
+document.getElementById('gachaBtn').addEventListener('click',openGacha);
+document.getElementById('dexBtn').addEventListener('click',openDex);
+document.getElementById('friendBtn').addEventListener('click',openFriends);
+
+/* ===== 実トークン消費のポーリング & 進捗ロード ===== */
+async function pollUsage(){ try{ const r=await fetch('/api/usage',{cache:'no-store'}); const d=await r.json();
+  totalTokens=d.totalTokens||0; if(G.baseline==null){ G.baseline=totalTokens; saveGame(); } }catch(_){} }
+loadGame().then(()=>{ buildPalette(); pollUsage(); });
+setInterval(pollUsage, 10000);
+
+/* 床グリッド確認用オーバーレイ(?grid=1) — 背景の床線と平行かをチェック */
+const SHOW_GRID = new URLSearchParams(location.search).get('grid')==='1';
+function drawGridDebug(){
+  g.save(); g.strokeStyle='rgba(0,255,180,0.7)'; g.lineWidth=1;
+  for(let c=0;c<=GU;c++){ const a=isoToScreen(c/GU,0), b=isoToScreen(c/GU,1); g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b.x,b.y); g.stroke(); }
+  for(let r=0;r<=GV;r++){ const a=isoToScreen(0,r/GV), b=isoToScreen(1,r/GV); g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b.x,b.y); g.stroke(); }
+  g.restore();
+}
+
+/* ============================================================
+   メインループ
+   ============================================================ */
+let frameT=0, lastT=performance.now();
+function frame(now){
+  frameT++;
+  const dt=Math.min(0.1,(now-lastT)/1000); lastT=now;
+  const hour=currentHour();
+  hitboxes=[]; screenPos={};
+
+  const busy=curWorkers.filter(w=>w.working).length;
+  accrue(busy,dt);
+
+  if(view==='factory'){
+    drawBackground(hour);                     // 背景(main・等倍で高精細)
+    if(SHOW_GRID) drawGridDebug();
+    fg.clearRect(0,0,W,H); g=fg;              // 設置物+キャラをオフスクリーン層へ
+    drawFactory(hour);
+    gradeLayer(fg,hour);                       // 時間帯の色でまとめて補正
+    g=mainCtx; g.drawImage(fx,0,0);            // 背景の上に合成
+    if(buildMode) drawHover();
+    // ラベルは工場では busy のみ表示
+    for(const w of curWorkers) if(!w.working) delete screenPos[keyOf(w)];
+  } else {
+    drawLounge(hour);
+    for(const w of curWorkers) if(w.working) delete screenPos[keyOf(w)];
+  }
+
+  positionLabels();
+  if(frameT%20===0) updateDash();
+  requestAnimationFrame(frame);
+}
+/* URL 初期状態(?view=lounge / ?build=1) — 共有リンク & テスト用 */
+(function initFromUrl(){ const q=new URLSearchParams(location.search);
+  if(q.get('view')==='lounge') setView('lounge');
+  if(q.get('build')==='1') toggleBuild(true);
+  const pn=q.get('panel');
+  if(pn==='gacha') openGacha();
+  else if(pn==='gachapull'){ openGacha(); const b=panel.querySelector('#p10'); if(b) b.click(); }
+  else if(pn==='dex') openDex();
+  else if(pn==='friends') openFriends();
+})();
+updateDash();
+requestAnimationFrame(frame);
+window.addEventListener('beforeunload',saveProd);
+</script>
+</body>
+</html>

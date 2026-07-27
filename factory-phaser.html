@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🏭 Claude Factory (Phaser)</title>
+<style>
+  :root{ --ink:#e6fff4; --gold:#ffd27a; --mint:#9fdcc6; --panel:rgba(16,24,26,.82); --edge:#2c4740; }
+  html,body{height:100%;margin:0;background:radial-gradient(120% 120% at 50% 30%,#1b232b 0%,#0c1014 70%);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);overflow:hidden}
+  #wrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+  #game{width:min(1300px,96vw);aspect-ratio:1024/572}
+  #game canvas{image-rendering:pixelated;border-radius:8px;box-shadow:0 24px 80px rgba(0,0,0,.6)}
+  #topbar{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:6;font-size:12px}
+  .tab{background:var(--panel);color:var(--mint);border:1px solid var(--edge);border-radius:8px;padding:5px 12px;cursor:pointer;backdrop-filter:blur(3px)}
+  .tab:hover{border-color:var(--mint)} .tab.gacha{color:var(--gold)}
+  #badge{position:absolute;top:10px;right:12px;font-size:12px;color:var(--ink);background:var(--panel);padding:6px 12px;border-radius:8px;z-index:6}
+  #badge b{color:#7fe6ff}
+  #hud{position:absolute;left:12px;bottom:12px;font-size:12px;color:var(--ink);background:var(--panel);padding:5px 10px;border-radius:6px;z-index:6}
+  #hud b{color:var(--gold)}
+  #note{position:absolute;top:10px;left:12px;font-size:10px;color:#9fdcc6;background:var(--panel);padding:4px 9px;border-radius:6px;z-index:6}
+  /* overlay */
+  #overlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(6,10,12,.72);backdrop-filter:blur(4px)}
+  #overlay.show{display:flex}
+  #panel{position:relative;background:#12181c;border:1px solid var(--edge);border-radius:12px;padding:18px 20px;max-width:min(700px,92vw);max-height:88vh;overflow:auto}
+  #panel h2{margin:0 0 8px;font-size:16px;color:var(--gold)}
+  #panel .close{position:absolute;top:8px;right:14px;font-size:20px;color:#9fb0c0;cursor:pointer}
+  .rowline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;font-size:12px}
+  .btn{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,66px);gap:8px;margin-top:6px}
+  .cell{width:66px;height:80px;border-radius:8px;border:2px solid #333;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:28px;position:relative;cursor:pointer}
+  .cell small{font-size:8px;margin-top:1px} .cell .cnt{position:absolute;bottom:2px;right:5px;font-size:9px;color:#fff}
+  .cell.own:hover{box-shadow:0 0 0 2px var(--gold) inset}
+  .cardwrap{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;min-height:100px;align-items:center;margin:6px 0}
+  .card{width:72px;height:94px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:32px;border:2px solid #fff;animation:pop .45s ease both}
+  .card small{font-size:9px;font-weight:700;margin-top:2px}
+  @keyframes pop{0%{transform:scale(.2) rotate(-8deg);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1)}}
+  #toast{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--ink);padding:8px 16px;border-radius:8px;z-index:7;display:none;font-size:12px}
+  /* craft */
+  .invbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center;background:#0e1417;border:1px solid var(--edge);border-radius:8px;padding:7px 9px;margin:6px 0;font-size:12px}
+  .chip{display:inline-flex;align-items:center;gap:3px;background:#1a2228;border-radius:6px;padding:2px 7px}
+  .chip b{color:#eafff4}
+  .sttabs{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0 4px}
+  .sttab{background:#141b20;border:1px solid var(--edge);border-radius:8px 8px 0 0;padding:5px 11px;cursor:pointer;font-size:12px;color:#9fdcc6}
+  .sttab.on{background:#1d262c;border-color:var(--gold);color:var(--gold)}
+  .rc{display:flex;align-items:center;gap:10px;background:#10171b;border:1px solid #243036;border-radius:9px;padding:8px 11px;margin:6px 0}
+  .rc .ic{font-size:26px;width:34px;text-align:center}
+  .rc .mid{flex:1;min-width:0}
+  .rc .nm{font-size:13px;color:#eafff4;font-weight:700}
+  .rc .cost{font-size:11px;color:#9fb0c0;margin-top:2px}
+  .rc .cost .lack{color:#e0674e}
+  .rc button{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:7px;padding:8px 13px;cursor:pointer;font-family:inherit;font-size:12px}
+  .rc button:disabled{background:#33403c;color:#7f8f89;cursor:not-allowed}
+  .locked{opacity:.5}
+  /* tech map */
+  .map{display:flex;flex-direction:column;gap:2px}
+  .tier{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:7px 0}
+  .tlab{font-size:10px;color:#9fb0c0;width:74px;flex:none}
+  .node{display:inline-flex;flex-direction:column;align-items:center;background:#131b20;border:1px solid var(--edge);border-radius:8px;padding:6px 9px;min-width:60px}
+  .node.mach{border-color:#c98b52} .node.mat{border-color:#4a6b7a} .node .e{font-size:22px} .node small{font-size:9px;color:#cfeee0;margin-top:1px}
+  .arrow{color:#5f7a72;font-size:16px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="game"></div>
+  <div id="note">⚙️ Phaser 基盤 — 現行版は <a href="/" style="color:#ffd27a">/</a></div>
+  <div id="topbar">
+    <div class="tab" id="craftBtn">🔨 クラフト</div>
+    <div class="tab" id="mapBtn">🗺️ アイテムマップ</div>
+    <div class="tab gacha" id="gachaBtn">🎁 ガチャ</div>
+    <div class="tab" id="dexBtn">📖 図鑑</div>
+  </div>
+  <div id="badge"><span id="tokN" style="color:#ffd27a">🔩 0kt</span> ・ ガチャ石 <b id="stoneN">0</b></div>
+  <div id="hud"></div>
+  <div id="toast"></div>
+  <div id="overlay"><div id="panel"></div></div>
+</div>
+<script src="vendor/phaser.min.js"></script>
+<script src="game/main.js"></script>
+<script>
+'use strict';
+/* ===== ガチャ / コレクション(現行版と共通ロジック・実トークン連動) ===== */
+const RAR={1:{n:'N',c:'#9fb0c0',w:58},2:{n:'R',c:'#5fa8e0',w:27},3:{n:'SR',c:'#b57be0',w:11},4:{n:'SSR',c:'#f6c04a',w:3.2},5:{n:'UR',c:'#ff5d6c',w:0.8}};
+const PRIZES=[
+  {id:'p_bolt',e:'🔩',n:'謎のボルト',r:1},{id:'p_clip',e:'📎',n:'クリップ',r:1},{id:'p_cone',e:'🚧',n:'コーン',r:1},{id:'p_seed',e:'🌱',n:'観葉の芽',r:1},
+  {id:'p_guitar',e:'🎸',n:'ギター',r:2},{id:'p_lamp',e:'💡',n:'ランプ',r:2},{id:'p_bronze',e:'🥉',n:'銅トロフィー',r:2},
+  {id:'p_robot',e:'🤖',n:'ロボ人形',r:3},{id:'p_arcade',e:'🕹️',n:'アーケード',r:3},{id:'p_gold',e:'🥇',n:'金メダル',r:3},
+  {id:'p_crystal',e:'💎',n:'クリスタル',r:4},{id:'p_rocket',e:'🚀',n:'ロケット',r:4},
+  {id:'p_crown',e:'👑',n:'王冠',r:5},{id:'p_dragon',e:'🐉',n:'ドラゴン像',r:5},
+];
+const TOKENS_PER_STONE=50000;
+let totalTokens=0, G={baseline:null,bonus:30,spent:0,inv:{},pity:0};
+const earned=()=> (G.bonus + (G.baseline==null?0:Math.floor(Math.max(0,totalTokens-G.baseline)/TOKENS_PER_STONE)));
+const stones=()=> Math.max(0, earned()-G.spent);
+let saveT=null;
+function saveGame(){ if(saveT)clearTimeout(saveT); saveT=setTimeout(()=>{ const b=JSON.stringify(G);
+  try{fetch('/api/save',{method:'POST',body:b});}catch(_){} try{localStorage.setItem('cf-gacha',b);}catch(_){}} ,400); }
+async function loadGame(){ let s=null; try{ s=await (await fetch('/api/save',{cache:'no-store'})).json(); }catch(_){}
+  if(!s||!s.inv){ try{ s=JSON.parse(localStorage.getItem('cf-gacha')); }catch(_){} }
+  if(s&&typeof s==='object') G=Object.assign(G,s); if(!G.inv)G.inv={}; craftInit(); }
+function rollRarity(){ if(G.pity>=9){ const x=Math.random(); return x<0.78?3:(x<0.95?4:5); }
+  let x=Math.random()*100,acc=0; for(const k of [1,2,3,4,5]){ acc+=RAR[k].w; if(x<acc)return k; } return 1; }
+function pullOne(){ const rr=rollRarity(); G.pity=rr>=3?0:G.pity+1; const pool=PRIZES.filter(p=>p.r===rr);
+  const pz=pool[Math.floor(Math.random()*pool.length)]; G.inv[pz.id]=(G.inv[pz.id]||0)+1; return pz; }
+function doPull(n){ if(stones()<n) return null; G.spent+=n; const got=[]; for(let i=0;i<n;i++) got.push(pullOne()); saveGame(); return got; }
+
+const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
+function closeOverlay(){ overlay.classList.remove('show'); }
+function openOverlay(h){ panel._refresh=null; panel.innerHTML='<span class="close">✕</span>'+h; panel.querySelector('.close').onclick=closeOverlay; overlay.classList.add('show'); }
+overlay.addEventListener('click',e=>{ if(e.target===overlay) closeOverlay(); });
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',1600); }
+function updateBadge(){ document.getElementById('stoneN').textContent='💎 '+stones();
+  const t=document.getElementById('tokN'); if(t) t.textContent='🔩 '+ktAvail().toLocaleString()+'kt'; }
+
+function openGacha(){
+  openOverlay(`<h2>🎁 ガチャ</h2>
+    <div class="rowline">所持 <b id="gS" style="color:#7fe6ff;font-size:18px">💎 ${stones()}</b>
+      <span style="color:#9fb0c0">実トークン ${(totalTokens/1e6).toFixed(1)}M・${TOKENS_PER_STONE/1000}kで1石</span></div>
+    <div class="rowline"><button class="btn" id="p1">1回 (1💎)</button><button class="btn" id="p10">10連 (10💎)</button>
+      <span style="color:#9fb0c0">天井: あと${Math.max(0,10-G.pity)}回でSR以上</span></div>
+    <div class="cardwrap" id="rv"><span style="color:#9fb0c0">引いてみよう！</span></div>
+    <div class="rowline" style="font-size:10px;color:#9fb0c0">排出率 ${[2,3,4,5].map(k=>RAR[k].n+' '+RAR[k].w+'%').join(' / ')}</div>`);
+  const rv=panel.querySelector('#rv');
+  const run=n=>{ const got=doPull(n); if(!got){ rv.innerHTML='<span style="color:#e05a4e">💎が足りません</span>'; return; }
+    rv.innerHTML=''; got.sort((a,b)=>b.r-a.r).forEach((p,i)=>{ const col=RAR[p.r].c,el=document.createElement('div');
+      el.className='card'; el.style.borderColor=col; el.style.boxShadow=`0 0 14px ${col}`; el.style.background=`linear-gradient(160deg,#0e1417,${col}44)`;
+      el.style.animationDelay=(i*0.05)+'s'; el.innerHTML=`${p.e}<small style="color:${col}">${RAR[p.r].n}</small><small style="color:#cfeee0">${p.n}</small>`; rv.appendChild(el); });
+    panel.querySelector('#gS').textContent='💎 '+stones(); updateBadge(); };
+  panel.querySelector('#p1').onclick=()=>run(1); panel.querySelector('#p10').onclick=()=>run(10);
+}
+function openDex(){
+  const owned=PRIZES.filter(p=>G.inv[p.id]).length;
+  const cells=PRIZES.map(p=>{ const have=G.inv[p.id]||0,col=RAR[p.r].c;
+    return have? `<div class="cell own" data-id="${p.id}" style="border-color:${col}" title="クリックで部屋に飾る">${p.e}<small style="color:${col}">${RAR[p.r].n}</small><span class="cnt">×${have}</span></div>`
+               : `<div class="cell" style="opacity:.45">❓<small style="color:#9fb0c0">${RAR[p.r].n}</small></div>`; }).join('');
+  openOverlay(`<h2>📖 コレクション図鑑 <span style="font-size:12px;color:#9fb0c0">${owned}/${PRIZES.length}</span></h2>
+    <div class="grid">${cells}</div><div class="rowline" style="font-size:11px;color:#9fb0c0">所持アイテムをクリックで部屋に飾る</div>`);
+  panel.querySelectorAll('.cell.own').forEach(el=>el.onclick=()=>{
+    const p=PRIZES.find(x=>x.id===el.dataset.id);
+    if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(p.e, RAR[p.r].c); toast(`${p.e} ${p.n} を部屋に飾った！`); closeOverlay(); }
+  });
+}
+document.getElementById('gachaBtn').addEventListener('click',openGacha);
+document.getElementById('dexBtn').addEventListener('click',openDex);
+
+/* ===== クラフト（実トークン=🔩kt を消費・素材とテックツリー） ===== */
+const KT_DIV=1000;                              // 1kt = 実トークン1000
+const MATS={ frag:{e:'🧩',n:'データ片'}, gear:{e:'⚙️',n:'歯車'}, plate:{e:'🔲',n:'板金'}, crys:{e:'💠',n:'演算結晶'}, circ:{e:'🔗',n:'回路'} };
+const MACHS={ red:{e:'🟥',n:'抽出機'}, green:{e:'🟩',n:'成形機'}, blue:{e:'🟦',n:'演算機'}, yellow:{e:'🟨',n:'選別機'} };
+// st: 作業場所('build'=建設タブ / red,green,blue,yellow=各製造機)。in:素材, kt:トークン, out:産物, req:{mach}前提
+const RECIPES=[
+  {id:'r_frag', st:'red',    name:'データ片を抽出',   in:{},               kt:150, out:{mat:'frag',q:1}},
+  {id:'b_belt', st:'build',  name:'コンベア',         in:{frag:4},         kt:60,  out:{belt:1}},
+  {id:'b_green',st:'build',  name:'成形機を建設',     in:{frag:12},        kt:200, out:{mach:'green'}},
+  {id:'b_blue', st:'build',  name:'演算機を建設',     in:{gear:8,plate:6}, kt:500, out:{mach:'blue'},  req:{mach:'green'}},
+  {id:'b_yellow',st:'build', name:'選別機を建設',     in:{circ:10,crys:8}, kt:900, out:{mach:'yellow'},req:{mach:'blue'}},
+  {id:'g_gear', st:'green',  name:'歯車を成形',       in:{frag:2},         kt:40,  out:{mat:'gear',q:1}},
+  {id:'g_plate',st:'green',  name:'板金を成形',       in:{frag:3},         kt:55,  out:{mat:'plate',q:1}},
+  {id:'l_crys', st:'blue',   name:'演算結晶を生成',   in:{plate:2},        kt:120, out:{mat:'crys',q:1}},
+  {id:'l_circ', st:'blue',   name:'回路を生成',       in:{gear:3,crys:1},  kt:180, out:{mat:'circ',q:1}},
+  {id:'s_stone',st:'yellow', name:'ガチャ石に変換',   in:{circ:2},         kt:300, out:{stone:1}},
+];
+function craftInit(){ if(!G.craft) G.craft={}; const c=G.craft;
+  if(c.baseTok==null) c.baseTok=0;                 // 累計トークン全体をクラフト資源に（これまでの稼働ぶん）
+  if(c.bonusKt==null) c.bonusKt=800; if(c.spentKt==null) c.spentKt=0;
+  if(!c.inv) c.inv={}; if(!c.built) c.built={}; if(!c.built.red) c.built.red=1; }
+const ktEarned=()=> (G.craft.bonusKt + (G.craft.baseTok==null?0:Math.floor(Math.max(0,totalTokens-G.craft.baseTok)/KT_DIV)));
+const ktAvail =()=> Math.max(0, ktEarned()-G.craft.spentKt);
+const invN=(m)=> (G.craft.inv[m]||0);
+const built=(t)=> !!G.craft.built[t];
+function lacks(rc){ const L=[]; if(ktAvail()<rc.kt) L.push('🔩'); for(const m in rc.in){ if(invN(m)<rc.in[m]) L.push(m); } return L; }
+function canCraft(rc){ if(rc.req&&rc.req.mach&&!built(rc.req.mach)) return false; return lacks(rc).length===0; }
+function doCraft(rc){ if(!canCraft(rc)) return false; G.craft.spentKt+=rc.kt; for(const m in rc.in) G.craft.inv[m]=invN(m)-rc.in[m];
+  const o=rc.out; let msg='';
+  if(o.mat){ G.craft.inv[o.mat]=invN(o.mat)+(o.q||1); msg=`${MATS[o.mat].e} ${MATS[o.mat].n} ×${o.q||1} を製造`; }
+  else if(o.belt){ if(window.__scene&&window.__scene.placeBelt) window.__scene.placeBelt(); msg='🛗 コンベアを設置'; }
+  else if(o.mach){ G.craft.built[o.mach]=(G.craft.built[o.mach]||0)+1;
+    if(window.__scene&&window.__scene.placeMachine) window.__scene.placeMachine(o.mach, MACHS[o.mach].n); msg=`${MACHS[o.mach].e} ${MACHS[o.mach].n} を建設！`; }
+  else if(o.stone){ G.bonus=(G.bonus||0)+o.stone; msg=`💎 ガチャ石 ×${o.stone} を獲得`; }
+  saveGame(); updateBadge(); toast(msg); return true; }
+
+function costHTML(rc){ const L=lacks(rc); const parts=[];
+  parts.push(`<span class="${L.includes('🔩')?'lack':''}">🔩${rc.kt}kt</span>`);
+  for(const m in rc.in) parts.push(`<span class="${L.includes(m)?'lack':''}">${MATS[m].e}${rc.in[m]}</span>`);
+  return parts.join(' + '); }
+function outHTML(o){ if(o.mat) return MATS[o.mat].e; if(o.mach) return MACHS[o.mach].e; if(o.belt) return '🛗'; if(o.stone) return '💎'; return '?'; }
+
+let _craftTab='red';
+function openCraft(startTab){ craftInit();
+  const owned=['build','red']; for(const t of ['green','blue','yellow']) if(built(t)) owned.push(t);
+  if(startTab && owned.includes(startTab)) _craftTab=startTab; if(!owned.includes(_craftTab)) _craftTab='red';
+  const label=(st)=> st==='build'?'🏗 建設': (MACHS[st].e+' '+MACHS[st].n);
+  const render=()=>{
+    const inv=Object.keys(MATS).map(m=>`<span class="chip">${MATS[m].e}<b>${invN(m)}</b></span>`).join('');
+    const tabs=owned.map(st=>`<span class="sttab ${st===_craftTab?'on':''}" data-st="${st}">${label(st)}</span>`).join('');
+    // 未所持の製造機タブ（建設で解放できるものをグレー表示）
+    const lockTabs=['green','blue','yellow'].filter(t=>!built(t)).map(t=>`<span class="sttab locked">${MACHS[t].e}${MACHS[t].n}</span>`).join('');
+    const rows=RECIPES.filter(r=>r.st===_craftTab).map(rc=>{
+      const ok=canCraft(rc); const reqLock=rc.req&&rc.req.mach&&!built(rc.req.mach);
+      const note=reqLock?`<span class="cost lack">要 ${MACHS[rc.req.mach].e}${MACHS[rc.req.mach].n}</span>`:`<div class="cost">${costHTML(rc)}</div>`;
+      return `<div class="rc ${reqLock?'locked':''}"><div class="ic">${outHTML(rc.out)}</div>
+        <div class="mid"><div class="nm">${rc.name}</div>${note}</div>
+        <button data-id="${rc.id}" ${ok?'':'disabled'}>作る</button></div>`;
+    }).join('');
+    openOverlay(`<h2>🔨 クラフト <span style="font-size:12px;color:#ffd27a">🔩 ${ktAvail().toLocaleString()}kt</span></h2>
+      <div class="invbar">${inv}</div>
+      <div class="sttabs">${tabs}${lockTabs}</div>
+      <div>${rows||'<div class="cost" style="padding:10px">レシピなし</div>'}</div>
+      <div class="rowline" style="font-size:10px;color:#9fb0c0">🔩kt = 実トークン消費 ÷1000（Claudeを使うほど増える）。素材を集めて上位の製造機を建設しよう。<a href="#" id="toMap" style="color:#9fdcc6">アイテムマップ→</a></div>`);
+    panel._refresh=render;
+    panel.querySelectorAll('.sttab[data-st]').forEach(el=>el.onclick=()=>{ _craftTab=el.dataset.st; render(); });
+    panel.querySelectorAll('.rc button[data-id]').forEach(b=>b.onclick=()=>{ const rc=RECIPES.find(r=>r.id===b.dataset.id);
+      const wasBuilt=rc.out.mach; if(doCraft(rc)){ if(wasBuilt&&!owned.includes(wasBuilt)){ owned.push(wasBuilt); _craftTab=wasBuilt; } render(); } });
+    const tm=panel.querySelector('#toMap'); if(tm) tm.onclick=(e)=>{ e.preventDefault(); openMap(); };
+  };
+  render();
+}
+function openMap(){ craftInit();
+  const node=(e,n,cls)=>`<span class="node ${cls}"><span class="e">${e}</span><small>${n}</small></span>`;
+  const A='<span class="arrow">→</span>';
+  const tiers=[
+    ['最初',       [node(MACHS.red.e,'抽出機(所持)','mach')]],
+    ['素材T1',     [node(MATS.frag.e,'データ片','mat')]],
+    ['建設/加工',  [node('🛗','コンベア','mach'),node(MACHS.green.e,'成形機','mach')]],
+    ['素材T2',     [node(MATS.gear.e,'歯車','mat'),node(MATS.plate.e,'板金','mat')]],
+    ['上位機',     [node(MACHS.blue.e,'演算機','mach')]],
+    ['素材T3',     [node(MATS.crys.e,'演算結晶','mat'),node(MATS.circ.e,'回路','mat')]],
+    ['最上位',     [node(MACHS.yellow.e,'選別機','mach')]],
+    ['循環',       [node('💎','ガチャ石','mat')]],
+  ];
+  const map=tiers.map((t,i)=>`<div class="tier"><span class="tlab">${t[0]}</span>${t[1].join(' ')}${i<tiers.length-1?' '+A:''}</div>`).join('');
+  openOverlay(`<h2>🗺️ アイテムマップ（テックツリー）</h2>
+    <div class="map">${map}</div>
+    <div class="rowline" style="font-size:11px;color:#9fb0c0">抽出機で🧩を採取→建設で🟩成形機→⚙️🔲を加工→🟦演算機→💠🔗→🟨選別機→💎（ガチャへ循環）。
+    <a href="#" id="toCraft" style="color:#ffd27a">クラフトを開く→</a></div>`);
+  const tc=panel.querySelector('#toCraft'); if(tc) tc.onclick=(e)=>{ e.preventDefault(); openCraft(); };
+}
+document.getElementById('craftBtn').addEventListener('click',()=>openCraft());
+document.getElementById('mapBtn').addEventListener('click',openMap);
+
+async function pollUsage(){ try{ const d=await (await fetch('/api/usage',{cache:'no-store'})).json();
+  totalTokens=d.totalTokens||0; if(G.baseline==null){ G.baseline=totalTokens; saveGame(); }
+  updateBadge(); if(overlay.classList.contains('show') && panel._refresh) panel._refresh(); }catch(_){} }
+loadGame().then(()=>{ updateBadge(); pollUsage().then(()=>{ const q=new URLSearchParams(location.search);
+  if(q.get('craft')) openCraft(); else if(q.get('map')) openMap(); }); });
+setInterval(pollUsage, 10000);
+</script>
+</body>
+</html>

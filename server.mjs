@@ -69,7 +69,71 @@ function collectSessions() {
   return workers;
 }
 
+// ===== 実トークン消費の集計(トランスクリプトを mtime キャッシュで軽量に) =====
+const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const SAVE_FILE = path.join(os.homedir(), '.claude', 'claude-factory-save.json');
+const tokFileCache = new Map();          // path -> {mtime, eff}
+let tokTotal = 0, tokComputedAt = 0;
+function listTranscripts(dir) {
+  let out = [], ents = [];
+  try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const e of ents) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) out = out.concat(listTranscripts(p));
+    else if (e.name.endsWith('.jsonl')) out.push(p);
+  }
+  return out;
+}
+function sumFileTokens(p) {
+  let eff = 0, txt = '';
+  try { txt = fs.readFileSync(p, 'utf8'); } catch { return 0; }
+  for (const line of txt.split('\n')) {
+    if (!line) continue;
+    let d; try { d = JSON.parse(line); } catch { continue; }
+    const u = (d.message && d.message.usage) || d.usage;
+    if (!u) continue;
+    // 実消費 = 出力 + 入力 + キャッシュ生成（cache_read は巨大・安価なので除外）
+    eff += (u.output_tokens || 0) + (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+  }
+  return eff;
+}
+function refreshTokens() {
+  try {
+    const files = listTranscripts(PROJECTS_DIR);
+    let total = 0; const seen = new Set();
+    for (const f of files) {
+      seen.add(f);
+      let st; try { st = fs.statSync(f); } catch { continue; }
+      const c = tokFileCache.get(f);
+      if (c && c.mtime === st.mtimeMs) { total += c.eff; continue; }
+      const eff = sumFileTokens(f);
+      tokFileCache.set(f, { mtime: st.mtimeMs, eff });
+      total += eff;
+    }
+    for (const k of [...tokFileCache.keys()]) if (!seen.has(k)) tokFileCache.delete(k);
+    tokTotal = total; tokComputedAt = Date.now();
+  } catch {}
+}
+
 const server = http.createServer((req, res) => {
+  const route = (req.url || '/').split('?')[0];
+  const JSONH = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' };
+  if (route === '/api/usage') {
+    res.writeHead(200, JSONH);
+    res.end(JSON.stringify({ totalTokens: tokTotal, computedAt: tokComputedAt }));
+    return;
+  }
+  if (route === '/api/save') {
+    if (req.method === 'POST') {
+      let body = ''; req.on('data', c => body += c);
+      req.on('end', () => { try { fs.writeFileSync(SAVE_FILE, body || '{}'); } catch {}
+        res.writeHead(200, JSONH); res.end('{"ok":true}'); });
+      return;
+    }
+    let data = '{}'; try { data = fs.readFileSync(SAVE_FILE, 'utf8'); } catch {}
+    res.writeHead(200, JSONH); res.end(data || '{}');
+    return;
+  }
   if (req.url === '/api/sessions') {
     const workers = collectSessions();
     const body = JSON.stringify({
@@ -87,8 +151,26 @@ const server = http.createServer((req, res) => {
     res.end(body);
     return;
   }
-  // それ以外はドット絵工場ページを返す
-  const html = fs.readFileSync(path.join(__dirname, 'pixel-factory.html'), 'utf8');
+  // 画像などの静的アセット(/assets/* と *.jpg/png)を配信
+  const MIME = { '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png', '.gif':'image/gif',
+                 '.svg':'image/svg+xml', '.css':'text/css', '.js':'text/javascript' };
+  const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  const ext = path.extname(urlPath).toLowerCase();
+  if (ext && MIME[ext]) {
+    const safe = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
+    const file = path.join(__dirname, safe);
+    if (file.startsWith(__dirname) && fs.existsSync(file)) {
+      res.writeHead(200, { 'Content-Type': MIME[ext], 'Cache-Control': 'no-store' });
+      res.end(fs.readFileSync(file));
+      return;
+    }
+    res.writeHead(404); res.end('not found'); return;
+  }
+  // /classic=旧ドット絵, /next=Phaser基盤(プロトタイプ), それ以外=現行ゲーム
+  const page = urlPath === '/classic' ? 'pixel-factory.html'
+             : urlPath === '/next'    ? 'factory-phaser.html'
+             : 'claude-factory.html';
+  const html = fs.readFileSync(path.join(__dirname, page), 'utf8');
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 });
@@ -99,4 +181,7 @@ server.listen(PORT, () => {
   console.log(`  データ元: ${SESSIONS_DIR}`);
   const w = collectSessions();
   console.log(`  現在: 全${w.length}体 / 稼働中${w.filter(x => x.working).length}体\n`);
+  // トークン集計はサーバ起動をブロックしないよう遅延実行
+  setTimeout(() => { refreshTokens(); console.log(`  実トークン消費(累計・実効): ${tokTotal.toLocaleString()}`); }, 300);
+  setInterval(refreshTokens, 120000);
 });
