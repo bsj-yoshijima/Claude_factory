@@ -45,10 +45,15 @@ function makeMascot(scene, key, pal, pose){
 }
 
 const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
+const MACHS_JP = { red:'抽出機', green:'成形機', blue:'演算機', yellow:'選別機' };
+// エージェントの頭アクセサリ(スキン)。クリックで巡回。プロジェクト単位で永続化。
+const SKINS = [ {id:'none',e:'',n:'なし'}, {id:'chick',e:'🐤',n:'ひよこ'}, {id:'phones',e:'🎧',n:'ヘッドフォン'},
+  {id:'hat',e:'🎩',n:'シルクハット'}, {id:'crown',e:'👑',n:'王冠'}, {id:'ribbon',e:'🎀',n:'リボン'},
+  {id:'flower',e:'🌸',n:'花'}, {id:'mush',e:'🍄',n:'キノコ'}, {id:'cap',e:'🎓',n:'角帽'} ];
 const DECOR = ['crate','drum','plant','pallet','sign'];
+// 製造機はショップ経済側(G.machines)が設置する。ここは無料の初期装飾のみ。
 const DEMO = [
-  {k:'m_red',c:3,r:2},{k:'m_blue',c:5,r:2},{k:'m_green',c:7,r:2},{k:'m_yellow',c:9,r:2},
-  {k:'dec_crate',c:2,r:8},{k:'dec_drum',c:10,r:7},{k:'dec_sign',c:10,r:9},{k:'dec_pallet',c:4,r:9},{k:'dec_plant',c:1,r:10},
+  {k:'dec_crate',c:2,r:8},{k:'dec_plant',c:1,r:10},
 ];
 
 class Main extends Phaser.Scene {
@@ -169,8 +174,26 @@ class Main extends Phaser.Scene {
     this.lit.push({sp:img, u:(cell.c+0.5)/GU, v:(cell.r+0.5)/GV});
     img.setTint(this.tintByLight((cell.c+0.5)/GU,(cell.r+0.5)/GV));
     if(label){ const t=this.add.text(p.x,p.y-2.0*CELL-4,label,{fontFamily:'monospace',fontSize:'10px',color:'#eafff6'}).setOrigin(0.5,1).setDepth(p.y+1); t.setShadow(0,1,'#000',3,true,true); }
+    this.occ.add(K(cell.c,cell.r)); this.machineCells.push({c:cell.c,r:cell.r});   // busyエージェントの作業先
+    this._spawnPop(p.x,p.y); return true;
+  }
+  /* 装飾品を空きセルに設置(採光・接地影つき) */
+  placeDeco(type){ const tex='dec_'+type; if(!this.textures.exists(tex)) return false;
+    const cell=this.freeCell(); const p=cellXY(cell.c,cell.r);
+    const img=this.add.image(p.x,p.y,tex).setOrigin(0.5,1); img.setScale(1.0*CELL/img.height).setDepth(p.y);
+    this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5)
+      .setDisplaySize(img.displayWidth*1.05, img.displayWidth*0.5).setAlpha(0.5);
+    this.lit.push({sp:img, u:(cell.c+0.5)/GU, v:(cell.r+0.5)/GV});
+    img.setTint(this.tintByLight((cell.c+0.5)/GU,(cell.r+0.5)/GV));
     this.occ.add(K(cell.c,cell.r)); this._spawnPop(p.x,p.y); return true;
   }
+  /* 所持している製造機一覧を工場に反映(ロード時) */
+  syncMachines(list){ for(const m of (list||[])) this.placeMachine(m.type, MACHS_JP[m.type]||''); }
+  /* テーマ装飾(絵文字)を空きセルに設置(接地影つき) */
+  placeEmojiDeco(emoji){ const cell=this.freeCell(); const p=cellXY(cell.c,cell.r);
+    this.add.image(p.x+CELL*0.16,p.y+CELL*0.05,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.72,CELL*0.32).setAlpha(0.42);
+    this.add.text(p.x,p.y-CELL*0.12,emoji,{fontSize:Math.round(CELL*1.05)+'px'}).setOrigin(0.5,1).setDepth(p.y);
+    this.occ.add(K(cell.c,cell.r)); this._spawnPop(p.x,p.y); return true; }
   /* クラフトで作ったコンベア単体を空きセルに設置 */
   placeBelt(){
     const BW=1.28*CELL, bscale=BW/965; const cell=this.freeCell(); const p=cellXY(cell.c,cell.r);
@@ -252,12 +275,6 @@ class Main extends Phaser.Scene {
     else if(hr>=16&&hr<18.5){ amb=0xffce9e; objAmb=0xecc196; ambB=0.86; shaftCol=0xffb277; shaftOn=0.18; }   // 西日
     else if(hr>=18.5&&hr<20){ amb=0x8a7594; objAmb=0x83718c; ambB=0.62; shaftCol=0xbfb0d8; shaftOn=0.11; nf=(hr-18.5)/1.5; } // 薄暮
     else { amb=0x47597f; objAmb=0x4c5c7e; ambB=0.5; shaftCol=0xafc0e6; shaftOn=0.10; nf=1; }                 // 夜
-    this.ambInt=objAmb; this.ambB=ambB; this.shaftOn=shaftOn;
-    this._ambC=Phaser.Display.Color.IntegerToColor(objAmb);
-    this._shaftC=Phaser.Display.Color.IntegerToColor(shaftCol);
-    this.bgImg.setTint(amb);
-    this.drawShafts();
-    for(const o of this.lit) o.sp.setTint(this.tintByLight(o.u,o.v));   // 設置物を採光で色付け
     // 窓の外の空(時間帯) + 太陽/月/星（bgの後ろ・ガラス越し）
     let sky, dayF=0;
     if(hr>=8&&hr<16){ sky=0xaec6e6; dayF=1; }                                   // 昼(青空)
@@ -265,10 +282,35 @@ class Main extends Phaser.Scene {
     else if(hr>=16&&hr<18.5){ sky=0xef8f56; dayF=Math.max(0,1-(hr-16)/2.5); }   // 夕焼け
     else if(hr>=18.5&&hr<20){ sky=0x3a3560; dayF=0; }                           // 薄暮
     else { sky=0x0c1430; dayF=0; }                                             // 夜空
+    // 背景テーマ(ショップ購入)。'auto'/未設定は時刻連動。テーマ時は室内採光も揃える
+    const TH={ blue:{amb:0xffffff,obj:0xefe9dd,shaft:0xfff3da,son:0.16,sky:0xaec6e6,day:1,nf:0},
+      sunset:{amb:0xffce9e,obj:0xecc196,shaft:0xffb277,son:0.18,sky:0xef8f56,day:0.55,nf:0},
+      night:{amb:0x47597f,obj:0x4c5c7e,shaft:0xafc0e6,son:0.10,sky:0x0c1430,day:0,nf:1},
+      space:{amb:0x3a3f66,obj:0x40466e,shaft:0x8aa0d8,son:0.08,sky:0x0a0a22,day:0,nf:1},
+      aurora:{amb:0x4a6a72,obj:0x4f6f74,shaft:0x9fe0c8,son:0.12,sky:0x123b3a,day:0,nf:1},
+      arabia:{amb:0xffdcae,obj:0xe8c79a,shaft:0xffcf94,son:0.18,sky:0xE8A15A,day:0.4,nf:0.2},   // 砂漠の夕
+      undersea:{amb:0x8fc2d2,obj:0x7fb3c6,shaft:0x9fe6f0,son:0.14,sky:0x1E6E7E,day:0,nf:0},      // 海中
+      japan:{amb:0xffe6ea,obj:0xf0d8dc,shaft:0xffd0d8,son:0.14,sky:0xF6B5C0,day:0.5,nf:0},        // 桜の空
+      china:{amb:0xffcf9e,obj:0xe8b58a,shaft:0xffcf8a,son:0.16,sky:0xC0342B,day:0.3,nf:0.3} };    // 紅い空
+    const t=TH[this.skyTheme]; if(t){ amb=t.amb; objAmb=t.obj; shaftCol=t.shaft; shaftOn=t.son; sky=t.sky; dayF=t.day; nf=t.nf; }
+    this.ambInt=objAmb; this.ambB=ambB; this.shaftOn=shaftOn; this.lightOn=nf;
+    this._ambC=Phaser.Display.Color.IntegerToColor(objAmb);
+    this._shaftC=Phaser.Display.Color.IntegerToColor(shaftCol);
+    this.bgImg.setTint(amb);
+    this.drawShafts();
+    for(const o of this.lit) o.sp.setTint(this.tintByLight(o.u,o.v));   // 設置物を採光で色付け
     if(this.skyLayer){ this.skyLayer.clear(); this.skyLayer.fillStyle(sky,1); this.skyLayer.fillPoints(this.skyCover,true); }
     if(this.sun){ this.sun.setAlpha(dayF); this.sunG.setAlpha(dayF*0.5); }
     if(this.moon){ this.moon.setAlpha(nf); this.moonG.setAlpha(nf*0.5); for(const s of this.stars) s.setAlpha(nf); }
   }
+  setSkyTheme(theme){ this.skyTheme=(theme&&theme!=='auto')?theme:null; this.updateLighting(); }
+  setFloor(theme){ if(!this.floorGfx){ this.floorGfx=this.add.graphics().setDepth(-999).setBlendMode(Phaser.BlendModes.MULTIPLY); }
+    this.floorGfx.clear();
+    const col={wood:null, cool:0x9fb6d0, crimson:0xd9948a, forest:0x93c090, gold:0xe8cf8a, mono:0xc4c4c4,
+      sand:0xe8d3a0, aqua:0x8fd6d0, tatami:0xbcc78a, redgold:0xd6a24a}[theme];   // 下段=シリーズ床材
+    if(col==null) return;   // wood=素の床
+    const p=[uvXY(0,0),uvXY(1,0),uvXY(1,1),uvXY(0,1)];
+    this.floorGfx.fillStyle(col,1); this.floorGfx.fillPoints(p,true); }
   isFree(c,r){ return c>=0&&r>=0&&c<GU&&r<GV && !this.occ.has(K(c,r)); }
   freeCell(){ for(let i=0;i<50;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=1+Math.floor(Math.random()*(GV-2)); if(this.isFree(c,r)) return {c,r}; } return {c:1,r:1}; }
   freeCellIn(minr,maxr){ for(let i=0;i<40;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=minr+Math.floor(Math.random()*(maxr-minr+1)); if(this.isFree(c,r)) return {c,r}; } return null; }
@@ -282,7 +324,16 @@ class Main extends Phaser.Scene {
         if(nc===to.c&&nr===to.r){ const path=[]; let n={c:nc,r:nr}; while(n){ path.unshift(n); n=prev[K(n.c,n.r)]; } path.shift(); return path; }
         q.push({c:nc,r:nr}); } }
     return null; }
-  clearDeco(a){ if(a.z){a.z.destroy();a.z=null;} if(a.cup){a.cup.destroy();a.cup=null;} }
+  clearDeco(a){ if(a.z){a.z.destroy();a.z=null;} if(a.cup){a.cup.destroy();a.cup=null;} if(a.skinObj){a.skinObj.destroy();a.skinObj=null;} }
+  /* スキン: 頭アクセサリの表示更新 / クリック巡回 / 一括反映(ロード時) */
+  updateSkin(a){ const sk=SKINS.find(s=>s.id===a.skinId)||SKINS[0];
+    if(!sk.e){ if(a.skinObj){a.skinObj.destroy();a.skinObj=null;} return; }
+    if(!a.skinObj) a.skinObj=this.add.text(a.px,a.py,'',{fontSize:'15px'}).setOrigin(0.5,1);
+    a.skinObj.setText(sk.e); }
+  cycleSkin(key){ const a=this.agents[key]; if(!a)return; const i=SKINS.findIndex(s=>s.id===a.skinId);
+    a.skinId=SKINS[(i+1)%SKINS.length].id; this.updateSkin(a);
+    if(window.__skinChanged) window.__skinChanged(a.proj, a.skinId); }
+  applySkins(map){ this.skins=map||{}; for(const k in this.agents){ const a=this.agents[k]; a.skinId=this.skins[a.proj]||'none'; this.updateSkin(a); } }
   decide(a){
     this.clearDeco(a);
     if(a.busy && this.machineCells.length && Math.random()<0.75){
@@ -309,11 +360,15 @@ class Main extends Phaser.Scene {
         const sp=this.add.sprite(p.x,p.y,`m${ci}_stand`).setOrigin(0.5,1).setScale(s);
         const lbl=this.add.text(p.x,p.y-30,w.project||'',{fontFamily:'monospace',fontSize:'11px',color:'#eafff6'}).setOrigin(0.5,1);
         lbl.setShadow(0,1,'#000',3,true,true);
-        this.agents[key]={sp,lbl,shadow,ci,cell,px:p.x,py:p.y,path:[],state:'walk',after:null,timer:0,face:1,busy:w.working,restType:'sit',z:null,cup:null,scl:s};
+        this.agents[key]={sp,lbl,shadow,ci,cell,px:p.x,py:p.y,path:[],state:'walk',after:null,timer:0,face:1,busy:w.working,restType:'sit',z:null,cup:null,scl:s,
+          proj:w.project||'', skinId:(this.skins&&this.skins[w.project])||'none', skinObj:null};
+        sp.setInteractive({useHandCursor:true}).on('pointerdown',()=>this.cycleSkin(key));
+        this.updateSkin(this.agents[key]);
         this.decide(this.agents[key]);
       } else this.agents[key].busy=w.working;
     });
     for(const k of Object.keys(this.agents)){ if(!present.has(k)){ const a=this.agents[k]; this.clearDeco(a); a.sp.destroy(); a.lbl.destroy(); a.shadow.destroy(); delete this.agents[k]; } }
+    this.busyCount=busyN;
     if(this.hud) this.hud.innerHTML=`稼働 <b>${busyN}</b> ・ 休憩 ${idleN} ・ Phaser基盤`;
   }
   update(time){
@@ -357,6 +412,7 @@ class Main extends Phaser.Scene {
       if(a.z){ a.z.setPosition(a.px+9, a.py-30-((time-(a.zt||time))*0.01)).setDepth(a.py+2);
         if((time-(a.zt||time))>1800){ a.z.destroy(); a.z=null; } }
       if(a.cup){ a.cup.setPosition(a.px+a.face*11, a.py-16).setDepth(a.py+2); }
+      if(a.skinObj){ a.skinObj.setPosition(a.px, a.sp.y - a.sp.displayHeight + 5).setDepth(a.py+3); }
     }
   }
 }
