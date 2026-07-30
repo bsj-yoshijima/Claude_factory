@@ -46,10 +46,22 @@ function makeMascot(scene, key, pal, pose){
 
 const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
 const MACHS_JP = { red:'抽出機', green:'成形機', blue:'演算機', yellow:'選別機' };
-// エージェントの頭アクセサリ(スキン)。クリックで巡回。プロジェクト単位で永続化。
-const SKINS = [ {id:'none',e:'',n:'なし'}, {id:'chick',e:'🐤',n:'ひよこ'}, {id:'phones',e:'🎧',n:'ヘッドフォン'},
-  {id:'hat',e:'🎩',n:'シルクハット'}, {id:'crown',e:'👑',n:'王冠'}, {id:'ribbon',e:'🎀',n:'リボン'},
-  {id:'flower',e:'🌸',n:'花'}, {id:'mush',e:'🍄',n:'キノコ'}, {id:'cap',e:'🎓',n:'角帽'} ];
+// エージェントのスキン(頭アクセ e + 体の色 body)。クリックで巡回・プロジェクト単位で永続化。
+const SKINS = [
+  {id:'none',   e:'',   n:'なし'},
+  {id:'chick',  e:'🐤', n:'ひよこ'},
+  {id:'phones', e:'🎧', n:'ヘッドフォン'},
+  {id:'hat',    e:'🎩', n:'シルクハット'},
+  {id:'crown',  e:'👑', n:'王様',     body:0xf1d489},
+  {id:'ribbon', e:'🎀', n:'リボン'},
+  {id:'flower', e:'🌸', n:'花'},
+  {id:'mush',   e:'🍄', n:'キノコ'},
+  {id:'cap',    e:'🎓', n:'卒業'},
+  {id:'ninja',  e:'🥷', n:'忍者',     body:0x3b4048},
+  {id:'diver',  e:'🤿', n:'ダイバー', body:0x5aa6d6},
+  {id:'santa',  e:'🎅', n:'サンタ',   body:0xd25148},
+  {id:'party',  e:'🎉', n:'パーティ', body:0xe07ab0},
+];
 const DECOR = ['crate','drum','plant','pallet','sign'];
 // 製造機はショップ経済側(G.machines)が設置する。ここは無料の初期装飾のみ。
 const DEMO = [
@@ -69,7 +81,8 @@ class Main extends Phaser.Scene {
     this.bgImg=this.add.image(0,0,'bg_room').setOrigin(0,0).setDisplaySize(W,H).setDepth(-1000);
     this._hourQ = new URLSearchParams(location.search).get('hour');
     this.lit=[];      // 位置ライティングで色付けする設置物 {sp,x,y}
-    this.ambB=1; this.ambInt=0xffffff; this.lightOn=0;
+    this.ambB=1; this.ambInt=0xefe9dd; this.lightOn=0;
+    this._ambC=Phaser.Display.Color.IntegerToColor(0xefe9dd); this._shaftC=Phaser.Display.Color.IntegerToColor(0xfff3da);   // 配置時のtint用に早期初期化
     this.lights=[{x:0.40*W,y:0.30*H,r:235},{x:0.55*W,y:0.36*H,r:235},{x:0.69*W,y:0.30*H,r:235}]; // 天井ライト位置
     PRESETS.forEach((p,i)=>{ makeMascot(this,`m${i}_stand`,p,'stand'); makeMascot(this,`m${i}_work`,p,'work'); makeMascot(this,`m${i}_sit`,p,'sit'); });
     // 火花
@@ -83,17 +96,10 @@ class Main extends Phaser.Scene {
     const grd=shg.createRadialGradient(32,16,1,32,16,30); grd.addColorStop(0,'rgba(0,0,0,0.5)'); grd.addColorStop(1,'rgba(0,0,0,0)');
     shg.fillStyle=grd; shg.fillRect(0,0,64,32); this.textures.addCanvas('shadow',shc);
 
-    this.occ=new Set(); this.machineCells=[];
-    for(const o of DEMO){
-      const p=cellXY(o.c,o.r);
-      const img=this.add.image(p.x,p.y,o.k).setOrigin(0.5,1);
-      const isM=MACHINES.includes(o.k);
-      img.setScale((isM?2.0:1.0)*CELL/img.height).setDepth(p.y);
-      this.add.image(p.x+CELL*0.24,p.y+CELL*0.12,'shadow').setDepth(p.y-0.5).setRotation(0.5)  // 光源=左上→影は右下へ伸ばす
-        .setDisplaySize(img.displayWidth*1.15, img.displayWidth*0.52).setAlpha(0.5);
-      this.lit.push({sp:img, u:(o.c+0.5)/GU, v:(o.r+0.5)/GV});   // 位置(uv)で採光
-      this.occ.add(K(o.c,o.r)); if(isM) this.machineCells.push({c:o.c,r:o.r});
-    }
+    this.occ=new Set(); this.machineCells=[]; this.placed=[]; this.editMode=false;
+    for(const o of DEMO){ const isM=MACHINES.includes(o.k);
+      this.addPlaced(isM?'machine':'deco', isM?o.k.replace('m_',''):o.k.replace('dec_',''), {cell:{c:o.c,r:o.r}, silent:true}); }
+    this.setupEdit();
     this.createBelt();
     this.createNightFx();
     this.updateLighting(); this.time.addEvent({delay:4000,loop:true,callback:()=>this.updateLighting()});
@@ -107,8 +113,8 @@ class Main extends Phaser.Scene {
         const p1=uvXY(0,w.v0),p2=uvXY(0,w.v1),p3=uvXY(this.uLen,w.v1+this.sh),p4=uvXY(this.uLen,w.v0+this.sh);
         g.lineStyle(2,0x33ffcc,0.8); g.strokePoints([p1,p2,p3,p4],true); } }
     this.agents={}; this.hud=document.getElementById('hud');
-    this.editMode = new URLSearchParams(location.search).get('edit')==='1';   // edit時のみ方向矢印
-    this.input.keyboard.on('keydown-E', ()=>{ this.editMode=!this.editMode; });
+    if(new URLSearchParams(location.search).get('edit')==='1') this.toggleEdit(true);   // 編集(グリッド/ドラッグ/ベルト矢印)
+    this.input.keyboard.on('keydown-E', ()=>this.toggleEdit());
     window.__scene=this;
     this.poll(); this.time.addEvent({delay:1500,loop:true,callback:()=>this.poll()});
   }
@@ -153,59 +159,89 @@ class Main extends Phaser.Scene {
       const la={x:cx-ax*2-nx*5,y:cy-ay*2-ny*5}, lb={x:cx-ax*2+nx*5,y:cy-ay*2+ny*5};
       g.beginPath(); g.moveTo(la.x,la.y); g.lineTo(tip.x,tip.y); g.lineTo(lb.x,lb.y); g.strokePath(); }
   }
-  /* ガチャ景品を空きセルに飾る(台座＋絵文字＋レア発光) */
-  placePrize(emoji, color){
-    const cell=this.freeCell(); const p=cellXY(cell.c,cell.r);
-    const col=Phaser.Display.Color.HexStringToColor(color).color;
-    this.add.image(p.x+CELL*0.16,p.y+CELL*0.06,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.8,CELL*0.36).setAlpha(0.5);  // 接地影
-    this.add.ellipse(p.x,p.y-2, CELL*0.95, CELL*0.5, col, 0.5).setDepth(p.y-1).setBlendMode(Phaser.BlendModes.ADD);
-    const base=this.add.rectangle(p.x,p.y-2, CELL*0.5, CELL*0.2, 0x2b3138).setOrigin(0.5,1).setDepth(p.y); base.setStrokeStyle(1,0x14171c);
-    this.add.text(p.x, p.y-CELL*0.26, emoji, {fontSize:Math.round(CELL*0.95)+'px'}).setOrigin(0.5,1).setDepth(p.y+0.1);
-    this.occ.add(K(cell.c,cell.r)); return true;
+  /* ===== 配置レジストリ（位置指定・移動・撤去に対応。編集画面の土台） ===== */
+  _makeObjs(e){ const {c,r}=e.cell; const p=cellXY(c,r); const u=(c+0.5)/GU, v=(r+0.5)/GV;
+    const tint=this.tintByLight(u,v); const objs=[]; let main=null; e._lit=null;
+    if(e.kind==='machine'){
+      const tex={red:'m_red',blue:'m_blue',green:'m_green',yellow:'m_yellow'}[e.sub];
+      const img=this.add.image(p.x,p.y,tex).setOrigin(0.5,1).setDepth(p.y); img.setScale(2.0*CELL/img.height).setTint(tint);
+      const sh=this.add.image(p.x+CELL*0.24,p.y+CELL*0.12,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.15,img.displayWidth*0.52).setAlpha(0.5);
+      const lbl=this.add.text(p.x,p.y-2.0*CELL-4,(MACHS_JP[e.sub]||'')+(e.lvl>1?` Lv${e.lvl}`:''),{fontFamily:'monospace',fontSize:'10px',color:'#eafff6'}).setOrigin(0.5,1).setDepth(p.y+1); lbl.setShadow(0,1,'#000',3,true,true);
+      objs.push(sh,img,lbl); main=img; e._lit=img; this.lit.push({sp:img,u,v}); this.machineCells.push({c,r});
+    } else if(e.kind==='belt'){
+      const s=this.add.image(p.x,p.y,'belt_seg').setOrigin(0.5,0.72).setScale(1.28*CELL/965).setDepth(p.y).setTint(tint);
+      const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.07,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(s.displayWidth*0.82,s.displayWidth*0.36).setAlpha(0.45);
+      objs.push(sh,s); main=s; e._lit=s; this.lit.push({sp:s,u,v});
+    } else if(e.kind==='deco'){
+      const img=this.add.image(p.x,p.y,'dec_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.0*CELL/img.height).setTint(tint);
+      const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
+      objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
+    } else if(e.kind==='emoji'){
+      const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.05,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.72,CELL*0.32).setAlpha(0.42);
+      const t=this.add.text(p.x,p.y-CELL*0.12,e.sub,{fontSize:Math.round(CELL*1.05)+'px'}).setOrigin(0.5,1).setDepth(p.y);
+      objs.push(sh,t); main=t;
+    } else if(e.kind==='prize'){
+      const col=Phaser.Display.Color.HexStringToColor(e.sub.color).color;
+      const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.06,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.8,CELL*0.36).setAlpha(0.5);
+      const gl=this.add.ellipse(p.x,p.y-2,CELL*0.95,CELL*0.5,col,0.5).setDepth(p.y-1).setBlendMode(Phaser.BlendModes.ADD);
+      const base=this.add.rectangle(p.x,p.y-2,CELL*0.5,CELL*0.2,0x2b3138).setOrigin(0.5,1).setDepth(p.y); base.setStrokeStyle(1,0x14171c);
+      const t=this.add.text(p.x,p.y-CELL*0.26,e.sub.e,{fontSize:Math.round(CELL*0.95)+'px'}).setOrigin(0.5,1).setDepth(p.y+0.1);
+      objs.push(sh,gl,base,t); main=t;
+    }
+    e.objs=objs; e.main=main; return e;
   }
-  /* クラフトで建てた製造機を空きセルに設置(DEMOと同じ描画・採光・影) */
-  placeMachine(type, label){
-    const tex={red:'m_red',blue:'m_blue',green:'m_green',yellow:'m_yellow'}[type]; if(!tex) return false;
-    const cell=this.freeCell(); const p=cellXY(cell.c,cell.r);
-    const img=this.add.image(p.x,p.y,tex).setOrigin(0.5,1);
-    img.setScale(2.0*CELL/img.height).setDepth(p.y);
-    this.add.image(p.x+CELL*0.24,p.y+CELL*0.12,'shadow').setDepth(p.y-0.5).setRotation(0.5)
-      .setDisplaySize(img.displayWidth*1.15, img.displayWidth*0.52).setAlpha(0.5);
-    this.lit.push({sp:img, u:(cell.c+0.5)/GU, v:(cell.r+0.5)/GV});
-    img.setTint(this.tintByLight((cell.c+0.5)/GU,(cell.r+0.5)/GV));
-    if(label){ const t=this.add.text(p.x,p.y-2.0*CELL-4,label,{fontFamily:'monospace',fontSize:'10px',color:'#eafff6'}).setOrigin(0.5,1).setDepth(p.y+1); t.setShadow(0,1,'#000',3,true,true); }
-    this.occ.add(K(cell.c,cell.r)); this.machineCells.push({c:cell.c,r:cell.r});   // busyエージェントの作業先
-    this._spawnPop(p.x,p.y); return true;
+  addPlaced(kind, sub, extra){ extra=extra||{};
+    if(kind==='deco' && !this.textures.exists('dec_'+sub)) return null;
+    const cell=(extra.cell && this.isFree(extra.cell.c,extra.cell.r)) ? extra.cell : this.freeCell();
+    const e={ id: extra.id||('o'+(this._oid=(this._oid||0)+1)), kind, sub, lvl:extra.lvl||1, cell };
+    this._makeObjs(e); this.occ.add(K(cell.c,cell.r)); this.placed.push(e);
+    if(this.editMode) this._enableDrag(e);
+    if(!extra.silent){ const p=cellXY(cell.c,cell.r); this._spawnPop(p.x,p.y); }
+    return e.id;
   }
-  /* 装飾品を空きセルに設置(採光・接地影つき) */
-  placeDeco(type){ const tex='dec_'+type; if(!this.textures.exists(tex)) return false;
-    const cell=this.freeCell(); const p=cellXY(cell.c,cell.r);
-    const img=this.add.image(p.x,p.y,tex).setOrigin(0.5,1); img.setScale(1.0*CELL/img.height).setDepth(p.y);
-    this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5)
-      .setDisplaySize(img.displayWidth*1.05, img.displayWidth*0.5).setAlpha(0.5);
-    this.lit.push({sp:img, u:(cell.c+0.5)/GU, v:(cell.r+0.5)/GV});
-    img.setTint(this.tintByLight((cell.c+0.5)/GU,(cell.r+0.5)/GV));
-    this.occ.add(K(cell.c,cell.r)); this._spawnPop(p.x,p.y); return true;
-  }
-  /* 所持している製造機一覧を工場に反映(ロード時) */
-  syncMachines(list){ for(const m of (list||[])) this.placeMachine(m.type, MACHS_JP[m.type]||''); }
-  /* テーマ装飾(絵文字)を空きセルに設置(接地影つき) */
-  placeEmojiDeco(emoji){ const cell=this.freeCell(); const p=cellXY(cell.c,cell.r);
-    this.add.image(p.x+CELL*0.16,p.y+CELL*0.05,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.72,CELL*0.32).setAlpha(0.42);
-    this.add.text(p.x,p.y-CELL*0.12,emoji,{fontSize:Math.round(CELL*1.05)+'px'}).setOrigin(0.5,1).setDepth(p.y);
-    this.occ.add(K(cell.c,cell.r)); this._spawnPop(p.x,p.y); return true; }
-  /* クラフトで作ったコンベア単体を空きセルに設置 */
-  placeBelt(){
-    const BW=1.28*CELL, bscale=BW/965; const cell=this.freeCell(); const p=cellXY(cell.c,cell.r);
-    const s=this.add.image(p.x,p.y,'belt_seg').setOrigin(0.5,0.72).setScale(bscale).setDepth(p.y);
-    this.add.image(p.x+CELL*0.16,p.y+CELL*0.07,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(s.displayWidth*0.82,s.displayWidth*0.36).setAlpha(0.45);
-    this.lit.push({sp:s, u:(cell.c+0.5)/GU, v:(cell.r+0.5)/GV});
-    s.setTint(this.tintByLight((cell.c+0.5)/GU,(cell.r+0.5)/GV));
-    this.occ.add(K(cell.c,cell.r)); this._spawnPop(p.x,p.y); return true;
-  }
+  _detach(e){ for(const o of e.objs) o.destroy();
+    if(e._lit){ const i=this.lit.findIndex(x=>x.sp===e._lit); if(i>=0)this.lit.splice(i,1); }
+    if(e.kind==='machine'){ const i=this.machineCells.findIndex(m=>m.c===e.cell.c&&m.r===e.cell.r); if(i>=0)this.machineCells.splice(i,1); } }
+  removeItem(id){ const i=this.placed.findIndex(e=>e.id===id); if(i<0)return false; const e=this.placed[i];
+    this._detach(e); this.occ.delete(K(e.cell.c,e.cell.r)); this.placed.splice(i,1); return true; }
+  moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
+    const same=(e.cell.c===c&&e.cell.r===r); if(!same && !this.isFree(c,r)) return false;
+    this._detach(e); this.occ.delete(K(e.cell.c,e.cell.r));
+    e.cell={c,r}; this._makeObjs(e); this.occ.add(K(c,r));
+    if(this.editMode) this._enableDrag(e); return true; }
+  getLayout(){ return this.placed.map(e=>({id:e.id,kind:e.kind,sub:e.sub,lvl:e.lvl,c:e.cell.c,r:e.cell.r})); }
+  buildLayout(list){ for(const e of this.placed.slice()) this.removeItem(e.id);
+    for(const it of (list||[])) this.addPlaced(it.kind, it.sub, {cell:{c:it.c,r:it.r}, lvl:it.lvl, id:it.id, silent:true});
+    this._oid=Math.max(0,...this.placed.map(e=>parseInt(String(e.id).replace(/\D/g,''))||0)); }
+  setMachineLevel(id,lvl){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e)return; e.lvl=lvl; this.moveItem(id,e.cell.c,e.cell.r); }
+  // 旧API互換（ショップ購入から呼ばれる）
+  placeMachine(type){ return this.addPlaced('machine', type); }
+  placeBelt(){ return this.addPlaced('belt', null); }
+  placeDeco(type){ return this.addPlaced('deco', type); }
+  placeEmojiDeco(emoji){ return this.addPlaced('emoji', emoji); }
+  placePrize(emoji,color){ return this.addPlaced('prize', {e:emoji,color}); }
+  syncMachines(list){ for(const m of (list||[])) this.addPlaced('machine', m.type, {lvl:m.lvl||1}); }
   /* 設置時のポップ演出 */
   _spawnPop(x,y){ const g=this.add.circle(x,y-CELL*0.5,CELL*0.6,0xffe9a8,0.5).setDepth(9000).setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({targets:g,scale:1.8,alpha:0,duration:420,onComplete:()=>g.destroy()}); }
+  /* ===== 編集モード（グリッド表示・ドラッグ移動・ゴミ箱で撤去） ===== */
+  setupEdit(){
+    this.editGrid=this.add.graphics().setDepth(7000).setVisible(false); this.editGrid.lineStyle(1,0x7fe6ff,0.5);
+    for(let c=0;c<=GU;c++){ const a=cellXY(c-0.5,-0.5), b=cellXY(c-0.5,GV-0.5); this.editGrid.beginPath(); this.editGrid.moveTo(a.x,a.y); this.editGrid.lineTo(b.x,b.y); this.editGrid.strokePath(); }
+    for(let r=0;r<=GV;r++){ const a=cellXY(-0.5,r-0.5), b=cellXY(GU-0.5,r-0.5); this.editGrid.beginPath(); this.editGrid.moveTo(a.x,a.y); this.editGrid.lineTo(b.x,b.y); this.editGrid.strokePath(); }
+    this.trash=this.add.container(72,H-52,[ this.add.rectangle(0,0,124,72,0x3a1418,0.85).setStrokeStyle(2,0xe05a4e), this.add.text(0,0,'🗑 ここへ撤去',{fontSize:'13px',color:'#ffd0c8'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
+    this._trashRect=new Phaser.Geom.Rectangle(10,H-88,124,74);
+    this.input.on('drag',(po,obj,dx,dy)=>{ if(this.editMode&&obj._e){ obj.x=dx; obj.y=dy; } });
+    this.input.on('dragend',(po,obj)=>{ if(!this.editMode||!obj._e)return; const e=obj._e;
+      if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){ this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); return; }
+      const uv=screenToIso(obj.x,obj.y); let c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1);
+      if(!this.moveItem(e.id,c,r)) this.moveItem(e.id,e.cell.c,e.cell.r);
+      if(window.__layoutChanged)window.__layoutChanged(); });
+  }
+  _enableDrag(e){ const m=e.main; if(!m)return; m._e=e; m.setInteractive({useHandCursor:true}); this.input.setDraggable(m,true); }
+  _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; }
+  toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode); this.trash.setVisible(this.editMode);
+    for(const e of this.placed){ this.editMode?this._enableDrag(e):this._disableDrag(e); } return this.editMode; }
   /* 窓オブジェクトを座標で定義(左壁 u=0)。床エッジ uvXY(0,v) を基準に壁の高さ方向へ立ち上げる。
      光源(採光の床帯・月/星のマスク)はすべてこの窓定義から導出する。 */
   defineWindows(){
@@ -326,10 +362,12 @@ class Main extends Phaser.Scene {
     return null; }
   clearDeco(a){ if(a.z){a.z.destroy();a.z=null;} if(a.cup){a.cup.destroy();a.cup=null;} if(a.skinObj){a.skinObj.destroy();a.skinObj=null;} }
   /* スキン: 頭アクセサリの表示更新 / クリック巡回 / 一括反映(ロード時) */
-  updateSkin(a){ const sk=SKINS.find(s=>s.id===a.skinId)||SKINS[0];
+  updateSkin(a){ const sk=SKINS.find(s=>s.id===a.skinId)||SKINS[0]; a.bodyTint=sk.body||null;
     if(!sk.e){ if(a.skinObj){a.skinObj.destroy();a.skinObj=null;} return; }
     if(!a.skinObj) a.skinObj=this.add.text(a.px,a.py,'',{fontSize:'15px'}).setOrigin(0.5,1);
     a.skinObj.setText(sk.e); }
+  mulTint(x,y){ const xr=(x>>16)&255,xg=(x>>8)&255,xb=x&255, yr=(y>>16)&255,yg=(y>>8)&255,yb=y&255;
+    return ((xr*yr/255|0)<<16)|((xg*yg/255|0)<<8)|(xb*yb/255|0); }
   cycleSkin(key){ const a=this.agents[key]; if(!a)return; const i=SKINS.findIndex(s=>s.id===a.skinId);
     a.skinId=SKINS[(i+1)%SKINS.length].id; this.updateSkin(a);
     if(window.__skinChanged) window.__skinChanged(a.proj, a.skinId); }
@@ -406,7 +444,8 @@ class Main extends Phaser.Scene {
           else { a.sp.setTexture(`m${a.ci}_stand`); } // lean: 壁際で立つ
         } else { a.sp.setTexture(`m${a.ci}_stand`); a.sp.x=a.px; a.sp.y=a.py; }
       } else this.decide(a);
-      a.sp.setFlipX(a.face<0).setDepth(a.py).setTint(this.tintByLight((a.cell.c+0.5)/GU,(a.cell.r+0.5)/GV));   // 採光で色付け
+      { const lt=this.tintByLight((a.cell.c+0.5)/GU,(a.cell.r+0.5)/GV);   // 採光×衣装色
+        a.sp.setFlipX(a.face<0).setDepth(a.py).setTint(a.bodyTint?this.mulTint(lt,a.bodyTint):lt); }
       a.shadow.setPosition(a.px+CELL*0.2,a.py+CELL*0.09).setDepth(a.py-0.5);
       a.lbl.setPosition(a.px, a.py-42*a.scl-6).setDepth(a.py+1);
       if(a.z){ a.z.setPosition(a.px+9, a.py-30-((time-(a.zt||time))*0.01)).setDepth(a.py+2);

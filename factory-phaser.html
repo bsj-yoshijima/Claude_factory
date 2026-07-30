@@ -64,10 +64,11 @@
 <body>
 <div id="wrap">
   <div id="game"></div>
-  <div id="note">⚙️ Phaser 基盤 — 現行版は <a href="/" style="color:#ffd27a">/</a></div>
+  <div id="note">🏭 Claude Factory</div>
   <div id="topbar">
     <div class="tab gacha" id="gachaBtn">🎁 ガチャ</div>
     <div class="tab" id="shopBtn">🏪 ショップ</div>
+    <div class="tab" id="editBtn">🔧 編集</div>
     <div class="tab" id="dexBtn">📖 図鑑</div>
   </div>
   <div id="badge"><span id="prodN">⚙️ 0</span><span id="rateN" style="color:#7fe6ff;font-size:10px;margin-left:4px"></span> ・ <span id="moneyN" style="color:#ffd27a">💰 0</span></div>
@@ -107,7 +108,7 @@ const SERIES={
 };
 
 let G={ pity:0, inv:{}, prodP:90, money:0, machines:[{type:'red',lvl:1}], belts:0, decos:{},
-        bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], lastT:null, produced:0 };
+        bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[], lastT:null, produced:0 };
 let saveT=null;
 function saveGame(){ if(saveT)clearTimeout(saveT); saveT=setTimeout(()=>{ const b=JSON.stringify(G);
   try{fetch('/api/save',{method:'POST',body:b});}catch(_){} try{localStorage.setItem('cf-save',b);}catch(_){}} ,400); }
@@ -116,12 +117,18 @@ async function loadGame(){ let s=null; try{ s=await (await fetch('/api/save',{ca
   if(s&&typeof s==='object') G=Object.assign(G,s);     // 旧セーブの景品(inv)・pityは引き継ぎ、経済フィールドを補完
   if(!G.inv)G.inv={}; if(!Array.isArray(G.machines)||!G.machines.length)G.machines=[{type:'red',lvl:1}]; if(!G.decos)G.decos={};
   if(!Array.isArray(G.bgOwned))G.bgOwned=['auto']; if(!Array.isArray(G.floorOwned))G.floorOwned=['wood']; if(!G.bg)G.bg='auto'; if(!G.floor)G.floor='wood';
-  if(!G.skins||typeof G.skins!=='object')G.skins={}; if(!Array.isArray(G.seriesOwned))G.seriesOwned=[]; if(!Array.isArray(G.emojiDecos))G.emojiDecos=[];
+  if(!G.skins||typeof G.skins!=='object')G.skins={}; if(!Array.isArray(G.seriesOwned))G.seriesOwned=[]; if(!Array.isArray(G.emojiDecos))G.emojiDecos=[]; if(!Array.isArray(G.layout))G.layout=[];
   ['prodP','money','belts','produced'].forEach(k=>{ if(typeof G[k]!=='number')G[k]=0; }); }
+// 配置レイアウト(位置)の唯一の真実 = G.layout。シーンから同期。
+function snapLayout(){ if(window.__scene) G.layout=window.__scene.getLayout(); }
+window.__layoutChanged=()=>{ snapLayout(); saveGame(); };
+const cnt=(kind,sub)=> (G.layout||[]).filter(e=>e.kind===kind&&(sub==null||e.sub===sub)).length;
 // エージェント頭アクセ(スキン)の永続化: main.js からクリック巡回時に呼ばれる
 window.__skinChanged=(proj,skinId)=>{ if(!proj)return; if(skinId==='none') delete G.skins[proj]; else G.skins[proj]=skinId; saveGame(); };
-// 生産レート(⚙️/秒) = Σ(機械レベル) × (1 + 0.25×稼働エージェント)
-function prodRate(){ let b=0; for(const m of G.machines) b+=m.lvl; const busy=(window.__scene&&window.__scene.busyCount)||0; return b*(1+0.25*busy); }
+// 生産レート(⚙️/秒) = Σ(機械レベル) × (1 + 0.25×稼働エージェント)。レイアウト確定後はG.layoutを、未確定時はG.machinesを参照
+function prodRate(){ let b=0; const L=(G.layout&&G.layout.length)?G.layout.filter(e=>e.kind==='machine'):null;
+  if(L){ for(const e of L) b+=(e.lvl||1); } else { for(const m of G.machines) b+=m.lvl; }
+  const busy=(window.__scene&&window.__scene.busyCount)||0; return b*(1+0.25*busy); }
 function rollRarity(){ if(G.pity>=9){ const x=Math.random(); return x<0.78?3:(x<0.95?4:5); }
   let x=Math.random()*100,acc=0; for(const k of [1,2,3,4,5]){ acc+=RAR[k].w; if(x<acc)return k; } return 1; }
 function pullOne(){ const rr=rollRarity(); G.pity=rr>=3?0:G.pity+1; const pool=PRIZES.filter(p=>p.r===rr);
@@ -161,7 +168,7 @@ function openDex(){
     <div class="grid">${cells}</div><div class="rowline" style="font-size:11px;color:#9fb0c0">所持アイテムをクリックで部屋に飾る</div>`);
   panel.querySelectorAll('.cell.own').forEach(el=>el.onclick=()=>{
     const p=PRIZES.find(x=>x.id===el.dataset.id);
-    if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(p.e, RAR[p.r].c); toast(`${p.e} ${p.n} を部屋に飾った！`); closeOverlay(); }
+    if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(p.e, RAR[p.r].c); snapLayout(); saveGame(); toast(`${p.e} ${p.n} を部屋に飾った！`); closeOverlay(); }
   });
 }
 document.getElementById('gachaBtn').addEventListener('click',openGacha);
@@ -170,15 +177,16 @@ document.getElementById('dexBtn').addEventListener('click',openDex);
 /* ===== ショップ（景品の売却＋購入/強化） ===== */
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
   G.inv[id]=have-qty; const gain=SELL[p.r]*qty; G.money+=gain; saveGame(); updateBadge(); toast(`${p.e} ${p.n}×${qty} を売却 (+💰${gain})`); }
-function buyMachine(type){ const pr=MACH[type].price; if(G.money<pr)return; G.money-=pr; G.machines.push({type,lvl:1});
-  if(window.__scene&&window.__scene.placeMachine) window.__scene.placeMachine(type, MACH[type].n); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入・設置！`); }
-function levelUp(i){ const m=G.machines[i]; if(!m)return; const c=lvCost(m.lvl); if(G.money<c)return; G.money-=c; m.lvl++; saveGame(); updateBadge(); toast(`${MACH[m.type].e} ${MACH[m.type].n} を Lv${m.lvl} に強化！(生産↑)`); }
-function buyBelt(){ if(G.money<BELT_PRICE)return; G.money-=BELT_PRICE; G.belts++; if(window.__scene&&window.__scene.placeBelt)window.__scene.placeBelt(); saveGame(); updateBadge(); toast('🛗 コンベアを購入・設置！'); }
-function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return; G.money-=pr; G.decos[t]=(G.decos[t]||0)+1; if(window.__scene&&window.__scene.placeDeco)window.__scene.placeDeco(t); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入・設置！`); }
+function buyMachine(type){ const pr=MACH[type].price; if(G.money<pr)return; G.money-=pr;
+  if(window.__scene)window.__scene.placeMachine(type); snapLayout(); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入・設置！`); }
+function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; const c=lvCost(e.lvl); if(G.money<c)return; G.money-=c; e.lvl++;
+  if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${MACH[e.sub].e} ${MACH[e.sub].n} を Lv${e.lvl} に強化！(生産↑)`); }
+function buyBelt(){ if(G.money<BELT_PRICE)return; G.money-=BELT_PRICE; if(window.__scene)window.__scene.placeBelt(); snapLayout(); saveGame(); updateBadge(); toast('🛗 コンベアを購入・設置！'); }
+function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return; G.money-=pr; if(window.__scene)window.__scene.placeDeco(t); snapLayout(); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入・設置！`); }
 function selectBg(k){ if(!G.bgOwned.includes(k)){ const pr=BG[k].price; if(G.money<pr)return; G.money-=pr; G.bgOwned.push(k); toast(`背景「${BG[k].n}」を購入！`); } G.bg=k; if(window.__scene&&window.__scene.setSkyTheme)window.__scene.setSkyTheme(k); saveGame(); updateBadge(); }
 function selectFloor(k){ if(!G.floorOwned.includes(k)){ const pr=FLOOR[k].price; if(G.money<pr)return; G.money-=pr; G.floorOwned.push(k); toast(`床材「${FLOOR[k].n}」を購入！`); } G.floor=k; if(window.__scene&&window.__scene.setFloor)window.__scene.setFloor(k); saveGame(); updateBadge(); }
 function buySeries(k){ const S=SERIES[k]; if(!G.seriesOwned.includes(k)){ if(G.money<S.price)return; G.money-=S.price; G.seriesOwned.push(k);
-    for(const e of S.decos){ G.emojiDecos.push(e); if(window.__scene&&window.__scene.placeEmojiDeco)window.__scene.placeEmojiDeco(e); } toast(`${S.n} シリーズを購入！内装と装飾を反映`); }
+    if(window.__scene) for(const e of S.decos) window.__scene.placeEmojiDeco(e); snapLayout(); toast(`${S.n} シリーズを購入！内装と装飾を反映`); }
   G.bg=S.sky; G.floor=S.floor; if(window.__scene){ window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } saveGame(); updateBadge(); }
 
 let _shopTab='sell';
@@ -195,20 +203,21 @@ function openShop(tab){ if(tab)_shopTab=tab;
       }).join('') : '<div class="cost" style="padding:12px">売れる景品がありません。🎁ガチャで景品を集めよう。</div>';
     } else if(_shopTab==='mach'){
       body = '<div class="cost" style="margin:2px 0 6px">所持している製造機（Lv↑で生産量が増える）</div>';
-      body += G.machines.map((m,i)=>{ const c=lvCost(m.lvl); return `<div class="rc"><div class="ic">${MACH[m.type].e}</div>
-        <div class="mid"><div class="nm">${MACH[m.type].n} <span style="color:#7fe6ff;font-size:11px">Lv${m.lvl}</span></div>
-        <div class="cost">生産 +${m.lvl}/s ・ 次のLv 💰${c.toLocaleString()}</div></div>
-        <button data-lv="${i}" ${G.money>=c?'':'disabled'}>強化</button></div>`; }).join('');
+      const machs=(G.layout||[]).filter(e=>e.kind==='machine');
+      body += machs.map(e=>{ const c=lvCost(e.lvl); return `<div class="rc"><div class="ic">${MACH[e.sub].e}</div>
+        <div class="mid"><div class="nm">${MACH[e.sub].n} <span style="color:#7fe6ff;font-size:11px">Lv${e.lvl}</span></div>
+        <div class="cost">生産 +${e.lvl}/s ・ 次のLv 💰${c.toLocaleString()}</div></div>
+        <button data-lv="${e.id}" ${G.money>=c?'':'disabled'}>強化</button></div>`; }).join('');
       body += '<div class="cost" style="margin:12px 0 6px">新しい製造機を購入（設置＋生産増＋作業エージェントの行き先が増える）</div>';
       body += Object.keys(MACH).map(t=>`<div class="rc"><div class="ic">${MACH[t].e}</div>
         <div class="mid"><div class="nm">${MACH[t].n}</div><div class="cost">💰${MACH[t].price.toLocaleString()}</div></div>
         <button data-buymach="${t}" ${G.money>=MACH[t].price?'':'disabled'}>購入</button></div>`).join('');
     } else if(_shopTab==='equip'){
-      body = `<div class="rc"><div class="ic">🛗</div><div class="mid"><div class="nm">コンベア <span style="color:#9fb0c0;font-size:10px">所持 ${G.belts}</span></div><div class="cost">💰${BELT_PRICE}</div></div>
+      body = `<div class="rc"><div class="ic">🛗</div><div class="mid"><div class="nm">コンベア <span style="color:#9fb0c0;font-size:10px">所持 ${cnt('belt')}</span></div><div class="cost">💰${BELT_PRICE}</div></div>
         <button data-belt="1" ${G.money>=BELT_PRICE?'':'disabled'}>購入</button></div>`;
       body += '<div class="cost" style="margin:12px 0 6px">装飾品</div>';
       body += Object.keys(DECO).map(t=>`<div class="rc"><div class="ic">${DECO[t].e}</div>
-        <div class="mid"><div class="nm">${DECO[t].n} <span style="color:#9fb0c0;font-size:10px">所持 ${G.decos[t]||0}</span></div><div class="cost">💰${DECO[t].price}</div></div>
+        <div class="mid"><div class="nm">${DECO[t].n} <span style="color:#9fb0c0;font-size:10px">所持 ${cnt('deco',t)}</span></div><div class="cost">💰${DECO[t].price}</div></div>
         <button data-deco="${t}" ${G.money>=DECO[t].price?'':'disabled'}>購入</button></div>`).join('');
     } else if(_shopTab==='decor'){   // 内装（背景=窓の外の景色 / 床材）
       const bgRow=Object.keys(BG).map(k=>{ const own=G.bgOwned.includes(k),cur=G.bg===k;
@@ -232,7 +241,7 @@ function openShop(tab){ if(tab)_shopTab=tab;
       <div>${body}</div>`);
     panel.querySelectorAll('.sttab[data-tab]').forEach(el=>el.onclick=()=>{ _shopTab=el.dataset.tab; render(); });
     panel.querySelectorAll('[data-sell]').forEach(b=>b.onclick=()=>{ const q=b.dataset.q==='all'?(G.inv[b.dataset.sell]||0):1; sellPrize(b.dataset.sell,q); render(); });
-    panel.querySelectorAll('[data-lv]').forEach(b=>b.onclick=()=>{ levelUp(+b.dataset.lv); render(); });
+    panel.querySelectorAll('[data-lv]').forEach(b=>b.onclick=()=>{ levelUp(b.dataset.lv); render(); });
     panel.querySelectorAll('[data-buymach]').forEach(b=>b.onclick=()=>{ buyMachine(b.dataset.buymach); render(); });
     panel.querySelectorAll('[data-belt]').forEach(b=>b.onclick=()=>{ buyBelt(); render(); });
     panel.querySelectorAll('[data-deco]').forEach(b=>b.onclick=()=>{ buyDeco(b.dataset.deco); render(); });
@@ -247,11 +256,18 @@ document.getElementById('shopBtn').addEventListener('click',()=>openShop());
 /* ===== 起動: ロード→オフライン生産→シーン待ち→所持品反映→生産tick ===== */
 function waitScene(){ return new Promise(res=>{ (function chk(){ if(window.__scene) res(); else setTimeout(chk,60); })(); }); }
 function applyOwned(){ const s=window.__scene; if(!s)return;
-  s.syncMachines(G.machines);
-  for(let i=0;i<G.belts;i++) s.placeBelt();
-  for(const t in G.decos) for(let i=0;i<(G.decos[t]||0);i++) s.placeDeco(t);
-  for(const e of (G.emojiDecos||[])) s.placeEmojiDeco(e);
+  if(G.layout&&G.layout.length){ s.buildLayout(G.layout); }        // 保存済みレイアウト(位置)を復元
+  else {                                                            // 初回: 所持品を配置→レイアウト確定
+    s.syncMachines(G.machines);
+    for(let i=0;i<G.belts;i++) s.placeBelt();
+    for(const t in G.decos) for(let i=0;i<(G.decos[t]||0);i++) s.placeDeco(t);
+    for(const e of (G.emojiDecos||[])) s.placeEmojiDeco(e);
+    snapLayout(); saveGame();
+  }
   s.setSkyTheme(G.bg); s.setFloor(G.floor); s.applySkins(G.skins); }
+document.getElementById('editBtn').addEventListener('click',()=>{ if(!window.__scene)return;
+  const on=window.__scene.toggleEdit(); document.getElementById('editBtn').classList.toggle('gacha',on);
+  toast(on?'🔧 編集: ドラッグで移動 / 左下🗑へドロップで撤去':'編集モードを終了'); });
 loadGame().then(async ()=>{
   if(G.lastT){ const dt=Math.min((Date.now()-G.lastT)/1000, 8*3600); const g=prodRate()*dt*0.5; if(g>0){ G.prodP+=g; G.produced+=g; } } // オフライン分(50%/最大8h)
   G.lastT=Date.now(); updateBadge();

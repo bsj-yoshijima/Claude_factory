@@ -166,10 +166,10 @@ const server = http.createServer((req, res) => {
     }
     res.writeHead(404); res.end('not found'); return;
   }
-  // /classic=旧ドット絵, /next=Phaser基盤(プロトタイプ), それ以外=現行ゲーム
+  // 現行=Phaser版(/ と /next)。/legacy=旧Canvas版, /classic=旧ドット絵
   const page = urlPath === '/classic' ? 'pixel-factory.html'
-             : urlPath === '/next'    ? 'factory-phaser.html'
-             : 'claude-factory.html';
+             : urlPath === '/legacy'  ? 'claude-factory.html'
+             : 'factory-phaser.html';
   const html = fs.readFileSync(path.join(__dirname, page), 'utf8');
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
