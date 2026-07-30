@@ -7,7 +7,8 @@ const W = 1024, H = 572, GU = 12, GV = 12;
 const ISO = { Bx:0.4858, By:0.3685, ux:0.3398, uy:0.3138, vx:-0.3121, vy:0.2852 };
 const CELL = ( Math.hypot(ISO.ux*W/GU, ISO.uy*H/GU) + Math.hypot(ISO.vx*W/GV, ISO.vy*H/GV) ) / 2;
 function isoToScreen(u,v){ return { x:(ISO.Bx+u*ISO.ux+v*ISO.vx)*W, y:(ISO.By+u*ISO.uy+v*ISO.vy)*H }; }
-function cellXY(c,r){ return isoToScreen((c+0.5)/GU,(r+0.5)/GV); }   // c,r は連続値でも可
+const OFF_U = 0.577, OFF_V = 0.851;   // 背景の床タイル目地への位相補正(FFT実測)。セル境界=目地に一致
+function cellXY(c,r){ return isoToScreen((c+0.5+OFF_U)/GU,(r+0.5+OFF_V)/GV); }   // c,r は連続値でも可
 const ISO_DET = ISO.ux*ISO.vy - ISO.vx*ISO.uy;
 function screenToIso(sx,sy){ const nx=sx/W-ISO.Bx, ny=sy/H-ISO.By;
   return { u:(nx*ISO.vy - ISO.vx*ny)/ISO_DET, v:(ISO.ux*ny - nx*ISO.uy)/ISO_DET }; }
@@ -226,15 +227,18 @@ class Main extends Phaser.Scene {
     this.tweens.add({targets:g,scale:1.8,alpha:0,duration:420,onComplete:()=>g.destroy()}); }
   /* ===== 編集モード（グリッド表示・ドラッグ移動・ゴミ箱で撤去） ===== */
   setupEdit(){
-    this.editGrid=this.add.graphics().setDepth(7000).setVisible(false); this.editGrid.lineStyle(1,0x7fe6ff,0.5);
-    for(let c=0;c<=GU;c++){ const a=cellXY(c-0.5,-0.5), b=cellXY(c-0.5,GV-0.5); this.editGrid.beginPath(); this.editGrid.moveTo(a.x,a.y); this.editGrid.lineTo(b.x,b.y); this.editGrid.strokePath(); }
-    for(let r=0;r<=GV;r++){ const a=cellXY(-0.5,r-0.5), b=cellXY(GU-0.5,r-0.5); this.editGrid.beginPath(); this.editGrid.moveTo(a.x,a.y); this.editGrid.lineTo(b.x,b.y); this.editGrid.strokePath(); }
+    // グリッドは床タイルの目地に一致(uvXYで直接描画・床[0,1]にクリップ)。深度は床の上・オブジェクトの下
+    this.editGrid=this.add.graphics().setDepth(-998).setVisible(false); this.editGrid.lineStyle(1,0x7fe6ff,0.5);
+    const gl=(u0,v0,u1,v1)=>{ const a=uvXY(u0,v0),b=uvXY(u1,v1); this.editGrid.beginPath(); this.editGrid.moveTo(a.x,a.y); this.editGrid.lineTo(b.x,b.y); this.editGrid.strokePath(); };
+    for(let c=0;c<GU;c++){ const uu=(c+OFF_U)/GU; if(uu>0&&uu<1) gl(uu,0,uu,1); }
+    for(let r=0;r<GV;r++){ const vv=(r+OFF_V)/GV; if(vv>0&&vv<1) gl(0,vv,1,vv); }
+    gl(0,0,1,0); gl(1,0,1,1); gl(1,1,0,1); gl(0,1,0,0);   // 床の外周
     this.trash=this.add.container(72,H-52,[ this.add.rectangle(0,0,124,72,0x3a1418,0.85).setStrokeStyle(2,0xe05a4e), this.add.text(0,0,'🗑 ここへ撤去',{fontSize:'13px',color:'#ffd0c8'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     this._trashRect=new Phaser.Geom.Rectangle(10,H-88,124,74);
     this.input.on('drag',(po,obj,dx,dy)=>{ if(this.editMode&&obj._e){ obj.x=dx; obj.y=dy; } });
     this.input.on('dragend',(po,obj)=>{ if(!this.editMode||!obj._e)return; const e=obj._e;
       if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){ this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); return; }
-      const uv=screenToIso(obj.x,obj.y); let c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1);
+      const uv=screenToIso(obj.x,obj.y); let c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       if(!this.moveItem(e.id,c,r)) this.moveItem(e.id,e.cell.c,e.cell.r);
       if(window.__layoutChanged)window.__layoutChanged(); });
   }
