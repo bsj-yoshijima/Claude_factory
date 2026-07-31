@@ -83,7 +83,87 @@ NO ground plane, NO text, NO labels, NO UI, NO characters.
 Each object clearly readable as a small game prop.
 ```
 
-### テーマごとの 4 items 案（未生成 / これから発注）
+---
+
+## 3. エージェント・スキンテンプレート（skin-<id>.png）
+
+スキン = **今のマスコットに装備を着せた"1枚絵"**。別キャラは作らない。ベースを固定し装備だけ変える。
+1シートに複数キャラを2×3等で並べ→マゼンタ抜き→個別スライス→`assets/skin-<id>.png`。
+`setPose` が `setScale((1.5*CELL)/height)` で足元基準に縮小するので、**各キャラは全身・足を最下部**に。
+
+### 固定プレフィックス（全スキン共通・"型"の核。毎回そのまま）
+
+```
+Sprite sheet of cute chibi MASCOT characters, lo-fi 8-bit Famicom pixel-art, VERY chunky pixels,
+thick clean black outlines, flat vibrant colors, high contrast.
+IMPORTANT — every mascot shares the EXACT SAME BASE, only the worn costume changes:
+a single rounded bean/egg-shaped body, NO visible arms, three tiny stubby feet at the very bottom,
+a plain face with only two small black dot eyes (no nose, no mouth), front-facing, standing upright,
+same body shape / size / proportions / 3 feet for all.
+Make the gear FLASHY and eye-catching (bold shapes, gold, gems, glow, sparkles, flowing capes).
+The face (two dot eyes) stays visible, EXCEPT eyewear gear (sunglasses / visor / eyepatch / mask) may cover the eyes.
+Arrange in a grid with WIDE clear gaps. Solid pure MAGENTA (#FF00FF) flat background everywhere
+including gaps. NO shadows, NO ground, NO text, NO labels, NO UI.
+```
+
+### 各スキンの可変部（被り物 head + 着るもの body の1セット）
+
+`N) <THEME> — HEAD: <被り物>. OUTFIT: <着るもの>. [eyes covered by <...>]` を並べる。
+
+| id | HEAD(被り物) | OUTFIT(着るもの) | 目隠し |
+|---|---|---|---|
+| japan | 金の前立が輝く豪華な兜 | 金縁の縅・胴丸 | - |
+| pirate | ドクロ付き三角帽 | 金ボタンの赤いコート | 眼帯 |
+| tokyo | 光るネオンバイザー | 黒＋シアンネオンのジャケット | バイザー |
+| christmas | ふさ付きサンタ帽＋白髭 | 金ベルトの赤白サンタ服 | - |
+| arabia | 宝石付き金ターバン＋羽根 | 紫金の豪華ベスト＋帯 | - |
+| egypt | 金青のネメス＋コブラ | 金の幅広襟＋白布 | - |
+| china | 龍の金冠 | 赤金の龍の官服 | - |
+| undersea | 真珠と貝の冠 | 虹色のウロコ＋ヒレ | - |
+| fantasy | 星の輝く魔法帽 | 星屑のローブ | - |
+| scifi | 銀ヘルメット＋触角 | 発光する銀スーツ | バイザー可 |
+| cabin | ニット帽 | 赤黒チェックのネル＋斧 | - |
+| dino | トゲ付き恐竜フード | 緑の着ぐるみ＋尻尾 | - |
+| haunted | 角の立ったシーツ | おばけの白布(波裾) | 目穴 |
+| circuit | 炎柄レーサーヘルメット | スポンサー柄スーツ | バイザー |
+| dwarf | ランプ付き鉱夫帽 | 革の作業着＋金バックル | 髭 |
+| hell | 燃える悪魔の角 | 赤マント＋尻尾 | - |
+| steampunk | ゴーグル付きシルクハット | 真鍮の歯車付き革コート | ゴーグル可 |
+| retrofuture | 真鍮の潜水士官帽 | ティール士官コート＋真鍮 | - |
+| halloween | 吸血鬼の髪＋立ち襟 | 赤裏地の黒マント | 牙 |
+| western | カウボーイ帽 | 保安官星＋バンダナ＋ベスト | - |
+| sushi | 日の丸鉢巻 | 白の板前着＋前掛け | - |
+| beehive | 触角＋縞ヘルメット | 黄黒縞＋透ける羽 | - |
+| circus | 虹色の髪＋赤鼻 | 水玉＋フリル襟 | 赤鼻 |
+| carnival | 羽根の豪華仮面 | 紫金のマント | 仮面 |
+| desert | 布のターバン頭巾 | 砂色のローブ | 口布可 |
+| jungle | ピスヘルメット | カーキの探検服＋装備 | - |
+| space | 金バイザーの宇宙ヘルメット | 白い与圧服＋パッチ | バイザー |
+| ice | 氷の結晶の王冠 | 白青の煌めくドレス | - |
+| mushroom | 赤白ドットのキノコ帽 | 葉っぱの妖精服＋羽 | - |
+| onsen | 頭に乗せた手ぬぐい | 藍の浴衣 | - |
+| diner | ダイナーの紙帽 | ギンガム＋エプロン | - |
+
+### 記入例（1シート6体）
+
+```
+<固定プレフィックス>
+6 mascots, left to right:
+1) SAMURAI — HEAD: ornate kabuto helmet with a big shining golden crescent crest. OUTFIT: navy-and-gold lamellar do armor. eyes visible.
+2) PIRATE — HEAD: black tricorn with white skull. OUTFIT: red captain coat with gold buttons and sash. right eye covered by a black eyepatch.
+3) CYBER — HEAD: glowing pink-and-cyan neon visor. OUTFIT: black jacket with glowing cyan neon trim. eyes covered by the visor.
+4) SANTA — HEAD: fluffy red santa hat with white pom, white beard. OUTFIT: red-and-white santa coat with a gold-buckle belt. eyes visible.
+5) GENIE — HEAD: golden jeweled turban with a feather. OUTFIT: purple-and-gold ornate vest with a sash. eyes visible.
+6) PHARAOH — HEAD: gold-and-blue nemes headdress with a cobra. OUTFIT: broad gold collar and white kilt. eyes visible.
+```
+
+### スライス
+- `scratchpad/skins/slice.py` を流用（連結成分で切り出し→マゼンタ抜き→`assets/skin-<id>.png`）。
+- 足が最下部・全身が入っているか確認（`setScale` が高さ基準のため）。
+
+---
+
+## 補足: 装飾プロップ 4 items 案（未生成 / これから発注）
 
 | key | 4 items |
 |---|---|

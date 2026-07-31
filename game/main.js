@@ -44,21 +44,6 @@ function makeMascot(scene, key, pal, pose){
   if(scene.textures.exists(key)) scene.textures.remove(key);
   scene.textures.addCanvas(key, cv);
 }
-// スキン装備オーバーレイ: makeMascot と同じ 26x28(×P) キャンバスに被り物/着るもののドットを焼く。
-// '.'(や未定義文字)はスキップ=ベースのマスコットが透ける(顔・素肌・体色が残る)。描画順は body→head。
-function makeSkinOverlay(scene, key, def){
-  const P=3, w=26, h=28;
-  const cv=document.createElement('canvas'); cv.width=w*P; cv.height=h*P;
-  const g=cv.getContext('2d');
-  const paint=(part)=>{
-    if(!part||!part.rows) return; const pal=part.pal||{};
-    part.rows.forEach((row,ry)=>{ for(let rx=0;rx<row.length;rx++){ const ch=row[rx]; const c=pal[ch]; if(!c) continue;
-      const X=part.x+rx, Y=part.y+ry; if(X<0||X>=w||Y<0||Y>=h) continue; g.fillStyle=c; g.fillRect(X*P,Y*P,P,P); } });
-  };
-  paint(def.body); paint(def.head);
-  if(scene.textures.exists(key)) scene.textures.remove(key);
-  scene.textures.addCanvas(key, cv);
-}
 
 const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
 const MACHS_JP = { red:'抽出機', green:'成形機', blue:'演算機', yellow:'選別機' };
@@ -68,9 +53,8 @@ const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_j
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
   retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen' };
 const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen'];  // Stitch製 装飾プロップ
-// エージェントのスキン(id=テーマキー・31種＋'none')。スキン=被り物+着るものの装備セットで、
-// ベースの手続きマスコットに重ね着させる(assets/skin-defs.json の型をcreateで overlay テクスチャ skin_<id> に焼く)。
-// 顔は基本見える(サングラス/眼帯など一部隠しはOK)。定義があるテーマのみ装備が乗り、無ければ素のマスコット。プロジェクト単位で永続化。
+// エージェントのスキン(id=テーマキー・31種＋'none')。テクスチャ skin_<id>(Stitch製透過PNG)があれば
+// スタンド/作業/座り 全ポーズを画像で丸ごと差し替え。無ければ従来の手続きマスコットにフォールバック。プロジェクト単位で永続化。
 const SKINS = [
   {id:'none', n:'デフォルト'},
   {id:'arabia',n:'魔人'},{id:'undersea',n:'人魚'},{id:'japan',n:'侍'},{id:'china',n:'皇帝'},
@@ -102,7 +86,7 @@ class Main extends Phaser.Scene {
     this.load.image('room_dino','assets/room-dino.png');
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
-    this.load.json('skindefs','assets/skin-defs.json');   // スキン=被り物+着るもののドット定義(型)。createで overlay テクスチャに焼く
+    for(const s of SKINS) if(s.id!=='none') this.load.image('skin_'+s.id, `assets/skin-${s.id}.png`);   // 未生成でもPhaserは欠損として扱うだけ→描画側でexistsチェックしフォールバック
     for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     this.load.image('belt_seg','assets/belt_seg.png');
@@ -117,7 +101,6 @@ class Main extends Phaser.Scene {
     this._ambC=Phaser.Display.Color.IntegerToColor(0xefe9dd); this._shaftC=Phaser.Display.Color.IntegerToColor(0xfff3da);   // 配置時のtint用に早期初期化
     this.lights=[{x:0.40*W,y:0.30*H,r:235},{x:0.55*W,y:0.36*H,r:235},{x:0.69*W,y:0.30*H,r:235}]; // 天井ライト位置
     PRESETS.forEach((p,i)=>{ makeMascot(this,`m${i}_stand`,p,'stand'); makeMascot(this,`m${i}_work`,p,'work'); makeMascot(this,`m${i}_sit`,p,'sit'); });
-    { const defs=this.cache.json.get('skindefs')||{}; for(const id in defs) makeSkinOverlay(this,'skin_'+id,defs[id]); }   // スキン装備を手続きマスコットと同座標系で焼く
     // 火花
     const sc=document.createElement('canvas'); sc.width=6; sc.height=6; const sg=sc.getContext('2d');
     sg.fillStyle='#fff'; sg.fillRect(2,0,2,6); sg.fillRect(0,2,6,2); this.textures.addCanvas('spark',sc);
@@ -449,17 +432,15 @@ class Main extends Phaser.Scene {
         q.push({c:nc,r:nr}); } }
     return null; }
   clearDeco(a){ if(a.z){a.z.destroy();a.z=null;} if(a.cup){a.cup.destroy();a.cup=null;} }
-  /* スキン: ベースは常に手続きマスコット m{ci}_{pose}。装備スキンがあればマスコットと同座標系の
-     オーバーレイ層 a.ov を上に重ねる(顔・体色はオーバーレイの'.'部分から透ける)。位置/反転/採光は
-     update側で毎フレーム同期。 */
+  /* スキン: テクスチャ skin_<id> があればポーズ差分なしで丸ごと差し替え(表示高さは手続きマスコット=1.5*CELLに揃える)。
+     無ければ従来 m{ci}_{pose}。足元基準 setOrigin(0.5,1) は生成時のまま維持。 */
   setPose(a, pose){
-    a.sp.setTexture(`m${a.ci}_${pose}`).setScale(a.scl);
-    const has = a.skinId && a.skinId!=='none' && this.textures.exists('skin_'+a.skinId);
-    if(has){
-      if(!a.ov){ a.ov=this.add.sprite(a.sp.x,a.sp.y,'skin_'+a.skinId).setOrigin(0.5,1).setScale(a.scl); }
-      else if(a.ov.texture.key!=='skin_'+a.skinId){ a.ov.setTexture('skin_'+a.skinId); }
-      a.ov.setScale(a.scl).setVisible(true);
-    } else if(a.ov){ a.ov.setVisible(false); }
+    if(a.skinId && a.skinId!=='none' && this.textures.exists('skin_'+a.skinId)){
+      if(a.sp.texture.key!=='skin_'+a.skinId) a.sp.setTexture('skin_'+a.skinId);
+      a.sp.setScale((1.5*CELL)/a.sp.height);   // on-screen 高さをマスコットに合わせる(アスペクト維持)
+    } else {
+      a.sp.setTexture(`m${a.ci}_${pose}`).setScale(a.scl);
+    }
   }
   /* スキン適用: 該当プロジェクトの全エージェント + this.skins マップ更新 + 既存の保存フックで永続化 */
   applySkin(proj, skinId){ if(!proj)return; this.skins=this.skins||{};
@@ -494,13 +475,13 @@ class Main extends Phaser.Scene {
         const sp=this.add.sprite(p.x,p.y,`m${ci}_stand`).setOrigin(0.5,1).setScale(s);
         const lbl=this.add.text(p.x,p.y-30,w.project||'',{fontFamily:'monospace',fontSize:'11px',color:'#eafff6'}).setOrigin(0.5,1);
         lbl.setShadow(0,1,'#000',3,true,true);
-        this.agents[key]={sp,lbl,shadow,ci,cell,px:p.x,py:p.y,path:[],state:'walk',after:null,timer:0,face:1,busy:w.working,restType:'sit',z:null,cup:null,scl:s,ov:null,
+        this.agents[key]={sp,lbl,shadow,ci,cell,px:p.x,py:p.y,path:[],state:'walk',after:null,timer:0,face:1,busy:w.working,restType:'sit',z:null,cup:null,scl:s,
           proj:w.project||'', skinId:(this.skins&&this.skins[w.project])||'none'};
         this.setPose(this.agents[key],'stand');   // スキン適用済みなら即テクスチャ反映
         this.decide(this.agents[key]);
       } else this.agents[key].busy=w.working;
     });
-    for(const k of Object.keys(this.agents)){ if(!present.has(k)){ const a=this.agents[k]; this.clearDeco(a); a.sp.destroy(); if(a.ov)a.ov.destroy(); a.lbl.destroy(); a.shadow.destroy(); delete this.agents[k]; } }
+    for(const k of Object.keys(this.agents)){ if(!present.has(k)){ const a=this.agents[k]; this.clearDeco(a); a.sp.destroy(); a.lbl.destroy(); a.shadow.destroy(); delete this.agents[k]; } }
     this.busyCount=busyN;
     if(this.hud) this.hud.innerHTML=`稼働 <b>${busyN}</b> ・ 休憩 ${idleN} ・ Phaser基盤`;
   }
@@ -540,8 +521,7 @@ class Main extends Phaser.Scene {
         } else { this.setPose(a,'stand'); a.sp.x=a.px; a.sp.y=a.py; }
       } else this.decide(a);
       { const lt=this.tintByLight((a.cell.c+0.5)/GU,(a.cell.r+0.5)/GV);   // 部屋の採光を乗算tint(スキンにも適用)
-        a.sp.setFlipX(a.face<0).setDepth(a.py).setTint(lt);
-        if(a.ov && a.ov.visible){ a.ov.setPosition(a.sp.x,a.sp.y).setFlipX(a.face<0).setDepth(a.py+0.6).setTint(lt); } }
+        a.sp.setFlipX(a.face<0).setDepth(a.py).setTint(lt); }
       a.shadow.setPosition(a.px+CELL*0.2,a.py+CELL*0.09).setDepth(a.py-0.5);
       a.lbl.setPosition(a.px, a.py-42*a.scl-6).setDepth(a.py+1);
       if(a.z){ a.z.setPosition(a.px+9, a.py-30-((time-(a.zt||time))*0.01)).setDepth(a.py+2);
