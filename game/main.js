@@ -328,7 +328,7 @@ class Main extends Phaser.Scene {
       night:{amb:0x47597f,obj:0x4c5c7e,shaft:0xafc0e6,son:0.10,sky:0x0c1430,day:0,nf:1},
       space:{amb:0x3a3f66,obj:0x40466e,shaft:0x8aa0d8,son:0.08,sky:0x0a0a22,day:0,nf:1},
       aurora:{amb:0x4a6a72,obj:0x4f6f74,shaft:0x9fe0c8,son:0.12,sky:0x123b3a,day:0,nf:1},
-      arabia:{amb:0xffdcae,obj:0xe8c79a,shaft:0xffcf94,son:0.18,sky:0xE8A15A,day:0.4,nf:0.2},   // 砂漠の夕
+      arabia:{amb:0xecba70,obj:0xe8c79a,shaft:0xffcf94,son:0.18,sky:0xE8A15A,day:0.4,nf:0.2},   // 砂漠の夕(壁=テラコッタ)
       undersea:{amb:0x8fc2d2,obj:0x7fb3c6,shaft:0x9fe6f0,son:0.14,sky:0x1E6E7E,day:0,nf:0},      // 海中
       japan:{amb:0xffe6ea,obj:0xf0d8dc,shaft:0xffd0d8,son:0.14,sky:0xF6B5C0,day:0.5,nf:0},        // 桜の空
       china:{amb:0xffcf9e,obj:0xe8b58a,shaft:0xffcf8a,son:0.16,sky:0xC0342B,day:0.3,nf:0.3} };    // 紅い空
@@ -344,13 +344,33 @@ class Main extends Phaser.Scene {
     if(this.moon){ this.moon.setAlpha(nf); this.moonG.setAlpha(nf*0.5); for(const s of this.stars) s.setAlpha(nf); }
   }
   setSkyTheme(theme){ this.skyTheme=(theme&&theme!=='auto')?theme:null; this.updateLighting(); }
-  setFloor(theme){ if(!this.floorGfx){ this.floorGfx=this.add.graphics().setDepth(-999).setBlendMode(Phaser.BlendModes.MULTIPLY); }
-    this.floorGfx.clear();
-    const col={wood:null, cool:0x9fb6d0, crimson:0xd9948a, forest:0x93c090, gold:0xe8cf8a, mono:0xc4c4c4,
-      sand:0xe8d3a0, aqua:0x8fd6d0, tatami:0xbcc78a, redgold:0xd6a24a}[theme];   // 下段=シリーズ床材
+  setFloor(theme){ if(!this.floorGfx){ this.floorGfx=this.add.graphics().setDepth(-999); }
+    const g=this.floorGfx; g.clear(); g.setBlendMode(Phaser.BlendModes.NORMAL);
+    // シリーズ床材=不透明のタイル模様に描き替え(素材そのものを変える)
+    const PAT={ sand:{a:0xd8b478,b:0xcaa45e,grout:0x8a5836,m1:0xE8C868,m2:0x9c6a40},        // アラビア(アラベスク)
+      aqua:{a:0x64b3b3,b:0x53a0a5,grout:0x2c6c72,m1:0x9fe6d6,m2:0x347c80},                   // 海底
+      tatami:{a:0xbcc386,b:0xaeb672,grout:0x7a6640,m1:0xd6dca4,m2:0x87764c},                 // 和(畳)
+      redgold:{a:0xae322c,b:0x9a2824,grout:0x561411,m1:0xE8C468,m2:0x781c18} };              // 中華
+    if(PAT[theme]){ this._patternFloor(PAT[theme]); return; }
+    // 単色床材=従来の色掛け(MULTIPLY)
+    g.setBlendMode(Phaser.BlendModes.MULTIPLY);
+    const col={cool:0x9fb6d0, crimson:0xd9948a, forest:0x93c090, gold:0xe8cf8a, mono:0xc4c4c4}[theme];
     if(col==null) return;   // wood=素の床
-    const p=[uvXY(0,0),uvXY(1,0),uvXY(1,1),uvXY(0,1)];
-    this.floorGfx.fillStyle(col,1); this.floorGfx.fillPoints(p,true); }
+    g.fillStyle(col,1); g.fillPoints([uvXY(0,0),uvXY(1,0),uvXY(1,1),uvXY(0,1)],true); }
+  /* 床タイルを1枚ずつ不透明に描く(市松ベース＋同心ダイヤのモチーフ)。OFFで目地に整合 */
+  _patternFloor(pal){ const g=this.floorGfx; const P=(u,v)=>uvXY(u,v);
+    g.fillStyle(pal.b,1); g.fillPoints([P(0,0),P(1,0),P(1,1),P(0,1)],true);   // 全面ベース(端のスキマ対策)
+    const mid=(p,q,t)=>({x:p.x+(q.x-p.x)*t,y:p.y+(q.y-p.y)*t});
+    for(let c=0;c<GU;c++) for(let r=0;r<GV;r++){
+      const u0=(c+OFF_U)/GU,u1=(c+1+OFF_U)/GU,v0=(r+OFF_V)/GV,v1=(r+1+OFF_V)/GV;
+      if(u0<-0.02||u1>1.02||v0<-0.02||v1>1.02) continue;
+      const A=P(u0,v0),B=P(u1,v0),C=P(u1,v1),D=P(u0,v1), cen=P((u0+u1)/2,(v0+v1)/2);
+      g.fillStyle(((c+r)&1)?pal.a:pal.b,1); g.fillPoints([A,B,C,D],true);
+      g.lineStyle(1,pal.grout,0.6); g.strokePoints([A,B,C,D],true);
+      const ins=(t)=>[mid(A,cen,t),mid(B,cen,t),mid(C,cen,t),mid(D,cen,t)];
+      g.fillStyle(pal.m2,0.85); g.fillPoints(ins(0.30),true);   // 中ダイヤ
+      g.fillStyle(pal.m1,0.95); g.fillPoints(ins(0.60),true);   // 芯ダイヤ(モチーフ)
+    } }
   isFree(c,r){ return c>=0&&r>=0&&c<GU&&r<GV && !this.occ.has(K(c,r)); }
   freeCell(){ for(let i=0;i<50;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=1+Math.floor(Math.random()*(GV-2)); if(this.isFree(c,r)) return {c,r}; } return {c:1,r:1}; }
   freeCellIn(minr,maxr){ for(let i=0;i<40;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=minr+Math.floor(Math.random()*(maxr-minr+1)); if(this.isFree(c,r)) return {c,r}; } return null; }
