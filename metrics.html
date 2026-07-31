@@ -329,9 +329,26 @@ function render(d){
     : '—';
 }
 
+/* 取得と描画は別で扱う。1回目の取得に失敗したまま「WP 0」が出ると
+   「本当に0」と「サーバが落ちている」の区別がつかないので、状態を明示する。 */
+function fail(msg){
+  const p = document.getElementById('recv');
+  p.textContent = msg; p.className = 'pill dead';
+  if(!lastData) document.getElementById('wpTotal').textContent = '—';   // 未取得は 0 ではなく — で出す
+}
 async function tick(){
-  try{ render(await (await fetch('/api/otel',{cache:'no-store'})).json()); }
-  catch(e){ document.getElementById('recv').textContent = 'サーバ未接続'; document.getElementById('recv').className='pill dead'; }
+  let d;
+  try{
+    const r = await fetch('/api/otel',{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    d = await r.json();
+  }catch(e){
+    // サーバ再起動中はここに来る。取得済みの値は消さずに状態だけ変える
+    fail('サーバ未接続（再起動中？）');
+    return;
+  }
+  try{ render(d); }
+  catch(e){ fail('描画エラー: '+e.message); console.error(e); }   // 黙って固まらせない
 }
 tick(); setInterval(tick, 3000);
 </script>
