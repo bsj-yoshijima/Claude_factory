@@ -356,6 +356,17 @@ loadGame().then(async ()=>{
   setInterval(()=>{ const r=prodRate(); G.prodP+=r; G.produced+=r; updateBadge(); }, 1000);
   setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
   const q=new URLSearchParams(location.search);
+  if(q.get('unlockall')){   // 全背景・全アイテムを所持(テスト用)。何度開いても増殖しないよう max で設定
+    G.bgOwned=Array.from(new Set([...G.bgOwned,'auto',...SKY_THEMES]));
+    G.seriesOwned=Array.from(new Set([...G.seriesOwned,...ROOM_THEMES]));
+    G.floorOwned=Array.from(new Set([...G.floorOwned,...Object.keys(FLOOR)]));
+    G.money=Math.max(G.money,999999);
+    for(const t of Object.keys(MACH)) G.stock.machine[t]=Math.max(3,G.stock.machine[t]||0);
+    for(const t of Object.keys(PROP)) G.stock.prop[t]=Math.max(3,G.stock.prop[t]||0);
+    for(const t of Object.keys(DECO)) G.stock.deco[t]=Math.max(3,G.stock.deco[t]||0);
+    G.stock.belt=Math.max(5,G.stock.belt||0);
+    saveGame(); updateBadge(); toast('✅ 全背景・全アイテムを解放しました（在庫）');
+  }
   if(q.get('edit')){ paletteEl.classList.add('show'); document.getElementById('editBtn').classList.add('gacha'); renderPalette(); }
   if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop')); else if(q.get('gacha'))openGacha();
 });
