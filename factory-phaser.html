@@ -299,9 +299,11 @@ function openShop(tab){ if(tab)_shopTab=tab;
         const ks=Object.keys(PROP).filter(t=>(PROP[t].th||'')===th);
         if(!ks.length) continue;
         body += `<div class="cost" style="margin:10px 0 4px;color:#7fe6ff">${label}</div>`;
-        body += ks.map(t=>`<div class="rc"><div class="ic">${PROP[t].e}</div>
-          <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('prop',t)}</span></div><div class="cost">💰${PROP[t].price}</div></div>
-          <button data-prop="${t}" ${G.money>=PROP[t].price?'':'disabled'}>購入</button></div>`).join('');
+        body += ks.map(t=>{ const sp=(window.PROP_SPAN||{})[t]||1;   // 占有コマ数(見た目の大きさ)
+          return `<div class="rc"><div class="ic">${PROP[t].e}</div>
+          <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('prop',t)}</span></div>
+          <div class="cost">💰${PROP[t].price}${sp>1?` ・ ${sp}コマ`:''}</div></div>
+          <button data-prop="${t}" ${G.money>=PROP[t].price?'':'disabled'}>購入</button></div>`; }).join('');
       }
       body += '<div class="cost" style="margin:12px 0 6px">その他</div>';
       body += Object.keys(DECO).map(t=>`<div class="rc"><div class="ic">${DECO[t].e}</div>
