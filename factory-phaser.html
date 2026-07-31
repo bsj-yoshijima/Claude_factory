@@ -260,7 +260,7 @@ function openSkin(){
       const emoji = s.id==='none' ? '🧑‍🏭' : ((BG_META[s.id]&&BG_META[s.id].e)||'🎨');
       const thumb = s.id==='none'
         ? `<span style="font-size:28px">${emoji}</span>`
-        : `<img src="assets/skin-${s.id}.png" alt="" style="width:46px;height:46px;object-fit:contain" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${emoji}',style:'font-size:28px'}))">`;
+        : `<img src="assets/hat-${s.id}.png" alt="" style="width:46px;height:46px;object-fit:contain" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${emoji}',style:'font-size:28px'}))">`;
       return `<div class="cell own" data-skin="${s.id}" style="${applied?'border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset':''}">${thumb}<small style="color:#cfeee0">${s.n}</small>${applied?'<span class="cnt">✓</span>':''}</div>`;
     }).join('');
     openOverlay(`<h2>🎨 スキン</h2>

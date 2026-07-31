@@ -24,6 +24,9 @@ const PRESETS = [
   {b:'#e0b23a',s:'#ad8327',l:'#f2d06a'}, {b:'#d86a9c',s:'#a94773',l:'#f094bc'},
 ];
 const MTOP = [3,2,1,1,0,0,1,2,3,3,2,1,0,0,1,1,2,3];
+// スキン=被り物(帽子)のみ。ベースの手続きマスコット(26x28ドット,1ドット=DOTP px)はそのまま。
+// 被り物テクスチャ hat_<id> を頭頂に載せる較正: 底辺中央を(HAT_CX, HAT_BASE_Y)ドットへ、幅をHAT_W_DOTに正規化。
+const DOTP = 3, HAT_CX = 12.5, HAT_BASE_Y = 10.8, HAT_W_DOT = 19;
 function makeMascot(scene, key, pal, pose){
   const P=3, w=26, h=28;
   const cv=document.createElement('canvas'); cv.width=w*P; cv.height=h*P;
@@ -53,8 +56,8 @@ const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_j
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
   retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen' };
 const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen'];  // Stitch製 装飾プロップ
-// エージェントのスキン(id=テーマキー・31種＋'none')。テクスチャ skin_<id>(Stitch製透過PNG)があれば
-// スタンド/作業/座り 全ポーズを画像で丸ごと差し替え。無ければ従来の手続きマスコットにフォールバック。プロジェクト単位で永続化。
+// エージェントのスキン(id=テーマキー・31種＋'none')。スキン=被り物(帽子)だけ。ベースのマスコットは常にそのまま、
+// 頭上に被り物テクスチャ hat_<id>(形状指定でStitch生成→マゼンタ抜き)を1枚重ねる。定義のあるidだけ帽子が乗る。プロジェクト単位で永続化。
 const SKINS = [
   {id:'none', n:'デフォルト'},
   {id:'arabia',n:'魔人'},{id:'undersea',n:'人魚'},{id:'japan',n:'侍'},{id:'china',n:'皇帝'},
@@ -86,7 +89,7 @@ class Main extends Phaser.Scene {
     this.load.image('room_dino','assets/room-dino.png');
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
-    for(const s of SKINS) if(s.id!=='none') this.load.image('skin_'+s.id, `assets/skin-${s.id}.png`);   // 未生成でもPhaserは欠損として扱うだけ→描画側でexistsチェックしフォールバック
+    for(const s of SKINS) if(s.id!=='none') this.load.image('hat_'+s.id, `assets/hat-${s.id}.png`);   // 被り物。未生成でもPhaserは欠損扱い→描画側でexistsチェック
     for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     this.load.image('belt_seg','assets/belt_seg.png');
@@ -432,15 +435,18 @@ class Main extends Phaser.Scene {
         q.push({c:nc,r:nr}); } }
     return null; }
   clearDeco(a){ if(a.z){a.z.destroy();a.z=null;} if(a.cup){a.cup.destroy();a.cup=null;} }
-  /* スキン: テクスチャ skin_<id> があればポーズ差分なしで丸ごと差し替え(表示高さは手続きマスコット=1.5*CELLに揃える)。
-     無ければ従来 m{ci}_{pose}。足元基準 setOrigin(0.5,1) は生成時のまま維持。 */
+  /* ベースは常に手続きマスコット m{ci}_{pose}。被り物 hat_<id> があれば頭上にオーバーレイ層 a.hat を重ねる
+     (幅を頭幅に正規化, 底辺中央を頭頂へ)。位置/反転/採光は update 側で毎フレーム同期。座り時は頭が1ドット下がる。 */
   setPose(a, pose){
-    if(a.skinId && a.skinId!=='none' && this.textures.exists('skin_'+a.skinId)){
-      if(a.sp.texture.key!=='skin_'+a.skinId) a.sp.setTexture('skin_'+a.skinId);
-      a.sp.setScale((1.5*CELL)/a.sp.height);   // on-screen 高さをマスコットに合わせる(アスペクト維持)
-    } else {
-      a.sp.setTexture(`m${a.ci}_${pose}`).setScale(a.scl);
-    }
+    a.sp.setTexture(`m${a.ci}_${pose}`).setScale(a.scl);
+    a.hatBaseY = HAT_BASE_Y + (pose==='sit'?1:0);
+    const has = a.skinId && a.skinId!=='none' && this.textures.exists('hat_'+a.skinId);
+    if(has){
+      if(!a.hat){ a.hat=this.add.sprite(a.sp.x,a.sp.y,'hat_'+a.skinId).setOrigin(0.5,1); }
+      else if(a.hat.texture.key!=='hat_'+a.skinId){ a.hat.setTexture('hat_'+a.skinId); }
+      const nw=a.hat.texture.getSourceImage().width;
+      a.hat.setScale((HAT_W_DOT*DOTP*a.scl)/nw).setVisible(true);
+    } else if(a.hat){ a.hat.setVisible(false); }
   }
   /* スキン適用: 該当プロジェクトの全エージェント + this.skins マップ更新 + 既存の保存フックで永続化 */
   applySkin(proj, skinId){ if(!proj)return; this.skins=this.skins||{};
@@ -476,12 +482,12 @@ class Main extends Phaser.Scene {
         const lbl=this.add.text(p.x,p.y-30,w.project||'',{fontFamily:'monospace',fontSize:'11px',color:'#eafff6'}).setOrigin(0.5,1);
         lbl.setShadow(0,1,'#000',3,true,true);
         this.agents[key]={sp,lbl,shadow,ci,cell,px:p.x,py:p.y,path:[],state:'walk',after:null,timer:0,face:1,busy:w.working,restType:'sit',z:null,cup:null,scl:s,
-          proj:w.project||'', skinId:(this.skins&&this.skins[w.project])||'none'};
+          hat:null, hatBaseY:HAT_BASE_Y, proj:w.project||'', skinId:(this.skins&&this.skins[w.project])||'none'};
         this.setPose(this.agents[key],'stand');   // スキン適用済みなら即テクスチャ反映
         this.decide(this.agents[key]);
       } else this.agents[key].busy=w.working;
     });
-    for(const k of Object.keys(this.agents)){ if(!present.has(k)){ const a=this.agents[k]; this.clearDeco(a); a.sp.destroy(); a.lbl.destroy(); a.shadow.destroy(); delete this.agents[k]; } }
+    for(const k of Object.keys(this.agents)){ if(!present.has(k)){ const a=this.agents[k]; this.clearDeco(a); a.sp.destroy(); if(a.hat)a.hat.destroy(); a.lbl.destroy(); a.shadow.destroy(); delete this.agents[k]; } }
     this.busyCount=busyN;
     if(this.hud) this.hud.innerHTML=`稼働 <b>${busyN}</b> ・ 休憩 ${idleN} ・ Phaser基盤`;
   }
@@ -521,7 +527,9 @@ class Main extends Phaser.Scene {
         } else { this.setPose(a,'stand'); a.sp.x=a.px; a.sp.y=a.py; }
       } else this.decide(a);
       { const lt=this.tintByLight((a.cell.c+0.5)/GU,(a.cell.r+0.5)/GV);   // 部屋の採光を乗算tint(スキンにも適用)
-        a.sp.setFlipX(a.face<0).setDepth(a.py).setTint(lt); }
+        a.sp.setFlipX(a.face<0).setDepth(a.py).setTint(lt);
+        if(a.hat && a.hat.visible){ const dp=DOTP*a.scl;
+          a.hat.setPosition(a.sp.x+(HAT_CX-13)*dp, a.sp.y-(28-a.hatBaseY)*dp).setDepth(a.py+0.6).setTint(lt).setFlipX(a.face<0); } }
       a.shadow.setPosition(a.px+CELL*0.2,a.py+CELL*0.09).setDepth(a.py-0.5);
       a.lbl.setPosition(a.px, a.py-42*a.scl-6).setDepth(a.py+1);
       if(a.z){ a.z.setPosition(a.px+9, a.py-30-((time-(a.zt||time))*0.01)).setDepth(a.py+2);
