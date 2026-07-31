@@ -53,21 +53,18 @@ const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_j
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
   retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen' };
 const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen'];  // Stitch製 装飾プロップ
-// エージェントのスキン(頭アクセ e + 体の色 body)。クリックで巡回・プロジェクト単位で永続化。
+// エージェントのスキン(id=テーマキー・31種＋'none')。テクスチャ skin_<id>(Stitch製透過PNG)があれば
+// スタンド/作業/座り 全ポーズを画像で丸ごと差し替え。無ければ従来の手続きマスコットにフォールバック。プロジェクト単位で永続化。
 const SKINS = [
-  {id:'none',   e:'',   n:'なし'},
-  {id:'chick',  e:'🐤', n:'ひよこ'},
-  {id:'phones', e:'🎧', n:'ヘッドフォン'},
-  {id:'hat',    e:'🎩', n:'シルクハット'},
-  {id:'crown',  e:'👑', n:'王様',     body:0xf1d489},
-  {id:'ribbon', e:'🎀', n:'リボン'},
-  {id:'flower', e:'🌸', n:'花'},
-  {id:'mush',   e:'🍄', n:'キノコ'},
-  {id:'cap',    e:'🎓', n:'卒業'},
-  {id:'ninja',  e:'🥷', n:'忍者',     body:0x3b4048},
-  {id:'diver',  e:'🤿', n:'ダイバー', body:0x5aa6d6},
-  {id:'santa',  e:'🎅', n:'サンタ',   body:0xd25148},
-  {id:'party',  e:'🎉', n:'パーティ', body:0xe07ab0},
+  {id:'none', n:'デフォルト'},
+  {id:'arabia',n:'魔人'},{id:'undersea',n:'人魚'},{id:'japan',n:'侍'},{id:'china',n:'皇帝'},
+  {id:'diner',n:'ウェイトレス'},{id:'fantasy',n:'魔法使い'},{id:'scifi',n:'宇宙人'},{id:'cabin',n:'きこり'},
+  {id:'dino',n:'恐竜'},{id:'haunted',n:'ゴースト'},{id:'pirate',n:'海賊'},{id:'circuit',n:'レーサー'},
+  {id:'dwarf',n:'ドワーフ'},{id:'hell',n:'デビル'},{id:'steampunk',n:'発明家'},{id:'retrofuture',n:'ネモ船長'},
+  {id:'tokyo',n:'サイバー'},{id:'halloween',n:'吸血鬼'},{id:'western',n:'ガンマン'},{id:'sushi',n:'寿司職人'},
+  {id:'beehive',n:'みつばち'},{id:'circus',n:'ピエロ'},{id:'carnival',n:'仮面'},{id:'desert',n:'遊牧民'},
+  {id:'jungle',n:'探検家'},{id:'egypt',n:'ファラオ'},{id:'christmas',n:'サンタ'},{id:'space',n:'宇宙飛行士'},
+  {id:'ice',n:'氷の女王'},{id:'mushroom',n:'妖精'},{id:'onsen',n:'湯上がり'},
 ];
 const DECOR = ['crate','drum','plant','pallet','sign'];
 // 製造機はショップ経済側(G.machines)が設置する。ここは無料の初期装飾のみ。
@@ -89,6 +86,7 @@ class Main extends Phaser.Scene {
     this.load.image('room_dino','assets/room-dino.png');
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
+    for(const s of SKINS) if(s.id!=='none') this.load.image('skin_'+s.id, `assets/skin-${s.id}.png`);   // 未生成でもPhaserは欠損として扱うだけ→描画側でexistsチェックしフォールバック
     for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     this.load.image('belt_seg','assets/belt_seg.png');
@@ -134,6 +132,12 @@ class Main extends Phaser.Scene {
     if(new URLSearchParams(location.search).get('edit')==='1') this.toggleEdit(true);   // 編集(グリッド/ドラッグ/ベルト矢印)
     this.input.keyboard.on('keydown-E', ()=>this.toggleEdit());
     window.__scene=this;
+    // Scene↔UI ブリッジ(スキン選択画面が参照)
+    window.__factory={
+      getAgents:()=>Object.keys(this.agents).map(k=>{ const a=this.agents[k]; return {proj:a.proj, skinId:a.skinId||'none', working:!!a.busy}; }),
+      applySkin:(proj,skinId)=>this.applySkin(proj,skinId),
+      skinList:SKINS,
+    };
     this.poll(); this.time.addEvent({delay:1500,loop:true,callback:()=>this.poll()});
   }
   createBelt(){
@@ -427,18 +431,24 @@ class Main extends Phaser.Scene {
         if(nc===to.c&&nr===to.r){ const path=[]; let n={c:nc,r:nr}; while(n){ path.unshift(n); n=prev[K(n.c,n.r)]; } path.shift(); return path; }
         q.push({c:nc,r:nr}); } }
     return null; }
-  clearDeco(a){ if(a.z){a.z.destroy();a.z=null;} if(a.cup){a.cup.destroy();a.cup=null;} if(a.skinObj){a.skinObj.destroy();a.skinObj=null;} }
-  /* スキン: 頭アクセサリの表示更新 / クリック巡回 / 一括反映(ロード時) */
-  updateSkin(a){ const sk=SKINS.find(s=>s.id===a.skinId)||SKINS[0]; a.bodyTint=sk.body||null;
-    if(!sk.e){ if(a.skinObj){a.skinObj.destroy();a.skinObj=null;} return; }
-    if(!a.skinObj) a.skinObj=this.add.text(a.px,a.py,'',{fontSize:'15px'}).setOrigin(0.5,1);
-    a.skinObj.setText(sk.e); }
-  mulTint(x,y){ const xr=(x>>16)&255,xg=(x>>8)&255,xb=x&255, yr=(y>>16)&255,yg=(y>>8)&255,yb=y&255;
-    return ((xr*yr/255|0)<<16)|((xg*yg/255|0)<<8)|(xb*yb/255|0); }
-  cycleSkin(key){ const a=this.agents[key]; if(!a)return; const i=SKINS.findIndex(s=>s.id===a.skinId);
-    a.skinId=SKINS[(i+1)%SKINS.length].id; this.updateSkin(a);
-    if(window.__skinChanged) window.__skinChanged(a.proj, a.skinId); }
-  applySkins(map){ this.skins=map||{}; for(const k in this.agents){ const a=this.agents[k]; a.skinId=this.skins[a.proj]||'none'; this.updateSkin(a); } }
+  clearDeco(a){ if(a.z){a.z.destroy();a.z=null;} if(a.cup){a.cup.destroy();a.cup=null;} }
+  /* スキン: テクスチャ skin_<id> があればポーズ差分なしで丸ごと差し替え(表示高さは手続きマスコット=1.5*CELLに揃える)。
+     無ければ従来 m{ci}_{pose}。足元基準 setOrigin(0.5,1) は生成時のまま維持。 */
+  setPose(a, pose){
+    if(a.skinId && a.skinId!=='none' && this.textures.exists('skin_'+a.skinId)){
+      if(a.sp.texture.key!=='skin_'+a.skinId) a.sp.setTexture('skin_'+a.skinId);
+      a.sp.setScale((1.5*CELL)/a.sp.height);   // on-screen 高さをマスコットに合わせる(アスペクト維持)
+    } else {
+      a.sp.setTexture(`m${a.ci}_${pose}`).setScale(a.scl);
+    }
+  }
+  /* スキン適用: 該当プロジェクトの全エージェント + this.skins マップ更新 + 既存の保存フックで永続化 */
+  applySkin(proj, skinId){ if(!proj)return; this.skins=this.skins||{};
+    if(skinId==='none') delete this.skins[proj]; else this.skins[proj]=skinId;
+    for(const k in this.agents){ const a=this.agents[k]; if(a.proj===proj){ a.skinId=skinId; this.setPose(a,'stand'); } }
+    if(window.__skinChanged) window.__skinChanged(proj, skinId); }
+  /* ロード時の一括反映(プロジェクト→skinId マップ) */
+  applySkins(map){ this.skins=map||{}; for(const k in this.agents){ const a=this.agents[k]; a.skinId=this.skins[a.proj]||'none'; this.setPose(a,'stand'); } }
   decide(a){
     this.clearDeco(a);
     if(a.busy && this.machineCells.length && Math.random()<0.75){
@@ -466,9 +476,8 @@ class Main extends Phaser.Scene {
         const lbl=this.add.text(p.x,p.y-30,w.project||'',{fontFamily:'monospace',fontSize:'11px',color:'#eafff6'}).setOrigin(0.5,1);
         lbl.setShadow(0,1,'#000',3,true,true);
         this.agents[key]={sp,lbl,shadow,ci,cell,px:p.x,py:p.y,path:[],state:'walk',after:null,timer:0,face:1,busy:w.working,restType:'sit',z:null,cup:null,scl:s,
-          proj:w.project||'', skinId:(this.skins&&this.skins[w.project])||'none', skinObj:null};
-        sp.setInteractive({useHandCursor:true}).on('pointerdown',()=>this.cycleSkin(key));
-        this.updateSkin(this.agents[key]);
+          proj:w.project||'', skinId:(this.skins&&this.skins[w.project])||'none'};
+        this.setPose(this.agents[key],'stand');   // スキン適用済みなら即テクスチャ反映
         this.decide(this.agents[key]);
       } else this.agents[key].busy=w.working;
     });
@@ -491,7 +500,7 @@ class Main extends Phaser.Scene {
         const w0=a.path[0], t=cellXY(w0.c,w0.r);
         const dx=t.x-a.px, dy=t.y-a.py, dist=Math.hypot(dx,dy);
         if(dist<2){ a.cell=w0; a.path.shift(); } else { a.px+=dx/dist*SPD; a.py+=dy/dist*SPD; a.face=dx<0?-1:1; }
-        a.state='walk'; a.sp.setTexture(`m${a.ci}_stand`);
+        a.state='walk'; this.setPose(a,'stand');
         a.sp.x=a.px; a.sp.y=a.py - Math.abs(Math.sin(time*0.012))*3;
       } else if(a.after){
         a.state=a.after.state; a.timer=a.after.dur; a.restType=a.after.restType||a.restType;
@@ -500,25 +509,24 @@ class Main extends Phaser.Scene {
       } else if(a.timer>0){
         a.timer--; a.sp.x=a.px; a.sp.y=a.py;
         if(a.state==='work'){
-          const sw=(Math.floor(time*0.012)%2===0); a.sp.setTexture(sw?`m${a.ci}_work`:`m${a.ci}_stand`); a.sp.y=a.py-(sw?1:0);
+          const sw=(Math.floor(time*0.012)%2===0); this.setPose(a,sw?'work':'stand'); a.sp.y=a.py-(sw?1:0);
           if(Math.random()<0.14) this.sparks.emitParticleAt(a.px + a.face*12, a.py-26, 2);
         } else if(a.state==='rest'){
           const rt=a.restType;
-          if(rt==='sit'){ a.sp.setTexture(`m${a.ci}_sit`);
+          if(rt==='sit'){ this.setPose(a,'sit');
             if(!a.z && Math.random()<0.03){ a.z=this.add.text(a.px+9,a.py-30,'💤',{fontSize:'13px'}).setOrigin(0.5,1); a.zt=time; } }
-          else if(rt==='coffee'){ a.sp.setTexture(`m${a.ci}_stand`);
+          else if(rt==='coffee'){ this.setPose(a,'stand');
             if(!a.cup) a.cup=this.add.text(a.px+a.face*11,a.py-16,'☕',{fontSize:'12px'}).setOrigin(0.5,1); }
-          else { a.sp.setTexture(`m${a.ci}_stand`); } // lean: 壁際で立つ
-        } else { a.sp.setTexture(`m${a.ci}_stand`); a.sp.x=a.px; a.sp.y=a.py; }
+          else { this.setPose(a,'stand'); } // lean: 壁際で立つ
+        } else { this.setPose(a,'stand'); a.sp.x=a.px; a.sp.y=a.py; }
       } else this.decide(a);
-      { const lt=this.tintByLight((a.cell.c+0.5)/GU,(a.cell.r+0.5)/GV);   // 採光×衣装色
-        a.sp.setFlipX(a.face<0).setDepth(a.py).setTint(a.bodyTint?this.mulTint(lt,a.bodyTint):lt); }
+      { const lt=this.tintByLight((a.cell.c+0.5)/GU,(a.cell.r+0.5)/GV);   // 部屋の採光を乗算tint(スキンにも適用)
+        a.sp.setFlipX(a.face<0).setDepth(a.py).setTint(lt); }
       a.shadow.setPosition(a.px+CELL*0.2,a.py+CELL*0.09).setDepth(a.py-0.5);
       a.lbl.setPosition(a.px, a.py-42*a.scl-6).setDepth(a.py+1);
       if(a.z){ a.z.setPosition(a.px+9, a.py-30-((time-(a.zt||time))*0.01)).setDepth(a.py+2);
         if((time-(a.zt||time))>1800){ a.z.destroy(); a.z=null; } }
       if(a.cup){ a.cup.setPosition(a.px+a.face*11, a.py-16).setDepth(a.py+2); }
-      if(a.skinObj){ a.skinObj.setPosition(a.px, a.sp.y - a.sp.displayHeight + 5).setDepth(a.py+3); }
     }
   }
 }

@@ -85,6 +85,7 @@
   <div id="topbar">
     <div class="tab gacha" id="gachaBtn">🎁 ガチャ</div>
     <div class="tab" id="shopBtn">🏪 ショップ</div>
+    <div class="tab" id="skinBtn">🎨 スキン</div>
     <div class="tab" id="editBtn">🔧 編集</div>
     <div class="tab" id="dexBtn">📖 図鑑</div>
   </div>
@@ -237,6 +238,48 @@ function openDex(){
 }
 document.getElementById('gachaBtn').addEventListener('click',openGacha);
 document.getElementById('dexBtn').addEventListener('click',openDex);
+
+/* ===== 🎨 スキン: エージェントを選んでテーマ別スキンを丸ごと適用 ===== */
+let _skinSel=null;
+function openSkin(){
+  const render=()=>{
+    const list=(window.__factory&&window.__factory.getAgents())||[];
+    // プロジェクト単位に集約(同名エージェントは稼働数をまとめる)
+    const byProj={};
+    for(const a of list){ const p=byProj[a.proj]||(byProj[a.proj]={proj:a.proj,skinId:'none',n:0,busy:0});
+      p.n++; if(a.working)p.busy++; if(a.skinId&&a.skinId!=='none')p.skinId=a.skinId; }
+    const projs=Object.values(byProj);
+    if(_skinSel && !byProj[_skinSel]) _skinSel=null;
+    if(!_skinSel && projs.length) _skinSel=projs[0].proj;
+    const cur=_skinSel?byProj[_skinSel]:null;
+    const agentRow = projs.length ? projs.map(p=>{ const on=p.proj===_skinSel; const st=p.busy>0?'🟢 稼働':'💤 休憩';
+      return `<div class="pitem ${on?'on':''}" data-proj="${encodeURIComponent(p.proj)}" style="width:auto;min-width:70px;height:auto;padding:6px 10px;font-size:12px">${p.proj||'(無名)'}<span style="font-size:9px;color:#9fdcc6;margin-top:2px">${st}${p.n>1?' ×'+p.n:''}</span></div>`;
+    }).join('') : '<div class="phint" style="padding:8px">稼働中のエージェントがいません。</div>';
+    const skins=(window.__factory&&window.__factory.skinList)||[];
+    const grid = skins.map(s=>{ const applied=cur&&cur.skinId===s.id;
+      const emoji = s.id==='none' ? '🧑‍🏭' : ((BG_META[s.id]&&BG_META[s.id].e)||'🎨');
+      const thumb = s.id==='none'
+        ? `<span style="font-size:28px">${emoji}</span>`
+        : `<img src="assets/skin-${s.id}.png" alt="" style="width:46px;height:46px;object-fit:contain" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${emoji}',style:'font-size:28px'}))">`;
+      return `<div class="cell own" data-skin="${s.id}" style="${applied?'border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset':''}">${thumb}<small style="color:#cfeee0">${s.n}</small>${applied?'<span class="cnt">✓</span>':''}</div>`;
+    }).join('');
+    openOverlay(`<h2>🎨 スキン</h2>
+      <div class="cost" style="margin:2px 0 4px">① エージェントを選ぶ</div>
+      <div class="cardwrap" style="justify-content:flex-start;min-height:0;gap:6px">${agentRow}</div>
+      <div class="cost" style="margin:12px 0 4px">② スキンを選んで適用${cur?`（対象: <b style="color:#eafff4">${cur.proj||'(無名)'}</b>）`:''}</div>
+      <div class="grid">${grid}</div>
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">スキン画像が未生成のものは仮アイコン表示。適用してもアセット到着まではデフォルト見た目のままです。</div>`);
+    panel.querySelectorAll('[data-proj]').forEach(el=>el.onclick=()=>{ _skinSel=decodeURIComponent(el.dataset.proj); render(); });
+    panel.querySelectorAll('[data-skin]').forEach(el=>el.onclick=()=>{
+      if(!cur){ toast('先にエージェントを選んでください'); return; }
+      const s=skins.find(x=>x.id===el.dataset.skin);
+      window.__factory.applySkin(cur.proj, el.dataset.skin);   // scene側で this.skins更新＋window.__skinChangedで永続化
+      toast(`${cur.proj||'(無名)'} → ${s?s.n:el.dataset.skin}`); render();
+    });
+  };
+  render();
+}
+document.getElementById('skinBtn').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openSkin(); });
 
 /* ===== ショップ（景品の売却＋購入/強化） ===== */
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
