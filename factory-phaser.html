@@ -22,9 +22,11 @@
   /* overlay */
   #overlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(6,10,12,.72);backdrop-filter:blur(4px)}
   #overlay.show{display:flex}
-  #panel{position:relative;background:#12181c;border:1px solid var(--edge);border-radius:12px;padding:18px 20px;max-width:min(700px,92vw);max-height:88vh;overflow:auto}
+  /* 固定サイズ: 中身が変わっても外枠がガタつかない。内部だけスクロール */
+  #panel{position:relative;background:#12181c;border:1px solid var(--edge);border-radius:12px;padding:16px 20px;width:min(680px,92vw);height:min(72vh,560px);overflow:hidden}
+  .pbody{height:100%;overflow-y:auto;overflow-x:hidden;padding-right:6px}
   #panel h2{margin:0 0 8px;font-size:16px;color:var(--gold)}
-  #panel .close{position:absolute;top:8px;right:14px;font-size:20px;color:#9fb0c0;cursor:pointer}
+  #panel .close{position:absolute;top:8px;right:14px;font-size:20px;color:#9fb0c0;cursor:pointer;z-index:2}
   .rowline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;font-size:12px}
   .btn{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,66px);gap:8px;margin-top:6px}
@@ -137,7 +139,7 @@ function doPull(n){ const cost=n*PULL_COST; if(G.prodP<cost) return null; G.prod
 
 const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
 function closeOverlay(){ overlay.classList.remove('show'); }
-function openOverlay(h){ panel._refresh=null; panel.innerHTML='<span class="close">✕</span>'+h; panel.querySelector('.close').onclick=closeOverlay; overlay.classList.add('show'); }
+function openOverlay(h){ panel._refresh=null; panel.innerHTML='<span class="close">✕</span><div class="pbody">'+h+'</div>'; panel.querySelector('.close').onclick=closeOverlay; overlay.classList.add('show'); }
 overlay.addEventListener('click',e=>{ if(e.target===overlay) closeOverlay(); });
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',1600); }
 function updateBadge(){ const p=document.getElementById('prodN'); if(p)p.textContent='⚙️ '+Math.floor(G.prodP).toLocaleString();
