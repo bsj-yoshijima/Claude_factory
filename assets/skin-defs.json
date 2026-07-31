@@ -1,0 +1,88 @@
+{
+  "japan": {
+    "head": { "y":6, "x":4, "pal":{"b":"#33406b","s":"#232c4d","g":"#e8c24a","K":"#141414"},
+      "rows":[
+        "......gggg......",
+        "...bbbbbbbbbb...",
+        "..bbbbbbbbbbbb..",
+        ".bbbbssbbssbbbb.",
+        "bsbbbbbbbbbbbbsb",
+        "bb............bb",
+        "b..............b"
+      ] },
+    "body": { "y":14, "x":4, "pal":{"b":"#33406b","s":"#232c4d","g":"#e8c24a","K":"#141414"},
+      "rows":[
+        "gbbbbbbbbbbbbbbg",
+        "bbsbbsbbsbbsbbbb",
+        "bbbbbbbbbbbbbbbb",
+        "bbsbbsbbsbbsbbbb",
+        "bbbbbbbbbbbbbbbb",
+        ".bbbbbbbbbbbbbb.",
+        "...gg......gg..."
+      ] }
+  },
+  "pirate": {
+    "head": { "y":6, "x":4, "pal":{"h":"#2a2320","w":"#f4f1e6","K":"#141414","d":"#101014"},
+      "rows":[
+        "...hhhhhhhhhh...",
+        "..hhhhhhhhhhhh..",
+        ".hhhhhwwhhhhhhh.",
+        "KKKKKKKKKKKKKKKK",
+        "...............",
+        "...............",
+        "..........ddd.."
+      ] },
+    "body": { "y":14, "x":4, "pal":{"r":"#b23b3b","d":"#7d2727","y":"#e8c24a","K":"#141414"},
+      "rows":[
+        "KrrrrrrrrrrrrrrK",
+        "rrrddKKddrrrrrr.",
+        "rrrrrrrrrrrrrr..",
+        "rrryyKKyyrrrrr..",
+        "rrrrrrrrrrrr....",
+        ".rrrrrrrrrrr....",
+        "...K......K....."
+      ] }
+  },
+  "tokyo": {
+    "head": { "y":9, "x":4, "pal":{"p":"#ff2fa0","c":"#28e6ff","K":"#0a0a0f"},
+      "rows":[
+        "pppppppppppppppp",
+        "KKKKKKKKKKKKKKKK",
+        "KccccccccccccccK",
+        "KccccccccccccccK"
+      ] },
+    "body": { "y":14, "x":4, "pal":{"d":"#1b1e2b","c":"#28e6ff","K":"#0a0a0f"},
+      "rows":[
+        "KddddddddddddddK",
+        "dcddddddddddddcd",
+        "dddddddddddddd..",
+        "dcccccccccccccd.",
+        "dddddddddddddd..",
+        ".dddddddddddd...",
+        "...d......d....."
+      ] }
+  },
+  "christmas": {
+    "head": { "y":6, "x":4, "pal":{"r":"#c0392b","w":"#f4f1e6","K":"#141414"},
+      "rows":[
+        ".............ww.",
+        "....rrrrrrrr....",
+        "...rrrrrrrrrr...",
+        "..rrrrrrrrrrrr..",
+        "wwwwwwwwwwwwwwww",
+        "...............",
+        "...............",
+        "...wwwwwwwwww..."
+      ] },
+    "body": { "y":14, "x":4, "pal":{"r":"#c0392b","w":"#f4f1e6","y":"#e8c24a","K":"#141414"},
+      "rows":[
+        "wKrrrrrrrrrrKww.",
+        "rrrrrrrrrrrrrr..",
+        "rrrKKKKKKKKrr...",
+        "rrrKyyKKyyKrr...",
+        "rrrrrrrrrrrr....",
+        ".rrrrrrrrrrr....",
+        "..wKw....wKw...."
+      ] }
+  }
+}
