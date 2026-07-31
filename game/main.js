@@ -52,7 +52,13 @@ const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_j
   diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino',
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
   retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus' };
-const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen'];  // Stitch製 装飾プロップ
+// Stitch製 装飾プロップ。汎用12種 + テーマ別6種×5テーマ(部屋画像と同じアイソメ視点で生成)
+const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen',
+  'cir_popcorn','cir_ballstand','cir_trunks','cir_ringtoss','cir_cannon','cir_stool',                 // 🎪 サーカス
+  'sus_lane','sus_oke','sus_tea','sus_sake','sus_neko','sus_netacase',                                // 🍣 回転寿司
+  'wes_barreltable','wes_horseshoe','wes_wheel','wes_campfire','wes_cactus','wes_assay',              // 🤠 西部開拓
+  'bee_combtable','bee_honeypots','bee_pollen','bee_candles','bee_throne','bee_frames',               // 🐝 ミツバチの巣
+  'stm_boiler','stm_cogs','stm_console','stm_chair','stm_orrery','stm_coal'];                         // ⚙️ スチームパンク
 // エージェントのスキン(頭アクセ e + 体の色 body)。クリックで巡回・プロジェクト単位で永続化。
 const SKINS = [
   {id:'none',   e:'',   n:'なし'},

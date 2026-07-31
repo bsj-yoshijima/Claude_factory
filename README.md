@@ -69,6 +69,9 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 | `server.mjs` | セッションを読んで配信＋静的ファイル配信する常駐サーバ |
 | `claude-factory.html` | **メインのゲーム画面**（背景画像・設置・工場/休憩室・ダッシュボード） |
 | `assets/factory-*.jpg` | Stitch 生成の空部屋背景（morning / evening / night） |
+| `assets/prop_*.png` | Stitch 生成の装飾プロップ（汎用12種 + テーマ別6種×5テーマ） |
+| `assets/prop-sheets/*.jpg` | プロップの生成元シート（1枚に3×2で6体）。切り出し前の素材 |
+| `tools/cut_props.py` | シートから1体ずつ切り出して背景・接地影を抜き、`assets/prop_*.png` を作る |
 | `pixel-factory.html` | 旧・全手描きドット絵版（`http://localhost:4321/classic` で表示） |
 | `index.html` | 初期のシンプル版（カードUI） |
 | `machine-concepts.html` | 工場に足す機械のコンセプトボード |
