@@ -275,13 +275,16 @@ function openDex(tab){
   if(_dexTab==='prod'){
     // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
     body=`<div class="pgrid">${PRODS.map(p=>{ const n=c.dex[p.id]||0;
+      // 発見済みには主な原材料をヒントとして出す（レシピを推測する手がかり）
+      const hint=p.m.length?p.m.map(x=>MAT[x]?MAT[x].e:'').join(''):'';
       return n ? `<div class="pcard" style="border-color:${RAR[p.r].c}"><div class="e">${p.e}</div>
                     <div class="nm">${p.n}</div><div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
-                    <div class="qn">×${n}</div></div>`
+                    <div class="qn">×${n}</div><div class="qn" title="主な原材料">${hint}</div></div>`
                : `<div class="pcard miss"><div class="e">❓</div><div class="nm">？？？</div>
                     <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`; }).join('')}</div>
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
-        原材料の組み合わせを変えて未発見の製品を探そう。1製品 = ${CRAFT_WP}WP。</div>`;
+        原材料の組み合わせを変えて未発見の製品を探そう。1製品 = ${CRAFT_WP}WP。
+        レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。</div>`;
   } else {
     body=`<div class="grid">${PRIZES.map(p=>{ const have=G.inv[p.id]||0,col=RAR[p.r].c;
       return have? `<div class="cell own" data-id="${p.id}" style="border-color:${col}" title="クリックで部屋に飾る">${p.e}<small style="color:${col}">${RAR[p.r].n}</small><span class="cnt">×${have}</span></div>`
@@ -349,7 +352,10 @@ const PRODS = [
   {id:'parfait', e:'🍧',n:'豪華パフェ',    r:4,m:['milk','sugar','choco','egg']},
   {id:'bento',   e:'🍱',n:'特上弁当',      r:4,m:['rice','meat','veg','egg']},
   {id:'course',  e:'🏆',n:'伝説のフルコース',r:5,m:['meat','cheese','tomato','butter','rice','veg']},
+  // レシピに無い組み合わせのときだけ出る。組み合わせを探す動機になる「ハズレ枠」
+  {id:'blob',    e:'🪨',n:'謎のカタマリ',   r:1,m:[]},
 ];
+const BLOB='blob';
 const PROD = Object.fromEntries(PRODS.map(p=>[p.id,p]));
 
 // 組み合わせ（重複を除いた原材料のソート済みキー）→ 出うる製品5種
@@ -369,25 +375,17 @@ const RECIPES = {
   'rice,veg'            : ['onigiri','salad','bento','soup','sushi'],
   'egg,flour'           : ['bread','pancake','cookie','omelet','croissant'],
   'noodle,veg'          : ['cupnoodle','ramen','pasta','salad','soup'],
+  'butter,veg'          : ['fries','salad','soup','gratin','omelet'],
+  'cheese,meat,tomato'  : ['course','burger','pizza','pasta','gratin'],
 };
 
 // 未定義の組み合わせは、組み合わせ文字列から「決定的に」5種を選ぶ。
 // Math.random にすると開き直すたび候補が変わってしまうため、必ずハッシュ由来にする。
-function hash32(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
-// 未定義の組み合わせは「原材料との相性」で上位5種を選ぶ。
-// 同点は組み合わせ文字列のハッシュで決める（=同じ組み合わせなら常に同じ5種。
-// Math.random にすると開き直すたび候補が変わって「探索」が成立しない）。
+// レシピに定義された組み合わせだけが製品になる。
+// それ以外は「🪨 謎のカタマリ」。組み合わせを当てにいく動機がこれで生まれる。
 function poolFor(key){
-  if(RECIPES[key]) return RECIPES[key].filter(id=>PROD[id]);
-  const mats=key.split(','), h=hash32(key);
-  const scored=PRODS.map((p,i)=>{
-    const hit=mats.filter(m=>p.m.includes(m)).length;
-    const miss=p.m.length-hit;                       // 余計な材料が多い製品は少し下げる
-    const rare=(RAR[p.r].w/100);                     // レアほど出にくくする
-    const jitter=((Math.imul(h^(i*2654435761),2246822519)>>>0)/4294967296)*0.9;
-    return { id:p.id, s: hit*3 - miss*0.35 + rare*0.6 + jitter };
-  }).sort((a,b)=>b.s-a.s);
-  return scored.slice(0,5).map(x=>x.id);
+  const r=RECIPES[key];
+  return (r && r.length) ? r.filter(id=>PROD[id]) : [BLOB];
 }
 // 5種の中からレア度で重み付けして1つ引く（同じ組み合わせでも出るものが変わる）
 function rollProduct(key){
@@ -512,10 +510,10 @@ function updateDoneBtn(){
 function openDone(){
   const c=craftState();
   const had={}; for(const k in c.dex) had[k]=c.dex[k];      // 「初めて」の判定は登録前の図鑑で行う
-  const seenNow={};
   const cards=[...c.made].reverse().slice(0,200).map(m=>{
     const p=PROD[m.pid]; if(!p) return '';
-    const isNew = !had[m.pid] && !seenNow[m.pid]; if(!had[m.pid]) seenNow[m.pid]=1;
+    // 未登録の製品は該当する全部に NEW を付ける（3個できていれば3個とも）
+    const isNew = !had[m.pid];
     const ks=(m.key||'').split(',').map(x=>MAT[x]?MAT[x].e:'').join('');
     return `<div class="pcard">${isNew?'<span class="new">NEW</span>':''}
       <div class="e">${p.e}</div><div class="nm">${p.n}</div>
