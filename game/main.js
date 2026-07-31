@@ -49,6 +49,7 @@ const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
 const MACHS_JP = { red:'抽出機', green:'成形機', blue:'演算機', yellow:'選別機' };
 // テーマ専用の部屋画像(Stitch製・壁/床/窓を焼き込み)。ここにあるテーマは背景ごと差し替える
 const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_japan', china:'room_china' };
+const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen'];  // Stitch製 装飾プロップ
 // エージェントのスキン(頭アクセ e + 体の色 body)。クリックで巡回・プロジェクト単位で永続化。
 const SKINS = [
   {id:'none',   e:'',   n:'なし'},
@@ -78,6 +79,7 @@ class Main extends Phaser.Scene {
     this.load.image('room_undersea','assets/room-undersea.png');
     this.load.image('room_japan','assets/room-japan.png');
     this.load.image('room_china','assets/room-china.png');
+    for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
     for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     this.load.image('belt_seg','assets/belt_seg.png');
@@ -183,6 +185,10 @@ class Main extends Phaser.Scene {
       const img=this.add.image(p.x,p.y,'dec_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.0*CELL/img.height).setTint(tint);
       const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
       objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
+    } else if(e.kind==='prop'){
+      const img=this.add.image(p.x,p.y,'prop_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.35*CELL/img.height).setTint(tint);
+      const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.09,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.0,img.displayWidth*0.46).setAlpha(0.5);
+      objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
     } else if(e.kind==='emoji'){
       const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.05,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.72,CELL*0.32).setAlpha(0.42);
       const t=this.add.text(p.x,p.y-CELL*0.12,e.sub,{fontSize:Math.round(CELL*1.05)+'px'}).setOrigin(0.5,1).setDepth(p.y);
@@ -226,6 +232,7 @@ class Main extends Phaser.Scene {
   placeBelt(){ return this.addPlaced('belt', null); }
   placeDeco(type){ return this.addPlaced('deco', type); }
   placeEmojiDeco(emoji){ return this.addPlaced('emoji', emoji); }
+  placeProp(name){ if(!this.textures.exists('prop_'+name)) return null; return this.addPlaced('prop', name); }
   placePrize(emoji,color){ return this.addPlaced('prize', {e:emoji,color}); }
   syncMachines(list){ for(const m of (list||[])) this.addPlaced('machine', m.type, {lvl:m.lvl||1}); }
   /* 設置時のポップ演出 */

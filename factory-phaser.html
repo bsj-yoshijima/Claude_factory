@@ -99,14 +99,18 @@ const MACH={ red:{e:'🟥',n:'抽出機',price:0}, green:{e:'🟩',n:'成形機'
 const lvCost=(lvl)=> Math.round(120*lvl*lvl);        // レベルアップ費用
 const BELT_PRICE=450;
 const DECO={ crate:{e:'📦',n:'木箱',price:150}, drum:{e:'🛢️',n:'ドラム缶',price:200}, plant:{e:'🪴',n:'観葉植物',price:180}, pallet:{e:'🧱',n:'パレット',price:160}, sign:{e:'🚧',n:'標識',price:220} };
+// Stitch製 装飾プロップ(床に置くオブジェクト)
+const PROP={ vase:{e:'🏺',n:'装飾壺',price:220}, palm:{e:'🌴',n:'ヤシの木',price:240}, rug:{e:'🧶',n:'絨毯',price:200}, flantern:{e:'🪔',n:'燭台ランプ',price:260},
+  fountain:{e:'⛲',n:'噴水',price:450}, chest:{e:'🧰',n:'宝箱',price:400}, cushion:{e:'🛋️',n:'クッション',price:180}, bonsai:{e:'🎍',n:'盆栽',price:280},
+  lantern:{e:'🏮',n:'吊り提灯',price:220}, pedestal:{e:'🗿',n:'石台座',price:320}, flower:{e:'🌸',n:'花鉢',price:170}, screen:{e:'🖼️',n:'屏風',price:340} };
 const BG={ auto:{n:'標準（時刻連動）',price:0}, blue:{n:'快晴',price:1800}, sunset:{n:'夕焼け',price:2200}, night:{n:'星空',price:2600}, space:{n:'宇宙',price:4200}, aurora:{n:'オーロラ',price:5200} };
 const FLOOR={ wood:{n:'木材（標準）',price:0}, cool:{n:'クールグレー',price:1000}, crimson:{n:'レッドタイル',price:1200}, forest:{n:'フォレスト',price:1200}, gold:{n:'ゴールド',price:3200} };
 // テーマシリーズ: 空テーマ(sky)＋床材(floor)＋絵文字装飾セット(decos) をまとめて購入/適用
 const SERIES={
-  arabia:{n:'🕌 アラビア', price:6000, sky:'arabia',   floor:'wood',    decos:['🪔','🏺','🌴','🐫','🕌']},
-  undersea:{n:'🐚 海底',   price:6000, sky:'undersea', floor:'wood',    decos:['🪸','🐚','🐠','🦀','🐙']},
-  japan:{n:'⛩️ 日本',      price:6000, sky:'japan',    floor:'wood',    decos:['🏮','⛩️','🎍','🎐','🍡']},
-  china:{n:'🐉 中華',      price:6000, sky:'china',    floor:'wood',    decos:['🏮','🐉','🧧','🀄','🐼']},
+  arabia:{n:'🕌 アラビア', price:6000, sky:'arabia',   floor:'wood',    decos:[]},
+  undersea:{n:'🐚 海底',   price:6000, sky:'undersea', floor:'wood',    decos:[]},
+  japan:{n:'⛩️ 日本',      price:6000, sky:'japan',    floor:'wood',    decos:[]},
+  china:{n:'🐉 中華',      price:6000, sky:'china',    floor:'wood',    decos:[]},
 };
 
 let G={ pity:0, inv:{}, prodP:90, money:0, machines:[{type:'red',lvl:1}], belts:0, decos:{},
@@ -185,6 +189,7 @@ function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machin
   if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${MACH[e.sub].e} ${MACH[e.sub].n} を Lv${e.lvl} に強化！(生産↑)`); }
 function buyBelt(){ if(G.money<BELT_PRICE)return; G.money-=BELT_PRICE; if(window.__scene)window.__scene.placeBelt(); snapLayout(); saveGame(); updateBadge(); toast('🛗 コンベアを購入・設置！'); }
 function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return; G.money-=pr; if(window.__scene)window.__scene.placeDeco(t); snapLayout(); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入・設置！`); }
+function buyProp(t){ const pr=PROP[t].price; if(G.money<pr)return; G.money-=pr; if(window.__scene)window.__scene.placeProp(t); snapLayout(); saveGame(); updateBadge(); toast(`${PROP[t].n} を購入・設置！`); }
 function selectBg(k){ if(!G.bgOwned.includes(k)){ const pr=BG[k].price; if(G.money<pr)return; G.money-=pr; G.bgOwned.push(k); toast(`背景「${BG[k].n}」を購入！`); } G.bg=k; if(window.__scene&&window.__scene.setSkyTheme)window.__scene.setSkyTheme(k); saveGame(); updateBadge(); }
 function selectFloor(k){ if(!G.floorOwned.includes(k)){ const pr=FLOOR[k].price; if(G.money<pr)return; G.money-=pr; G.floorOwned.push(k); toast(`床材「${FLOOR[k].n}」を購入！`); } G.floor=k; if(window.__scene&&window.__scene.setFloor)window.__scene.setFloor(k); saveGame(); updateBadge(); }
 function buySeries(k){ const S=SERIES[k]; if(!G.seriesOwned.includes(k)){ if(G.money<S.price)return; G.money-=S.price; G.seriesOwned.push(k);
@@ -217,7 +222,11 @@ function openShop(tab){ if(tab)_shopTab=tab;
     } else if(_shopTab==='equip'){
       body = `<div class="rc"><div class="ic">🛗</div><div class="mid"><div class="nm">コンベア <span style="color:#9fb0c0;font-size:10px">所持 ${cnt('belt')}</span></div><div class="cost">💰${BELT_PRICE}</div></div>
         <button data-belt="1" ${G.money>=BELT_PRICE?'':'disabled'}>購入</button></div>`;
-      body += '<div class="cost" style="margin:12px 0 6px">装飾品</div>';
+      body += '<div class="cost" style="margin:12px 0 6px">装飾プロップ（Stitch製・床に設置）</div>';
+      body += Object.keys(PROP).map(t=>`<div class="rc"><div class="ic">${PROP[t].e}</div>
+        <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">所持 ${cnt('prop',t)}</span></div><div class="cost">💰${PROP[t].price}</div></div>
+        <button data-prop="${t}" ${G.money>=PROP[t].price?'':'disabled'}>購入</button></div>`).join('');
+      body += '<div class="cost" style="margin:12px 0 6px">その他</div>';
       body += Object.keys(DECO).map(t=>`<div class="rc"><div class="ic">${DECO[t].e}</div>
         <div class="mid"><div class="nm">${DECO[t].n} <span style="color:#9fb0c0;font-size:10px">所持 ${cnt('deco',t)}</span></div><div class="cost">💰${DECO[t].price}</div></div>
         <button data-deco="${t}" ${G.money>=DECO[t].price?'':'disabled'}>購入</button></div>`).join('');
@@ -247,6 +256,7 @@ function openShop(tab){ if(tab)_shopTab=tab;
     panel.querySelectorAll('[data-buymach]').forEach(b=>b.onclick=()=>{ buyMachine(b.dataset.buymach); render(); });
     panel.querySelectorAll('[data-belt]').forEach(b=>b.onclick=()=>{ buyBelt(); render(); });
     panel.querySelectorAll('[data-deco]').forEach(b=>b.onclick=()=>{ buyDeco(b.dataset.deco); render(); });
+    panel.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{ buyProp(b.dataset.prop); render(); });
     panel.querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>{ selectBg(b.dataset.bg); render(); });
     panel.querySelectorAll('[data-fl]').forEach(b=>b.onclick=()=>{ selectFloor(b.dataset.fl); render(); });
     panel.querySelectorAll('[data-series]').forEach(b=>b.onclick=()=>{ buySeries(b.dataset.series); render(); });
