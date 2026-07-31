@@ -7,8 +7,11 @@ import path from 'node:path';
 import os from 'node:os';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { startOtelReceiver, snapshot as otelSnapshot } from './otel.mjs';
 
 const PORT = process.env.PORT || 4321;
+// OTel の受信は別ポートに分離（将来チームに公開するときに 4321 の画面と権限を分けられるように）
+const OTEL_PORT = process.env.OTEL_PORT || 4318;
 const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -32,6 +35,30 @@ function livePids() {
   }
 }
 
+// セッションJSONには status が無いので、トランスクリプト(*.jsonl)の更新時刻で稼働判定する。
+// 会話/ツール実行のたびに追記されるので、直近 BUSY_WINDOW_SEC 秒に更新があれば「作業中」とみなす。
+const BUSY_WINDOW_SEC = 30;
+let transcriptMap = new Map();   // sessionId -> jsonl のパス
+let transcriptMapAt = 0;
+function transcriptPath(sessionId) {
+  if (Date.now() - transcriptMapAt > 5000) {
+    const m = new Map();
+    for (const p of listTranscripts(PROJECTS_DIR)) {
+      m.set(path.basename(p, '.jsonl'), p);
+    }
+    transcriptMap = m;
+    transcriptMapAt = Date.now();
+  }
+  return transcriptMap.get(sessionId);
+}
+// 最終更新からの経過秒。トランスクリプトが見つからなければ null
+function lastActivitySec(sessionId) {
+  const p = sessionId && transcriptPath(sessionId);
+  if (!p) return null;
+  try { return Math.round((Date.now() - fs.statSync(p).mtimeMs) / 1000); }
+  catch { return null; }
+}
+
 function collectSessions() {
   const live = livePids();
   let files = [];
@@ -40,7 +67,6 @@ function collectSessions() {
   } catch {
     return [];
   }
-  const now = Date.now();
   const workers = [];
   for (const f of files) {
     let d;
@@ -49,7 +75,9 @@ function collectSessions() {
     const pid = d.pid;
     const alive = live ? live.has(pid) : true;
     if (!alive) continue; // 生きているプロセスだけ工場に並べる
-    const status = d.status || 'idle';
+    const idleSec = lastActivitySec(d.sessionId);
+    // d.status があればそれを優先（将来 Claude 側が持つようになった場合の互換）
+    const status = d.status || (idleSec !== null && idleSec <= BUSY_WINDOW_SEC ? 'busy' : 'idle');
     workers.push({
       pid,
       sessionId: d.sessionId,
@@ -60,7 +88,7 @@ function collectSessions() {
       version: d.version || '',
       status,                         // "busy" | "idle"
       working: status === 'busy',     // キャラが手を動かす基準
-      idleSec: d.updatedAt ? Math.round((now - d.updatedAt) / 1000) : null,
+      idleSec,
       startedAt: d.startedAt || null,
     });
   }
@@ -118,6 +146,12 @@ function refreshTokens() {
 const server = http.createServer((req, res) => {
   const route = (req.url || '/').split('?')[0];
   const JSONH = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' };
+  // OTel 集計スナップショット（レシーバと同一プロセスなのでメモリを直接読める）
+  if (route === '/api/otel') {
+    res.writeHead(200, JSONH);
+    res.end(JSON.stringify(otelSnapshot()));
+    return;
+  }
   if (route === '/api/usage') {
     res.writeHead(200, JSONH);
     res.end(JSON.stringify({ totalTokens: tokTotal, computedAt: tokComputedAt }));
@@ -169,15 +203,19 @@ const server = http.createServer((req, res) => {
   // /classic=旧ドット絵, /next=Phaser基盤(プロトタイプ), それ以外=現行ゲーム
   const page = urlPath === '/classic' ? 'pixel-factory.html'
              : urlPath === '/next'    ? 'factory-phaser.html'
+             : urlPath === '/metrics' ? 'metrics.html'
              : 'claude-factory.html';
   const html = fs.readFileSync(path.join(__dirname, page), 'utf8');
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 });
 
+startOtelReceiver(Number(OTEL_PORT));
+
 server.listen(PORT, () => {
   console.log(`\n  🏭 Claude Factory 起動しました`);
-  console.log(`  → http://localhost:${PORT}\n`);
+  console.log(`  → http://localhost:${PORT}`);
+  console.log(`  → http://localhost:${PORT}/metrics  (📊 メトリクス)\n`);
   console.log(`  データ元: ${SESSIONS_DIR}`);
   const w = collectSessions();
   console.log(`  現在: 全${w.length}体 / 稼働中${w.filter(x => x.working).length}体\n`);

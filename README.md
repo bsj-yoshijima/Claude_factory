@@ -46,6 +46,64 @@ node server.mjs                       # 再起動
 - `?demo=1` … サンプルの設置レイアウトを一時表示（未配置のときのみ）
 - `?dummy=12` … サーバ未接続時にダミーのエージェントを表示（プレビュー用）
 
+## 📊 メトリクス（OTel プロトタイプ）
+
+`http://localhost:4321/metrics` — Claude Code から OpenTelemetry で送られてくる実績値を全部そのまま並べ、WP（Work Point）を集計する検証用ページ。
+
+有効化するには `~/.claude/settings.json` の `env` に以下を入れて、**新しい** claude セッションを開始する（起動中のセッションには反映されない）。
+
+```json
+"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+"OTEL_METRICS_EXPORTER": "otlp",
+"OTEL_LOGS_EXPORTER": "otlp",
+"OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+"OTEL_METRIC_EXPORT_INTERVAL": "10000",
+"OTEL_LOGS_EXPORT_INTERVAL": "5000",
+"OTEL_LOG_USER_PROMPTS": "0",
+"OTEL_LOG_ASSISTANT_RESPONSES": "0",
+"OTEL_LOG_TOOL_DETAILS": "0",
+"OTEL_LOG_TOOL_CONTENT": "0"
+```
+
+`http/json` が使えるので **OTel Collector は不要**。`otel.mjs` が素の Node で OTLP を直接受ける（依存ゼロを維持）。
+
+```
+Claude Code ──OTLP/JSON──▶ :4318 /v1/metrics, /v1/logs   ← otel.mjs（受信 + WP集計）
+                                    │  生ログを ~/.claude/factory/otel-raw.jsonl に追記
+                                    ▼
+                           :4321 /api/otel ──▶ /metrics（表示）
+```
+
+生ログを残しているので、`otel.mjs` の `WP` の重みを書き換えて再起動すれば**過去データを自動リプレイして再集計**される。
+
+### 実測でわかったドキュメントとの差異
+
+| 項目 | 実際 |
+|---|---|
+| イベント名 | `event.name` は `claude_code.` プレフィックス**無し**（`tool_result` 等） |
+| 識別属性 | `user.email` / `session.id` / `organization.id` は resource ブロックではなく**各 datapoint / logRecord の attributes 側**に入る |
+| 未記載イベント | `hook_registered` / `hook_execution_start` / `hook_execution_complete` が実在（`hook_event=PostToolUse:Bash` まで取れる） |
+| プロンプト内容 | `prompt` / `response` 属性は存在するが値は `<REDACTED>`（既定で内容は送られない） |
+| `DISABLE_TELEMETRY=1` との併存 | 併存可。OTel 送信はブロックされない |
+
+### WP の重み（`otel.mjs` の `WP`）
+
+ツール実行は `success=true` のみ加点。
+
+| 対象 | 重み |
+|---|---|
+| `Edit` / `Write` / `NotebookEdit` | 10 |
+| `Bash` | 4 |
+| `Agent` / `Task` | 15 |
+| `Skill` | 25 |
+| `Read` / `Grep` / `Glob` | 2 |
+| その他・MCP ツール | 3 |
+| `lines_of_code.count` (added) | × 0.5 |
+| `lines_of_code.count` (removed) | × 0.3 |
+| `commit.count` | × 50 |
+| `pull_request.count` | × 150 |
+
 ## 仕組み
 
 ```
