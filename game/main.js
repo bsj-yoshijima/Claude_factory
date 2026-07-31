@@ -137,7 +137,7 @@ class Main extends Phaser.Scene {
     window.__scene=this;
     // Scene↔UI ブリッジ(スキン選択画面が参照)
     window.__factory={
-      getAgents:()=>Object.keys(this.agents).map(k=>{ const a=this.agents[k]; return {proj:a.proj, skinId:a.skinId||'none', working:!!a.busy}; }),
+      getAgents:()=>Object.keys(this.agents).map(k=>{ const a=this.agents[k]; return {proj:a.proj, skinId:a.skinId||'none', working:!!a.busy, color:PRESETS[a.ci].b}; }),
       applySkin:(proj,skinId)=>this.applySkin(proj,skinId),
       skinList:SKINS,
     };
@@ -479,7 +479,7 @@ class Main extends Phaser.Scene {
         const s=1.5*CELL/(28*3);
         const shadow=this.add.image(p.x,p.y,'shadow').setDisplaySize(CELL*0.95,CELL*0.42).setAlpha(0.48).setRotation(0.5);
         const sp=this.add.sprite(p.x,p.y,`m${ci}_stand`).setOrigin(0.5,1).setScale(s);
-        const lbl=this.add.text(p.x,p.y-30,w.project||'',{fontFamily:'monospace',fontSize:'11px',color:'#eafff6'}).setOrigin(0.5,1);
+        const lbl=this.add.text(p.x,p.y-30,w.project||'',{fontFamily:'monospace',fontSize:'11px',color:'#eafff6'}).setOrigin(0.5,1).setVisible(false);   // 名前は画面左の凡例に表示(頭上ラベルは非表示)
         lbl.setShadow(0,1,'#000',3,true,true);
         this.agents[key]={sp,lbl,shadow,ci,cell,px:p.x,py:p.y,path:[],state:'walk',after:null,timer:0,face:1,busy:w.working,restType:'sit',z:null,cup:null,scl:s,
           hat:null, hatBaseY:HAT_BASE_Y, proj:w.project||'', skinId:(this.skins&&this.skins[w.project])||'none'};
