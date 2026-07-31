@@ -47,6 +47,8 @@ function makeMascot(scene, key, pal, pose){
 
 const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
 const MACHS_JP = { red:'抽出機', green:'成形機', blue:'演算機', yellow:'選別機' };
+// テーマ専用の部屋画像(Stitch製・壁/床/窓を焼き込み)。ここにあるテーマは背景ごと差し替える
+const ROOM_TEX = { arabia:'room_arabia' };
 // エージェントのスキン(頭アクセ e + 体の色 body)。クリックで巡回・プロジェクト単位で永続化。
 const SKINS = [
   {id:'none',   e:'',   n:'なし'},
@@ -72,6 +74,7 @@ const DEMO = [
 class Main extends Phaser.Scene {
   preload(){
     this.load.image('bg_room','assets/factory-room.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
+    this.load.image('room_arabia','assets/room-arabia.png');   // Stitch製 テーマ部屋(壁/床/窓 焼き込み)
     for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     this.load.image('belt_seg','assets/belt_seg.png');
@@ -333,6 +336,7 @@ class Main extends Phaser.Scene {
       japan:{amb:0xffe6ea,obj:0xf0d8dc,shaft:0xffd0d8,son:0.14,sky:0xF6B5C0,day:0.5,nf:0},        // 桜の空
       china:{amb:0xffcf9e,obj:0xe8b58a,shaft:0xffcf8a,son:0.16,sky:0xC0342B,day:0.3,nf:0.3} };    // 紅い空
     const t=TH[this.skyTheme]; if(t){ amb=t.amb; objAmb=t.obj; shaftCol=t.shaft; shaftOn=t.son; sky=t.sky; dayF=t.day; nf=t.nf; }
+    if(this.themedRoom){ amb=0xffffff; objAmb=0xf0e6d6; shaftOn=0; nf=0; dayF=0; }   // テーマ部屋画像はそのまま活かす(過剰な色掛け/採光を切る)
     this.ambInt=objAmb; this.ambB=ambB; this.shaftOn=shaftOn; this.lightOn=nf;
     this._ambC=Phaser.Display.Color.IntegerToColor(objAmb);
     this._shaftC=Phaser.Display.Color.IntegerToColor(shaftCol);
@@ -343,7 +347,19 @@ class Main extends Phaser.Scene {
     if(this.sun){ this.sun.setAlpha(dayF); this.sunG.setAlpha(dayF*0.5); }
     if(this.moon){ this.moon.setAlpha(nf); this.moonG.setAlpha(nf*0.5); for(const s of this.stars) s.setAlpha(nf); }
   }
-  setSkyTheme(theme){ this.skyTheme=(theme&&theme!=='auto')?theme:null; this.updateLighting(); }
+  /* テーマ部屋(画像ごと差し替え)。焼き込み済みなので動的な空/採光/床オーバーレイは切る */
+  setRoom(key){ const tex=ROOM_TEX[key]; this.themedRoom=!!tex;
+    if(this.bgImg){ this.bgImg.setTexture(tex||'bg_room').setDisplaySize(W,H); }
+    const vis=!this.themedRoom;
+    if(this.skyLayer) this.skyLayer.setVisible(vis);
+    if(this.sun){ this.sun.setVisible(vis); this.sunG.setVisible(vis); }
+    if(this.moon){ this.moon.setVisible(vis); this.moonG.setVisible(vis); }
+    for(const s of (this.stars||[])) s.setVisible(vis);
+    if(this.themedRoom && this.floorGfx) this.floorGfx.clear();   // 床は部屋画像に含まれる
+  }
+  setSkyTheme(theme){
+    if(ROOM_TEX[theme]){ this.skyTheme=null; this.setRoom(theme); this.updateLighting(); return; }
+    this.setRoom(null); this.skyTheme=(theme&&theme!=='auto')?theme:null; this.updateLighting(); }
   setFloor(theme){ if(!this.floorGfx){ this.floorGfx=this.add.graphics().setDepth(-999); }
     const g=this.floorGfx; g.clear(); g.setBlendMode(Phaser.BlendModes.NORMAL);
     // シリーズ床材=不透明のタイル模様に描き替え(素材そのものを変える)
