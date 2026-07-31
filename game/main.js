@@ -254,6 +254,9 @@ class Main extends Phaser.Scene {
     for(let c=0;c<GU;c++){ const uu=(c+OFF_U)/GU; if(uu>0&&uu<1) gl(uu,0,uu,1); }
     for(let r=0;r<GV;r++){ const vv=(r+OFF_V)/GV; if(vv>0&&vv<1) gl(0,vv,1,vv); }
     gl(0,0,1,0); gl(1,0,1,1); gl(1,1,0,1); gl(0,1,0,0);   // 床の外周
+    // セル中心ドット(=オブジェクトの設置点)。各マスの中心が一目で分かる
+    this.editGrid.fillStyle(0x7fe6ff,0.6);
+    for(let c=0;c<GU;c++) for(let r=0;r<GV;r++){ const p=cellXY(c,r); this.editGrid.fillCircle(p.x,p.y,2.2); }
     this.trash=this.add.container(72,H-52,[ this.add.rectangle(0,0,124,72,0x3a1418,0.85).setStrokeStyle(2,0xe05a4e), this.add.text(0,0,'🗑 ここへ撤去',{fontSize:'13px',color:'#ffd0c8'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     this._trashRect=new Phaser.Geom.Rectangle(10,H-88,124,74);
     // 空き床クリックで、パレットで選択中のアイテムを設置
