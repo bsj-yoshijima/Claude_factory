@@ -159,9 +159,12 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 | ファイル | 内容 |
 |---|---|
 | `server.mjs` | セッションを読んで配信＋静的ファイル配信する常駐サーバ |
-| `claude-factory.html` | **メインのゲーム画面**（背景画像・設置・工場/休憩室・ダッシュボード） |
-| `assets/factory-*.jpg` | Stitch 生成の空部屋背景（morning / evening / night） |
-| `pixel-factory.html` | 旧・全手描きドット絵版（`http://localhost:4321/classic` で表示） |
+| `factory-phaser.html` / `game/main.js` | **現行のゲーム画面**（Phaser版。`/` と `/next`） |
+| `metrics.html` / `otel.mjs` | 📊 メトリクス（`/metrics`）。OTel 受信 + WP / スコアカード集計 |
+| `assets/room-*.png` | Stitch 生成のテーマ別背景（`docs/stitch-prompts.md` にプロンプト） |
+| `claude-factory.html` | 旧・Canvas版（`/legacy`） |
+| `assets/factory-*.jpg` | 旧Canvas版の空部屋背景（morning / evening / night） |
+| `pixel-factory.html` | 旧・全手描きドット絵版（`/classic`） |
 | `index.html` | 初期のシンプル版（カードUI） |
 | `machine-concepts.html` | 工場に足す機械のコンセプトボード |
 | `proposal.html` / `slides.html` / `slides-en.html` / `Claude-Factory.pdf` | 企画書・発表スライド |
