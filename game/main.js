@@ -48,7 +48,7 @@ function makeMascot(scene, key, pal, pose){
 const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
 const MACHS_JP = { red:'抽出機', green:'成形機', blue:'演算機', yellow:'選別機' };
 // テーマ専用の部屋画像(Stitch製・壁/床/窓を焼き込み)。ここにあるテーマは背景ごと差し替える
-const ROOM_TEX = { arabia:'room_arabia' };
+const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_japan', china:'room_china' };
 // エージェントのスキン(頭アクセ e + 体の色 body)。クリックで巡回・プロジェクト単位で永続化。
 const SKINS = [
   {id:'none',   e:'',   n:'なし'},
@@ -75,6 +75,9 @@ class Main extends Phaser.Scene {
   preload(){
     this.load.image('bg_room','assets/factory-room.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
     this.load.image('room_arabia','assets/room-arabia.png');   // Stitch製 テーマ部屋(壁/床/窓 焼き込み)
+    this.load.image('room_undersea','assets/room-undersea.png');
+    this.load.image('room_japan','assets/room-japan.png');
+    this.load.image('room_china','assets/room-china.png');
     for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     this.load.image('belt_seg','assets/belt_seg.png');
