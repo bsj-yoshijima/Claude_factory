@@ -51,7 +51,7 @@ const MACHS_JP = { red:'抽出機', green:'成形機', blue:'演算機', yellow:
 const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_japan', china:'room_china',
   diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino',
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
-  retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus' };
+  retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival' };
 const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen'];  // Stitch製 装飾プロップ
 // エージェントのスキン(頭アクセ e + 体の色 body)。クリックで巡回・プロジェクト単位で永続化。
 const SKINS = [
@@ -87,7 +87,7 @@ class Main extends Phaser.Scene {
     this.load.image('room_scifi','assets/room-scifi.png');
     this.load.image('room_cabin','assets/room-cabin.png');
     this.load.image('room_dino','assets/room-dino.png');
-    for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus']) this.load.image('room_'+n, `assets/room-${n}.png`);
+    for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival']) this.load.image('room_'+n, `assets/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
     for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
