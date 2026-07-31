@@ -49,7 +49,7 @@ const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
 const MACHS_JP = { red:'抽出機', green:'成形機', blue:'演算機', yellow:'選別機' };
 // テーマ専用の部屋画像(Stitch製・壁/床/窓を焼き込み)。ここにあるテーマは背景ごと差し替える
 const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_japan', china:'room_china',
-  diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin' };
+  diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino' };
 const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen'];  // Stitch製 装飾プロップ
 // エージェントのスキン(頭アクセ e + 体の色 body)。クリックで巡回・プロジェクト単位で永続化。
 const SKINS = [
@@ -84,6 +84,7 @@ class Main extends Phaser.Scene {
     this.load.image('room_fantasy','assets/room-fantasy.png');
     this.load.image('room_scifi','assets/room-scifi.png');
     this.load.image('room_cabin','assets/room-cabin.png');
+    this.load.image('room_dino','assets/room-dino.png');
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
     for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
