@@ -41,6 +41,11 @@ export const WP = {
   // その他メトリクス
   commit: 50,
   pullRequest: 150,
+  // 1人1分あたりのWP上限（工場のライン速度）。
+  // 実測(98分)では 1分あたり 中央値20 / 90%=45 / 最大83 WP だったので、200 は通常の作業では
+  // 1回もクリップしない。バランス調整ではなく、Read ループや大量並列エージェントのような
+  // 病的なケースを止めるガードレールとして置いている。クリップ量は必ず画面に出す。
+  perMinuteCap: 200,
 };
 
 /* ===================== OTLP/JSON のデコード補助 =====================
@@ -83,6 +88,7 @@ const resources = new Map();// resource key -> {attrs, count, last}
 const toolEvents = [];      // {t, tool, ok, sess, id}
 const agentWindows = [];    // {sess, start, end} — 同期 Agent の実行区間
 const apiEvents = [];       // {t, sess, qs} — api_request の query_source（親/子の判別に使う）
+const metricWpEvents = [];  // {t, id, wp} — メトリクス由来のWP（分バケットに入れるため時刻を保持）
 const TOOL_EVENTS_MAX = 200000;
 const RECENT_MAX = 300;
 
@@ -149,10 +155,13 @@ function ingestMetrics(payload) {
           if (m.name === 'claude_code.lines_of_code.count') {
             const w = a.type === 'added' ? WP.linesAdded : a.type === 'removed' ? WP.linesRemoved : 0;
             u.wpMetric += v * w; u.lines += v;
+            metricWpEvents.push({ t, id: identityOf(a), wp: v * w });
           } else if (m.name === 'claude_code.commit.count') {
             u.wpMetric += v * WP.commit;
+            metricWpEvents.push({ t, id: identityOf(a), wp: v * WP.commit });
           } else if (m.name === 'claude_code.pull_request.count') {
             u.wpMetric += v * WP.pullRequest;
+            metricWpEvents.push({ t, id: identityOf(a), wp: v * WP.pullRequest });
           }
           mark(t);
         }
@@ -302,6 +311,11 @@ export function snapshot() {
   // キー = ツール名 + 親/子。親と子を別行にして内訳が見えるようにする
   const agg = new Map();   // key -> {tool, sub, ok, ng, wp}
   const perUser = new Map();
+  const minuteBuckets = new Map();   // `${id}|${分}` -> 生WP
+  const addToMinute = (id, t, wp) => {
+    const k = `${id}|${Math.floor(t / 60000)}`;
+    minuteBuckets.set(k, (minuteBuckets.get(k) || 0) + wp);
+  };
   for (const e of toolEvents) {
     // Agent / Task 自身は「起動コスト」なので係数をかけない（入れ子でも二重に割り引かない）
     const isAgent = e.tool === 'Agent' || e.tool === 'Task';
@@ -313,6 +327,20 @@ export function snapshot() {
     const w = (WP.tool[e.tool] ?? WP.tool._default) * (sub ? WP.subagentFactor : 1);
     g.ok++; g.wp += w;
     perUser.set(e.id, (perUser.get(e.id) || 0) + w);
+    addToMinute(e.id, e.t, w);
+  }
+  for (const e of metricWpEvents) addToMinute(e.id, e.t, e.wp);
+
+  // 1分バケットごとに上限でクリップ。削られた量は必ず外に出す（黙って上限をかけない）
+  let wpRaw = 0, wpCapped = 0, clippedMinutes = 0;
+  const perUserCapped = new Map();
+  for (const [k, v] of minuteBuckets) {
+    const id = k.slice(0, k.lastIndexOf('|'));
+    wpRaw += v;
+    const c = Math.min(v, WP.perMinuteCap);
+    wpCapped += c;
+    perUserCapped.set(id, (perUserCapped.get(id) || 0) + c);
+    if (v > WP.perMinuteCap) clippedMinutes++;
   }
 
   const breakdown = [
@@ -328,11 +356,18 @@ export function snapshot() {
     { label: 'commit.count', count: commits, weight: WP.commit, wp: commits * WP.commit, kind: 'metric' },
     { label: 'pull_request.count', count: prs, weight: WP.pullRequest, wp: prs * WP.pullRequest, kind: 'metric' },
   ];
-  const wpTotal = breakdown.reduce((s, b) => s + b.wp, 0);
+  // breakdown の合計は「生WP」。上限適用後が実際に使う wpTotal
+  const wpTotal = wpCapped;
 
   return {
     stats: { ...stats, uptimeSec: Math.round((Date.now() - stats.startedAt) / 1000), rawFile: RAW_FILE },
     wpTotal, breakdown, weights: WP,
+    cap: {
+      perMinute: WP.perMinuteCap, wpRaw, wpCapped,
+      clipped: wpRaw - wpCapped, clippedMinutes,
+      activeMinutes: minuteBuckets.size,
+      peakPerMinute: minuteBuckets.size ? Math.max(...minuteBuckets.values()) : 0,
+    },
     subagent: {
       windows: agentWindows.length,
       toolsInside: [...agg.values()].filter(g => g.sub).reduce((s, g) => s + g.ok, 0),
@@ -346,7 +381,9 @@ export function snapshot() {
       sums: [...e.sums.entries()].sort((a, b) => b[1] - a[1]),
     })),
     users: [...users.values()]
-      .map(u => ({ ...u, wpTool: perUser.get(u.id) || 0, wp: u.wpMetric + (perUser.get(u.id) || 0) }))
+      .map(u => ({ ...u, wpTool: perUser.get(u.id) || 0,
+                   wpRaw: u.wpMetric + (perUser.get(u.id) || 0),
+                   wp: perUserCapped.get(u.id) ?? (u.wpMetric + (perUser.get(u.id) || 0)) }))
       .sort((a, b) => b.wp - a.wp),
     resources: [...resources.values()].sort((a, b) => b.last - a.last),
     recent: [...recent].reverse().slice(0, 120),

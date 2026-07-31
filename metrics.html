@@ -74,12 +74,13 @@
     <div class="cards">
       <div>
         <div class="wpbig" id="wpTotal">0</div>
-        <div class="sub">WP 合計（受信済みデータ全体）</div>
+        <div class="sub">有効WP 合計（1分上限を適用した後）</div>
       </div>
+      <div class="cards" id="capCards" style="margin:0"></div>
     </div>
     <table>
       <thead><tr>
-        <th>種別</th><th>項目</th><th class="n">件数 / 行数</th><th class="n">重み</th><th class="n">WP</th><th class="n">構成比</th>
+        <th>種別</th><th>項目</th><th class="n">件数 / 行数</th><th class="n">重み</th><th class="n">生WP</th><th class="n">構成比</th>
       </tr></thead>
       <tbody id="wpRows"></tbody>
     </table>
@@ -104,7 +105,7 @@
     <h2>ユーザー別 WP（リーダーボード素案）</h2>
     <p class="note">resource 属性の <code>user.email</code> / <code>user.account_uuid</code> 単位。<code>OTEL_RESOURCE_ATTRIBUTES=team=xxx</code> を入れるとチーム列も埋まります。</p>
     <table>
-      <thead><tr><th class="n">#</th><th>識別子</th><th>チーム</th><th class="n">WP</th><th class="n">うちツール</th><th class="n">うちメトリクス</th><th class="n">ツール成功</th><th class="n">増減行数</th></tr></thead>
+      <thead><tr><th class="n">#</th><th>識別子</th><th>チーム</th><th class="n">有効WP</th><th class="n">生WP</th><th class="n">うちツール</th><th class="n">うちメトリクス</th><th class="n">ツール成功</th><th class="n">増減行数</th></tr></thead>
       <tbody id="uRows"></tbody>
     </table>
   </section>
@@ -194,6 +195,13 @@ function render(d){
 
   /* WP */
   document.getElementById('wpTotal').textContent = n(Math.round(d.wpTotal));
+  document.getElementById('capCards').innerHTML = d.cap ? [
+    ['生WP（上限なし）', n(Math.round(d.cap.wpRaw))],
+    ['クリップされたWP', n(Math.round(d.cap.clipped))],
+    ['1分上限', n(d.cap.perMinute)],
+    ['1分あたり最大', n(Math.round(d.cap.peakPerMinute))],
+    ['クリップされた分数', `${d.cap.clippedMinutes} / ${d.cap.activeMinutes}`],
+  ].map(([l,v])=>`<div class="card"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('') : '';
   document.getElementById('subNote').innerHTML = d.subagent
     ? `〈子〉= サブエージェント内の実行（<code>Agent</code> の <code>duration_ms</code> 区間で判定）。
        区間 ${d.subagent.windows} 件 / 該当 ${d.subagent.toolsInside} 件に <b>× ${d.subagent.factor}</b> を適用。` : '';
@@ -204,7 +212,7 @@ function render(d){
         ${b.failed?` <span class="fail">失敗${b.failed}</span>`:''}</td>
     <td class="n">${n(b.count)}</td><td class="n">× ${b.weight}</td>
     <td class="n">${n(Math.round(b.wp))}</td>
-    <td class="n">${d.wpTotal?((b.wp/d.wpTotal*100).toFixed(1)+'%'):'—'}
+    <td class="n">${d.cap&&d.cap.wpRaw?((b.wp/d.cap.wpRaw*100).toFixed(1)+'%'):'—'}
         <div class="bar"><i style="width:${(b.wp/max*100).toFixed(1)}%"></i></div></td>
   </tr>`).join('') : `<tr><td colspan="6" class="attr">まだデータがありません</td></tr>`;
 
@@ -234,9 +242,10 @@ function render(d){
   document.getElementById('uRows').innerHTML = d.users.length ? d.users.map((u,i)=>`<tr>
     <td class="n">${i+1}</td><td>${esc(u.id)}</td><td class="attr">${esc(u.team||'—')}</td>
     <td class="n"><b>${n(Math.round(u.wp))}</b></td>
+    <td class="n" style="color:var(--dim)">${n(Math.round(u.wpRaw))}</td>
     <td class="n">${n(Math.round(u.wpTool))}</td><td class="n">${n(Math.round(u.wpMetric))}</td>
     <td class="n">${n(u.tools)}</td><td class="n">${n(u.lines)}</td>
-  </tr>`).join('') : `<tr><td colspan="8" class="attr">—</td></tr>`;
+  </tr>`).join('') : `<tr><td colspan="9" class="attr">—</td></tr>`;
 
   /* resources */
   document.getElementById('rRows').innerHTML = d.resources.length ? d.resources.map(r=>`
