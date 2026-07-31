@@ -69,7 +69,8 @@
 
   <section>
     <h2>WP（Work Point）合計</h2>
-    <p class="note">ツール実行は <code>success=true</code> のみ加点。失敗は加点せず件数だけ表示します。</p>
+    <p class="note">ツール実行は <code>success=true</code> のみ加点。失敗は加点せず件数だけ表示します。
+      <span id="subNote"></span></p>
     <div class="cards">
       <div>
         <div class="wpbig" id="wpTotal">0</div>
@@ -103,7 +104,7 @@
     <h2>ユーザー別 WP（リーダーボード素案）</h2>
     <p class="note">resource 属性の <code>user.email</code> / <code>user.account_uuid</code> 単位。<code>OTEL_RESOURCE_ATTRIBUTES=team=xxx</code> を入れるとチーム列も埋まります。</p>
     <table>
-      <thead><tr><th class="n">#</th><th>識別子</th><th>チーム</th><th class="n">WP</th><th class="n">ツール成功</th><th class="n">増減行数</th><th class="n">イベント数</th></tr></thead>
+      <thead><tr><th class="n">#</th><th>識別子</th><th>チーム</th><th class="n">WP</th><th class="n">うちツール</th><th class="n">うちメトリクス</th><th class="n">ツール成功</th><th class="n">増減行数</th></tr></thead>
       <tbody id="uRows"></tbody>
     </table>
   </section>
@@ -193,6 +194,9 @@ function render(d){
 
   /* WP */
   document.getElementById('wpTotal').textContent = n(Math.round(d.wpTotal));
+  document.getElementById('subNote').innerHTML = d.subagent
+    ? `〈子〉= サブエージェント内の実行（<code>Agent</code> の <code>duration_ms</code> 区間で判定）。
+       区間 ${d.subagent.windows} 件 / 該当 ${d.subagent.toolsInside} 件に <b>× ${d.subagent.factor}</b> を適用。` : '';
   const max = Math.max(1, ...d.breakdown.map(b=>b.wp));
   document.getElementById('wpRows').innerHTML = d.breakdown.length ? d.breakdown.map(b=>`<tr>
     <td class="${b.kind==='tool'?'tagt':'tagm'}">${b.kind==='tool'?'event':'metric'}</td>
@@ -229,9 +233,10 @@ function render(d){
   /* users */
   document.getElementById('uRows').innerHTML = d.users.length ? d.users.map((u,i)=>`<tr>
     <td class="n">${i+1}</td><td>${esc(u.id)}</td><td class="attr">${esc(u.team||'—')}</td>
-    <td class="n"><b>${n(Math.round(u.wp))}</b></td><td class="n">${n(u.tools)}</td>
-    <td class="n">${n(u.lines)}</td><td class="n">${n(u.events)}</td>
-  </tr>`).join('') : `<tr><td colspan="7" class="attr">—</td></tr>`;
+    <td class="n"><b>${n(Math.round(u.wp))}</b></td>
+    <td class="n">${n(Math.round(u.wpTool))}</td><td class="n">${n(Math.round(u.wpMetric))}</td>
+    <td class="n">${n(u.tools)}</td><td class="n">${n(u.lines)}</td>
+  </tr>`).join('') : `<tr><td colspan="8" class="attr">—</td></tr>`;
 
   /* resources */
   document.getElementById('rRows').innerHTML = d.resources.length ? d.resources.map(r=>`

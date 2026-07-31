@@ -20,15 +20,21 @@ const RAW_FILE = path.join(DATA_DIR, 'otel-raw.jsonl');
 /* ============================ WP の重み ============================
    ここだけ書き換えて再起動すれば、過去の生ログをリプレイして再集計される。 */
 export const WP = {
-  // claude_code.tool_result イベント（success=true のみ加点）
+  // tool_result イベント（success=true のみ加点）
   tool: {
     Edit: 10, Write: 10, NotebookEdit: 10,
     Bash: 4,
-    Agent: 15, Task: 15,
+    Agent: 3, Task: 3,    // 起動コストのみ。中身の労働は子の tool_result 側で数える
     Skill: 25,
     Read: 2, Grep: 2, Glob: 2,
     _default: 3,          // 上記以外・MCP ツールなど
   },
+  // サブエージェント内のツール実行にかける係数。
+  // 実測(session 4dcc579b)で、子の tool_result は親と同じ session.id に混ざって届き、
+  // query_source も agent.name も付かないことを確認した。判別は Agent の
+  // duration_ms から逆算した実行区間に入るかどうかで行う。
+  // 子の労働は実労働なので 0 にはしないが、Agent 起動分と二階層で満額払わないため 0.5。
+  subagentFactor: 0.5,
   // claude_code.lines_of_code.count メトリクス
   linesAdded: 0.5,
   linesRemoved: 0.3,      // 削除も労働として評価（行数稼ぎの逆インセンティブを消す）
@@ -71,8 +77,13 @@ const events = new Map();   // eventName -> {count, first, last, attrKeys:Set, b
 const recent = [];          // 直近イベント（生データ確認用リングバッファ）
 const users = new Map();    // identity -> {wp, tools, lines, events}
 const resources = new Map();// resource key -> {attrs, count, last}
-const toolOk = new Map();   // tool_name -> success=true の実行回数（WPの根拠）
-const toolNg = new Map();   // tool_name -> 失敗回数（加点しない。可視化用）
+// ツールWPは受信時に即加算できない。Agent の tool_result は子より後に届くので
+// （実測: 子 seq18/27 → Agent seq33）、受信時点では「子かどうか」が判定できない。
+// そこで1件ずつ記録しておき、snapshot() で Agent 区間と突き合わせて計算する。
+const toolEvents = [];      // {t, tool, ok, sess, id}
+const agentWindows = [];    // {sess, start, end} — 同期 Agent の実行区間
+const apiEvents = [];       // {t, sess, qs} — api_request の query_source（親/子の判別に使う）
+const TOOL_EVENTS_MAX = 200000;
 const RECENT_MAX = 300;
 
 let stats = { metricPosts: 0, logPosts: 0, tracePosts: 0, bytes: 0, startedAt: Date.now(), firstSeen: null, lastSeen: null, replayed: 0 };
@@ -101,7 +112,7 @@ function identityOf(a) {
 }
 function userOf(a) {
   const id = identityOf(a);
-  if (!users.has(id)) users.set(id, { id, wp: 0, tools: 0, lines: 0, events: 0, email: a['user.email'] || null, team: a.team || null });
+  if (!users.has(id)) users.set(id, { id, wpMetric: 0, tools: 0, lines: 0, events: 0, email: a['user.email'] || null, team: a.team || null });
   const u = users.get(id);
   if (!u.email && a['user.email']) u.email = a['user.email'];
   if (!u.team && a.team) u.team = a.team;
@@ -137,11 +148,11 @@ function ingestMetrics(payload) {
           // WP への寄与
           if (m.name === 'claude_code.lines_of_code.count') {
             const w = a.type === 'added' ? WP.linesAdded : a.type === 'removed' ? WP.linesRemoved : 0;
-            u.wp += v * w; u.lines += v;
+            u.wpMetric += v * w; u.lines += v;
           } else if (m.name === 'claude_code.commit.count') {
-            u.wp += v * WP.commit;
+            u.wpMetric += v * WP.commit;
           } else if (m.name === 'claude_code.pull_request.count') {
-            u.wp += v * WP.pullRequest;
+            u.wpMetric += v * WP.pullRequest;
           }
           mark(t);
         }
@@ -185,15 +196,27 @@ function ingestLogs(payload) {
           if (typeof a[k] === 'number' && !/timestamp|sequence/.test(k)) bump(e.sums, k, a[k]);
         }
 
-        // WP: ツール実行の成功のみ加点
+        // WP: ツール実行は記録だけして、集計は snapshot() で行う（上のコメント参照）
         if (norm(name) === 'tool_result') {
           const tn = a.tool_name || '(unknown)';
-          const failed = a.success === false || a.success === 'false';
-          if (failed) { bump(toolNg, tn); }
-          else {
-            bump(toolOk, tn);
-            u.wp += WP.tool[tn] ?? WP.tool._default; u.tools++;
+          const ok = !(a.success === false || a.success === 'false');
+          const sess = a['session.id'] || '?';
+          if (toolEvents.length < TOOL_EVENTS_MAX) {
+            toolEvents.push({ t, tool: tn, ok, sess, id: identityOf(a) });
           }
+          // Agent / Task は子の実行区間を作る。duration_ms から開始時刻を逆算する
+          const dur = Number(a.duration_ms || 0);
+          if (ok && (tn === 'Agent' || tn === 'Task') && dur > 0) {
+            agentWindows.push({ sess, start: t - dur, end: t });
+          }
+          if (ok) u.tools++;
+        }
+        // api_request の query_source で親(sdk)と子(agent:*)を見分ける。
+        // ツールは「直前に完了した api_request」の応答として実行されるので、
+        // 直前の api_request が agent:* ならそのツールはサブエージェントのもの。
+        // バックグラウンド実行の Agent は duration_ms≈0 で区間が作れないため、これが主判定になる。
+        if (norm(name) === 'api_request' && a.query_source) {
+          apiEvents.push({ t, sess: a['session.id'] || '?', qs: a.query_source });
         }
 
         recent.push({ t, name, identity: identityOf(a), attrs: dimsOf(a) });
@@ -247,12 +270,59 @@ export function snapshot() {
   const commits = sumSeries('claude_code.commit.count');
   const prs = sumSeries('claude_code.pull_request.count');
 
+  /* --- ツールWP: Agent 区間に入る実行は subagentFactor をかける --- */
+  const winBySess = new Map();
+  for (const w of agentWindows) {
+    if (!winBySess.has(w.sess)) winBySess.set(w.sess, []);
+    winBySess.get(w.sess).push(w);
+  }
+  const inWindow = (sess, t) => (winBySess.get(sess) || []).some(w => t >= w.start && t <= w.end);
+
+  // 直前に完了した api_request の query_source を引くための索引（セッションごとに時刻昇順）
+  const apiBySess = new Map();
+  for (const e of apiEvents) {
+    if (!apiBySess.has(e.sess)) apiBySess.set(e.sess, []);
+    apiBySess.get(e.sess).push(e);
+  }
+  for (const arr of apiBySess.values()) arr.sort((a, b) => a.t - b.t);
+  function prevQuerySource(sess, t) {
+    const arr = apiBySess.get(sess);
+    if (!arr || !arr.length) return null;
+    let lo = 0, hi = arr.length - 1, ans = -1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (arr[m].t <= t) { ans = m; lo = m + 1; } else hi = m - 1; }
+    return ans < 0 ? null : arr[ans].qs;
+  }
+  // 同期 Agent の区間 OR 直前の api_request が agent:* なら子とみなす
+  const inSubagent = (sess, t) => {
+    if (inWindow(sess, t)) return true;
+    const qs = prevQuerySource(sess, t);
+    return !!qs && qs.startsWith('agent:');
+  };
+
+  // キー = ツール名 + 親/子。親と子を別行にして内訳が見えるようにする
+  const agg = new Map();   // key -> {tool, sub, ok, ng, wp}
+  const perUser = new Map();
+  for (const e of toolEvents) {
+    // Agent / Task 自身は「起動コスト」なので係数をかけない（入れ子でも二重に割り引かない）
+    const isAgent = e.tool === 'Agent' || e.tool === 'Task';
+    const sub = !isAgent && inSubagent(e.sess, e.t);
+    const key = `${e.tool}|${sub}`;
+    let g = agg.get(key);
+    if (!g) { g = { tool: e.tool, sub, ok: 0, ng: 0, wp: 0 }; agg.set(key, g); }
+    if (!e.ok) { g.ng++; continue; }
+    const w = (WP.tool[e.tool] ?? WP.tool._default) * (sub ? WP.subagentFactor : 1);
+    g.ok++; g.wp += w;
+    perUser.set(e.id, (perUser.get(e.id) || 0) + w);
+  }
+
   const breakdown = [
-    ...[...toolOk.entries()].sort((a, b) => b[1] - a[1]).map(([name, n]) => {
-      const w = WP.tool[name] ?? WP.tool._default;
-      return { label: `tool_result ${name}`, count: n, weight: w, wp: n * w, kind: 'tool',
-               failed: toolNg.get(name) || 0, isDefaultWeight: WP.tool[name] === undefined };
-    }),
+    ...[...agg.values()].sort((a, b) => b.wp - a.wp).map(g => ({
+      label: `tool_result ${g.tool}${g.sub ? ' 〈子〉' : ''}`,
+      count: g.ok,
+      weight: +((WP.tool[g.tool] ?? WP.tool._default) * (g.sub ? WP.subagentFactor : 1)).toFixed(2),
+      wp: g.wp, kind: 'tool', sub: g.sub,
+      failed: g.ng, isDefaultWeight: WP.tool[g.tool] === undefined,
+    })),
     { label: 'lines_of_code(added)', count: added, weight: WP.linesAdded, wp: added * WP.linesAdded, kind: 'metric' },
     { label: 'lines_of_code(removed)', count: removed, weight: WP.linesRemoved, wp: removed * WP.linesRemoved, kind: 'metric' },
     { label: 'commit.count', count: commits, weight: WP.commit, wp: commits * WP.commit, kind: 'metric' },
@@ -263,7 +333,11 @@ export function snapshot() {
   return {
     stats: { ...stats, uptimeSec: Math.round((Date.now() - stats.startedAt) / 1000), rawFile: RAW_FILE },
     wpTotal, breakdown, weights: WP,
-    toolFailed: [...toolNg.entries()].sort((a, b) => b[1] - a[1]),
+    subagent: {
+      windows: agentWindows.length,
+      toolsInside: [...agg.values()].filter(g => g.sub).reduce((s, g) => s + g.ok, 0),
+      factor: WP.subagentFactor,
+    },
     series: [...series.values()].sort((a, b) => a.name.localeCompare(b.name) || b.value - a.value),
     events: [...events.values()].sort((a, b) => b.count - a.count).map(e => ({
       name: e.name, count: e.count, first: e.first, last: e.last,
@@ -271,7 +345,9 @@ export function snapshot() {
       breakdown: [...e.breakdown.entries()].sort((a, b) => b[1] - a[1]),
       sums: [...e.sums.entries()].sort((a, b) => b[1] - a[1]),
     })),
-    users: [...users.values()].sort((a, b) => b.wp - a.wp),
+    users: [...users.values()]
+      .map(u => ({ ...u, wpTool: perUser.get(u.id) || 0, wp: u.wpMetric + (perUser.get(u.id) || 0) }))
+      .sort((a, b) => b.wp - a.wp),
     resources: [...resources.values()].sort((a, b) => b.last - a.last),
     recent: [...recent].reverse().slice(0, 120),
   };

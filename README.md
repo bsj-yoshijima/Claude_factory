@@ -95,7 +95,7 @@ Claude Code ──OTLP/JSON──▶ :4318 /v1/metrics, /v1/logs   ← otel.mjs�
 |---|---|
 | `Edit` / `Write` / `NotebookEdit` | 10 |
 | `Bash` | 4 |
-| `Agent` / `Task` | 15 |
+| `Agent` / `Task` | 3（起動コストのみ） |
 | `Skill` | 25 |
 | `Read` / `Grep` / `Glob` | 2 |
 | その他・MCP ツール | 3 |
@@ -103,6 +103,30 @@ Claude Code ──OTLP/JSON──▶ :4318 /v1/metrics, /v1/logs   ← otel.mjs�
 | `lines_of_code.count` (removed) | × 0.3 |
 | `commit.count` | × 50 |
 | `pull_request.count` | × 150 |
+| **サブエージェント内のツール実行** | 上記 **× 0.5** |
+
+### サブエージェントの扱い
+
+実測でわかったこと: **子（サブエージェント）のツール実行は、親と同じ `session.id` の `tool_result` として混ざって届く。** `tool_result` には `query_source` も `agent.name` も付かないので、そのままでは親子を区別できない。放置すると `Agent` の起動WPと子の労働WPが二階層で加算され、サブエージェントを多用する人が構造的に有利になる。
+
+判別は2段構えで行っている。
+
+| Agent の実行形態 | `duration_ms` | 判別方法 |
+|---|---|---|
+| 同期（`run_in_background: false`） | 子の実行時間を含む（実測 28.6s） | `[end - duration_ms, end]` の区間に入るか |
+| **バックグラウンド（既定）** | **ほぼ 0（1〜42ms）** | 区間が作れないので、**直前に完了した `api_request` の `query_source`** で判定 |
+
+`api_request.query_source` の実測値はドキュメントの `main` / `subagent` / `auxiliary` より詳細だった。
+
+| 値 | 意味 |
+|---|---|
+| `sdk` | 親（メインループ） |
+| `agent:builtin:general-purpose` | 組み込みサブエージェント |
+| `agent:custom` | カスタムサブエージェント |
+| `web_search_tool` | Web検索の内部呼び出し |
+| `prompt_suggestion` | 入力補完の裏処理 |
+
+ツールは「直前に完了した `api_request` の応答」として実行されるので、直前が `agent:*` ならそのツールは子のもの、というルール。**並列に多数のバックグラウンドエージェントが走っている間は親の作業と時間的に重なるため、この判定は近似**（完全な分離はOTelのデータだけでは不可能）。
 
 ## 仕組み
 
