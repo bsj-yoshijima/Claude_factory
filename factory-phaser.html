@@ -61,6 +61,21 @@
   .node{display:inline-flex;flex-direction:column;align-items:center;background:#131b20;border:1px solid var(--edge);border-radius:8px;padding:6px 9px;min-width:60px}
   .node.mach{border-color:#c98b52} .node.mat{border-color:#4a6b7a} .node .e{font-size:22px} .node small{font-size:9px;color:#cfeee0;margin-top:1px}
   .arrow{color:#5f7a72;font-size:16px}
+  /* 編集パレット */
+  #palette{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);z-index:8;display:none;flex-direction:column;gap:7px;background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:9px 11px;backdrop-filter:blur(4px)}
+  #palette.show{display:flex}
+  .pcat{display:flex;gap:5px;flex-wrap:wrap}
+  .pcat .c{background:#141b20;border:1px solid var(--edge);border-radius:7px;padding:4px 11px;cursor:pointer;font-size:12px;color:#9fdcc6}
+  .pcat .c.on{border-color:var(--gold);color:var(--gold);background:#1d262c}
+  .pitems{display:flex;gap:6px;flex-wrap:wrap;width:min(860px,90vw);max-height:132px;overflow-y:auto}
+  .pitem{width:62px;height:64px;border:2px solid #2c3a38;border-radius:8px;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative}
+  .pitem:hover{border-color:#5f8a80}
+  .pitem.on{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
+  .pitem.cur{border-color:#7fe6ff}
+  .pitem small{font-size:8px;color:#cfeee0;margin-top:1px;max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pitem .qn{position:absolute;top:1px;right:4px;font-size:9px;color:#7fe6ff;font-weight:700}
+  .pitem.dim{opacity:.4;cursor:default}
+  .phint{font-size:10px;color:#9fb0c0}
 </style>
 </head>
 <body>
@@ -75,6 +90,7 @@
   </div>
   <div id="badge"><span id="prodN">⚙️ 0</span><span id="rateN" style="color:#7fe6ff;font-size:10px;margin-left:4px"></span> ・ <span id="moneyN" style="color:#ffd27a">💰 0</span></div>
   <div id="hud"></div>
+  <div id="palette"></div>
   <div id="toast"></div>
   <div id="overlay"><div id="panel"></div></div>
 </div>
@@ -114,7 +130,8 @@ const SERIES={
 };
 
 let G={ pity:0, inv:{}, prodP:90, money:0, machines:[{type:'red',lvl:1}], belts:0, decos:{},
-        bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[], lastT:null, produced:0 };
+        bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[],
+        stock:{machine:{},prop:{},deco:{},belt:0}, lastT:null, produced:0 };
 let saveT=null;
 function saveGame(){ if(saveT)clearTimeout(saveT); saveT=setTimeout(()=>{ const b=JSON.stringify(G);
   try{fetch('/api/save',{method:'POST',body:b});}catch(_){} try{localStorage.setItem('cf-save',b);}catch(_){}} ,400); }
@@ -124,7 +141,21 @@ async function loadGame(){ let s=null; try{ s=await (await fetch('/api/save',{ca
   if(!G.inv)G.inv={}; if(!Array.isArray(G.machines)||!G.machines.length)G.machines=[{type:'red',lvl:1}]; if(!G.decos)G.decos={};
   if(!Array.isArray(G.bgOwned))G.bgOwned=['auto']; if(!Array.isArray(G.floorOwned))G.floorOwned=['wood']; if(!G.bg)G.bg='auto'; if(!G.floor)G.floor='wood';
   if(!G.skins||typeof G.skins!=='object')G.skins={}; if(!Array.isArray(G.seriesOwned))G.seriesOwned=[]; if(!Array.isArray(G.emojiDecos))G.emojiDecos=[]; if(!Array.isArray(G.layout))G.layout=[];
-  ['prodP','money','belts','produced'].forEach(k=>{ if(typeof G[k]!=='number')G[k]=0; }); }
+  ['prodP','money','belts','produced'].forEach(k=>{ if(typeof G[k]!=='number')G[k]=0; });
+  // 在庫(owned)。無ければ現在の配置から復元(既存の設置物は所持扱い)
+  if(!G.stock||typeof G.stock!=='object'){ G.stock={machine:{},prop:{},deco:{},belt:0};
+    for(const e of G.layout){ if(e.kind==='belt') G.stock.belt++; else if(G.stock[e.kind]) G.stock[e.kind][e.sub]=(G.stock[e.kind][e.sub]||0)+1; } }
+  for(const k of ['machine','prop','deco']) if(!G.stock[k]||typeof G.stock[k]!=='object') G.stock[k]={};
+  if(typeof G.stock.belt!=='number') G.stock.belt=0; }
+// 在庫と配置数
+function ownedN(kind,sub){ return kind==='belt' ? (G.stock.belt||0) : ((G.stock[kind]&&G.stock[kind][sub])||0); }
+function availN(kind,sub){ return Math.max(0, ownedN(kind,sub) - cnt(kind==='belt'?'belt':kind, kind==='belt'?null:sub)); }
+function addStock(kind,sub,n){ n=n||1; if(kind==='belt') G.stock.belt=(G.stock.belt||0)+n; else { if(!G.stock[kind])G.stock[kind]={}; G.stock[kind][sub]=(G.stock[kind][sub]||0)+n; } }
+// 設置済みは必ず所持(在庫)に含める(在庫 >= 設置数 を保証)
+function reconcileStock(){ const need={machine:{},prop:{},deco:{},belt:0};
+  for(const e of (G.layout||[])){ if(e.kind==='belt') need.belt++; else if(need[e.kind]) need[e.kind][e.sub]=(need[e.kind][e.sub]||0)+1; }
+  for(const k of ['machine','prop','deco']){ for(const s in need[k]) if((G.stock[k][s]||0)<need[k][s]) G.stock[k][s]=need[k][s]; }
+  if((G.stock.belt||0)<need.belt) G.stock.belt=need.belt; }
 // 配置レイアウト(位置)の唯一の真実 = G.layout。シーンから同期。
 function snapLayout(){ if(window.__scene) G.layout=window.__scene.getLayout(); }
 window.__layoutChanged=()=>{ snapLayout(); saveGame(); };
@@ -142,7 +173,7 @@ function pullOne(){ const rr=rollRarity(); G.pity=rr>=3?0:G.pity+1; const pool=P
 function doPull(n){ const cost=n*PULL_COST; if(G.prodP<cost) return null; G.prodP-=cost; const got=[]; for(let i=0;i<n;i++) got.push(pullOne()); saveGame(); return got; }
 
 const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
-function closeOverlay(){ overlay.classList.remove('show'); }
+function closeOverlay(){ overlay.classList.remove('show'); if(document.getElementById('palette').classList.contains('show')&&window.renderPalette) renderPalette(); }
 function openOverlay(h){ panel._refresh=null; panel.innerHTML='<span class="close">✕</span><div class="pbody">'+h+'</div>'; panel.querySelector('.close').onclick=closeOverlay; overlay.classList.add('show'); }
 overlay.addEventListener('click',e=>{ if(e.target===overlay) closeOverlay(); });
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',1600); }
@@ -183,13 +214,13 @@ document.getElementById('dexBtn').addEventListener('click',openDex);
 /* ===== ショップ（景品の売却＋購入/強化） ===== */
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
   G.inv[id]=have-qty; const gain=SELL[p.r]*qty; G.money+=gain; saveGame(); updateBadge(); toast(`${p.e} ${p.n}×${qty} を売却 (+💰${gain})`); }
-function buyMachine(type){ const pr=MACH[type].price; if(G.money<pr)return; G.money-=pr;
-  if(window.__scene)window.__scene.placeMachine(type); snapLayout(); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入・設置！`); }
+// 購入=在庫(owned)に追加。設置は編集パレットから床クリックで行う
+function buyMachine(type){ const pr=MACH[type].price; if(G.money<pr)return; G.money-=pr; addStock('machine',type); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
 function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; const c=lvCost(e.lvl); if(G.money<c)return; G.money-=c; e.lvl++;
   if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${MACH[e.sub].e} ${MACH[e.sub].n} を Lv${e.lvl} に強化！(生産↑)`); }
-function buyBelt(){ if(G.money<BELT_PRICE)return; G.money-=BELT_PRICE; if(window.__scene)window.__scene.placeBelt(); snapLayout(); saveGame(); updateBadge(); toast('🛗 コンベアを購入・設置！'); }
-function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return; G.money-=pr; if(window.__scene)window.__scene.placeDeco(t); snapLayout(); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入・設置！`); }
-function buyProp(t){ const pr=PROP[t].price; if(G.money<pr)return; G.money-=pr; if(window.__scene)window.__scene.placeProp(t); snapLayout(); saveGame(); updateBadge(); toast(`${PROP[t].n} を購入・設置！`); }
+function buyBelt(){ if(G.money<BELT_PRICE)return; G.money-=BELT_PRICE; addStock('belt'); saveGame(); updateBadge(); toast('🛗 コンベアを購入（🔧編集で設置）'); }
+function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return; G.money-=pr; addStock('deco',t); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
+function buyProp(t){ const pr=PROP[t].price; if(G.money<pr)return; G.money-=pr; addStock('prop',t); saveGame(); updateBadge(); toast(`${PROP[t].n} を購入（🔧編集で設置）`); }
 function selectBg(k){ if(!G.bgOwned.includes(k)){ const pr=BG[k].price; if(G.money<pr)return; G.money-=pr; G.bgOwned.push(k); toast(`背景「${BG[k].n}」を購入！`); } G.bg=k; if(window.__scene&&window.__scene.setSkyTheme)window.__scene.setSkyTheme(k); saveGame(); updateBadge(); }
 function selectFloor(k){ if(!G.floorOwned.includes(k)){ const pr=FLOOR[k].price; if(G.money<pr)return; G.money-=pr; G.floorOwned.push(k); toast(`床材「${FLOOR[k].n}」を購入！`); } G.floor=k; if(window.__scene&&window.__scene.setFloor)window.__scene.setFloor(k); saveGame(); updateBadge(); }
 function buySeries(k){ const S=SERIES[k]; if(!G.seriesOwned.includes(k)){ if(G.money<S.price)return; G.money-=S.price; G.seriesOwned.push(k);
@@ -209,26 +240,27 @@ function openShop(tab){ if(tab)_shopTab=tab;
           <button data-sell="${p.id}" data-q="1">1個</button><button data-sell="${p.id}" data-q="all" style="margin-left:5px">全部</button></div>`;
       }).join('') : '<div class="cost" style="padding:12px">売れる景品がありません。🎁ガチャで景品を集めよう。</div>';
     } else if(_shopTab==='mach'){
-      body = '<div class="cost" style="margin:2px 0 6px">所持している製造機（Lv↑で生産量が増える）</div>';
+      body = '<div class="cost" style="margin:2px 0 6px">設置済みの製造機（Lv↑で生産量が増える）</div>';
       const machs=(G.layout||[]).filter(e=>e.kind==='machine');
-      body += machs.map(e=>{ const c=lvCost(e.lvl); return `<div class="rc"><div class="ic">${MACH[e.sub].e}</div>
+      body += (machs.length?machs:[]).map(e=>{ const c=lvCost(e.lvl); return `<div class="rc"><div class="ic">${MACH[e.sub].e}</div>
         <div class="mid"><div class="nm">${MACH[e.sub].n} <span style="color:#7fe6ff;font-size:11px">Lv${e.lvl}</span></div>
         <div class="cost">生産 +${e.lvl}/s ・ 次のLv 💰${c.toLocaleString()}</div></div>
-        <button data-lv="${e.id}" ${G.money>=c?'':'disabled'}>強化</button></div>`; }).join('');
-      body += '<div class="cost" style="margin:12px 0 6px">新しい製造機を購入（設置＋生産増＋作業エージェントの行き先が増える）</div>';
+        <button data-lv="${e.id}" ${G.money>=c?'':'disabled'}>強化</button></div>`; }).join('') || '<div class="cost" style="padding:6px 2px">未設置。🔧編集で在庫から設置</div>';
+      body += '<div class="cost" style="margin:12px 0 6px">製造機を購入（在庫→🔧編集で設置。設置すると生産＆作業先が増える）</div>';
       body += Object.keys(MACH).map(t=>`<div class="rc"><div class="ic">${MACH[t].e}</div>
-        <div class="mid"><div class="nm">${MACH[t].n}</div><div class="cost">💰${MACH[t].price.toLocaleString()}</div></div>
+        <div class="mid"><div class="nm">${MACH[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${availN('machine',t)}</span></div><div class="cost">💰${MACH[t].price.toLocaleString()}</div></div>
         <button data-buymach="${t}" ${G.money>=MACH[t].price?'':'disabled'}>購入</button></div>`).join('');
     } else if(_shopTab==='equip'){
-      body = `<div class="rc"><div class="ic">🛗</div><div class="mid"><div class="nm">コンベア <span style="color:#9fb0c0;font-size:10px">所持 ${cnt('belt')}</span></div><div class="cost">💰${BELT_PRICE}</div></div>
+      body = '<div class="cost" style="margin:2px 0 8px">購入すると在庫に入ります。設置は 🔧編集 のパレットから床をクリック。</div>';
+      body += `<div class="rc"><div class="ic">🛗</div><div class="mid"><div class="nm">コンベア <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('belt')}</span></div><div class="cost">💰${BELT_PRICE}</div></div>
         <button data-belt="1" ${G.money>=BELT_PRICE?'':'disabled'}>購入</button></div>`;
-      body += '<div class="cost" style="margin:12px 0 6px">装飾プロップ（Stitch製・床に設置）</div>';
+      body += '<div class="cost" style="margin:12px 0 6px">装飾プロップ（Stitch製）</div>';
       body += Object.keys(PROP).map(t=>`<div class="rc"><div class="ic">${PROP[t].e}</div>
-        <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">所持 ${cnt('prop',t)}</span></div><div class="cost">💰${PROP[t].price}</div></div>
+        <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('prop',t)}</span></div><div class="cost">💰${PROP[t].price}</div></div>
         <button data-prop="${t}" ${G.money>=PROP[t].price?'':'disabled'}>購入</button></div>`).join('');
       body += '<div class="cost" style="margin:12px 0 6px">その他</div>';
       body += Object.keys(DECO).map(t=>`<div class="rc"><div class="ic">${DECO[t].e}</div>
-        <div class="mid"><div class="nm">${DECO[t].n} <span style="color:#9fb0c0;font-size:10px">所持 ${cnt('deco',t)}</span></div><div class="cost">💰${DECO[t].price}</div></div>
+        <div class="mid"><div class="nm">${DECO[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('deco',t)}</span></div><div class="cost">💰${DECO[t].price}</div></div>
         <button data-deco="${t}" ${G.money>=DECO[t].price?'':'disabled'}>購入</button></div>`).join('');
     } else if(_shopTab==='decor'){   // 内装（背景=窓の外の景色 / 床材）
       const bgRow=Object.keys(BG).map(k=>{ const own=G.bgOwned.includes(k),cur=G.bg===k;
@@ -274,12 +306,49 @@ function applyOwned(){ const s=window.__scene; if(!s)return;
     for(let i=0;i<G.belts;i++) s.placeBelt();
     for(const t in G.decos) for(let i=0;i<(G.decos[t]||0);i++) s.placeDeco(t);
     for(const e of (G.emojiDecos||[])) s.placeEmojiDeco(e);
-    snapLayout(); saveGame();
+    snapLayout();
   }
+  reconcileStock(); saveGame();
   s.setSkyTheme(G.bg); s.setFloor(G.floor); s.applySkins(G.skins); }
+/* ===== 編集パレット: 大項目→在庫から選ぶ→床クリックで設置 ===== */
+const ROOM_THEMES=['arabia','undersea','japan','china'];
+const SKY_THEMES=['blue','sunset','night','space','aurora'];
+const BG_META={auto:{e:'🕐',n:'標準'},blue:{e:'☀️',n:'快晴'},sunset:{e:'🌆',n:'夕焼け'},night:{e:'🌙',n:'星空'},space:{e:'🌌',n:'宇宙'},aurora:{e:'🌈',n:'オーロラ'},arabia:{e:'🕌',n:'アラビア'},undersea:{e:'🐚',n:'海底'},japan:{e:'⛩️',n:'日本'},china:{e:'🐉',n:'中華'}};
+function ownedBgs(){ const a=['auto']; for(const k of SKY_THEMES) if(G.bgOwned.includes(k)) a.push(k); for(const k of ROOM_THEMES) if(G.seriesOwned.includes(k)) a.push(k); return a; }
+function applyBg(k){ G.bg=k; if(window.__scene){ window.__scene.setSkyTheme(k); window.__scene.setFloor(ROOM_THEMES.includes(k)?'wood':G.floor); } saveGame(); updateBadge(); }
+const paletteEl=document.getElementById('palette');
+let editCat='bg', editSel=null; window.__editSel=null;
+function renderPalette(){
+  const cats=[['bg','🌏 背景'],['prop','🧰 装飾'],['machine','🏭 製造機'],['belt','🛗 コンベア']];
+  let items='', hint='';
+  const cell=(dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
+  if(editCat==='bg'){ hint='背景を選ぶと即適用（部屋ごと切替）';
+    items=ownedBgs().map(k=>`<div class="pitem ${G.bg===k?'cur':''}" data-bg="${k}">${BG_META[k].e}<small>${BG_META[k].n}</small></div>`).join('');
+  } else if(editCat==='prop'){ hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
+    const P=Object.keys(PROP).filter(t=>availN('prop',t)>0).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
+    const D=Object.keys(DECO).filter(t=>availN('deco',t)>0).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
+    items=(P.concat(D).join(''))||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
+  } else if(editCat==='machine'){ hint=(editSel?'床をクリックで設置（生産＆作業先が増える）':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
+    const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.sub===t));
+    items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
+  } else { hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
+    const a=availN('belt'); items = a>0? cell(`data-place="belt:"`,'🛗','コンベア',0,a,editSel&&editSel.kind==='belt') : '<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
+  }
+  paletteEl.innerHTML=`<div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
+    <div class="pitems">${items}</div><div class="phint">${hint}</div>`;
+  paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; renderPalette(); });
+  paletteEl.querySelectorAll('[data-bg]').forEach(el=>el.onclick=()=>{ applyBg(el.dataset.bg); renderPalette(); });
+  paletteEl.querySelectorAll('[data-place]').forEach(el=>el.onclick=()=>{ const p=el.dataset.place.split(':'); editSel={kind:p[0],sub:p[1]||null}; window.__editSel=editSel; renderPalette(); });
+}
+window.renderPalette=renderPalette;
+window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
+  if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
+  const s=window.__scene; const id = s.addPlaced(sel.kind, sel.kind==='belt'?null:sel.sub, {cell:{c,r}});
+  if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
 document.getElementById('editBtn').addEventListener('click',()=>{ if(!window.__scene)return;
   const on=window.__scene.toggleEdit(); document.getElementById('editBtn').classList.toggle('gacha',on);
-  toast(on?'🔧 編集: ドラッグで移動 / 左下🗑へドロップで撤去':'編集モードを終了'); });
+  paletteEl.classList.toggle('show',on); if(on) renderPalette(); else { editSel=null; window.__editSel=null; }
+  toast(on?'🔧 編集: 上のパレットで選ぶ→床クリックで設置 / ドラッグで移動 / 左下🗑で撤去':'編集モードを終了'); });
 loadGame().then(async ()=>{
   if(G.lastT){ const dt=Math.min((Date.now()-G.lastT)/1000, 8*3600); const g=prodRate()*dt*0.5; if(g>0){ G.prodP+=g; G.produced+=g; } } // オフライン分(50%/最大8h)
   G.lastT=Date.now(); updateBadge();
@@ -287,6 +356,7 @@ loadGame().then(async ()=>{
   setInterval(()=>{ const r=prodRate(); G.prodP+=r; G.produced+=r; updateBadge(); }, 1000);
   setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
   const q=new URLSearchParams(location.search);
+  if(q.get('edit')){ paletteEl.classList.add('show'); document.getElementById('editBtn').classList.add('gacha'); renderPalette(); }
   if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop')); else if(q.get('gacha'))openGacha();
 });
 </script>

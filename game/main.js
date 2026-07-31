@@ -248,6 +248,11 @@ class Main extends Phaser.Scene {
     gl(0,0,1,0); gl(1,0,1,1); gl(1,1,0,1); gl(0,1,0,0);   // 床の外周
     this.trash=this.add.container(72,H-52,[ this.add.rectangle(0,0,124,72,0x3a1418,0.85).setStrokeStyle(2,0xe05a4e), this.add.text(0,0,'🗑 ここへ撤去',{fontSize:'13px',color:'#ffd0c8'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     this._trashRect=new Phaser.Geom.Rectangle(10,H-88,124,74);
+    // 空き床クリックで、パレットで選択中のアイテムを設置
+    this.input.on('pointerdown',(po,over)=>{ if(!this.editMode) return; if(over&&over.length) return;
+      if(!window.__editSel) return; const uv=screenToIso(po.x,po.y);
+      const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
+      if(window.__editPlaceAt) window.__editPlaceAt(c,r); });
     this.input.on('drag',(po,obj,dx,dy)=>{ if(this.editMode&&obj._e){ obj.x=dx; obj.y=dy; } });
     this.input.on('dragend',(po,obj)=>{ if(!this.editMode||!obj._e)return; const e=obj._e;
       if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){ this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); return; }
