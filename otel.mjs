@@ -48,6 +48,26 @@ export const WP = {
   perMinuteCap: 200,
 };
 
+/* ==================== 業務スコアカードの設定 ====================
+   ゲーム用WPとは目的が違うので完全に分離する。
+   - ゲーム用WP : 「頑張った感」。サブエージェント係数 0.5 をかける（ゲーム内の公平性）
+   - スコアカード: 「Claude Code の使い方」の可視化。係数はかけず生カウントで見せる
+   スコアカードは単一の合計値を作らない。多軸のまま並べる。 */
+export const SCORE = {
+  // 効率スコア = (追加行 + 削除行×removed + PR数×prLines) ÷ output_tokens × 1000
+  // 分母に総トークンを使わないこと: 実測で cacheRead が output の 316 倍あり、
+  // 総トークンは「セッションの長さ」を測ってしまう。output_tokens が試行錯誤の量に最も近い。
+  eff: {
+    removed: 0.3,      // 削除も成果だが、追加と同額だと「消して稼ぐ」が成立する
+    prLines: 150,      // 実測較正: 4 PR / 558 追加行 = 1PR ≒ 140行。スケールを揃える
+    scale: 1000,       // 表示上の桁合わせ
+  },
+  // 効率順ランキングの参加条件。これが無いと「3行しか書いていない人」が1位になる
+  // （実測: output 1,529 / 追加3行 のセッションが効率トップに並んだ）
+  minPrs: 1,
+  minLines: 100,
+};
+
 /* ===================== OTLP/JSON のデコード補助 =====================
    OTLP/JSON は int64 を「文字列」で送ってくる（JSON の数値精度対策）ので、
    asInt / intValue は必ず Number() を通す。 */
@@ -74,6 +94,8 @@ function num(dp) {
   return 0;
 }
 function nanoToMs(n) { return n ? Math.round(Number(n) / 1e6) : Date.now(); }
+// 稼働日は JST の暦日で数える（UTC だと日本の深夜作業が前日に寄る）
+const jstDay = t => new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
 /* ============================== ストア ============================== */
 // 1シリーズ = メトリクス名 + 属性の組み合わせ。delta なので受信値を足し込むだけ。
@@ -118,7 +140,26 @@ function identityOf(a) {
 }
 function userOf(a) {
   const id = identityOf(a);
-  if (!users.has(id)) users.set(id, { id, wpMetric: 0, tools: 0, lines: 0, events: 0, email: a['user.email'] || null, team: a.team || null });
+  if (!users.has(id)) users.set(id, {
+    id, email: a['user.email'] || null, team: a.team || null,
+    wpMetric: 0, tools: 0, lines: 0, events: 0,
+    // --- 業務スコアカード用の生カウント（サブエージェント係数をかけない） ---
+    sc: {
+      linesAdded: 0, linesRemoved: 0, commits: 0, prs: 0,
+      outputTokens: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0,
+      skill: 0, agent: 0, toolsOk: 0, toolsNg: 0,
+      qsCustomAgent: 0, qsBuiltinAgent: 0, qsMain: 0,
+      skillPathsInstalled: 0,
+      // 未ドキュメントだが実在するイベント。スコアカードにはこちらが正確
+      // subagent_completed: total_tool_uses / total_tokens / agent_type / agent.source / is_async
+      subAgents: 0, subAgentsCustom: 0, subAgentsAsync: 0,
+      subToolUses: 0, subTokens: 0, subTypes: new Map(),
+      // skill_executed: skill.name つきの Skill 実行
+      skillExec: 0, skillNames: new Map(),
+      editAccept: 0, editReject: 0,
+      days: new Set(), sessions: new Set(),
+    },
+  });
   const u = users.get(id);
   if (!u.email && a['user.email']) u.email = a['user.email'];
   if (!u.team && a.team) u.team = a.team;
@@ -150,6 +191,30 @@ function ingestMetrics(payload) {
           // CUMULATIVE の場合は最新値がそのまま累計なので上書き、DELTA は加算
           if (temporality === 2) s.value = v; else s.value += v;
           s.points++; s.last = t;
+
+          // --- 業務スコアカード（生カウント） ---
+          const sc = u.sc;
+          if (a['session.id']) sc.sessions.add(a['session.id']);
+          sc.days.add(jstDay(t));
+          switch (m.name) {
+            case 'claude_code.lines_of_code.count':
+              if (a.type === 'added') sc.linesAdded += v; else if (a.type === 'removed') sc.linesRemoved += v;
+              break;
+            case 'claude_code.commit.count': sc.commits += v; break;
+            case 'claude_code.pull_request.count': sc.prs += v; break;
+            case 'claude_code.cost.usage': sc.costUsd += v; break;
+            case 'claude_code.token.usage':
+              if (a.type === 'output') sc.outputTokens += v;
+              else if (a.type === 'input') sc.inputTokens += v;
+              else if (a.type === 'cacheRead') sc.cacheReadTokens += v;
+              else if (a.type === 'cacheCreation') sc.cacheCreationTokens += v;
+              break;
+            case 'claude_code.code_edit_tool.decision':
+              // 手戻りの兆候。user_reject / user_abort は「Claudeの提案を人が止めた」
+              if (a.decision === 'reject' || /^user_(reject|abort)$/.test(String(a.source))) sc.editReject += v;
+              else sc.editAccept += v;
+              break;
+          }
 
           // WP への寄与
           if (m.name === 'claude_code.lines_of_code.count') {
@@ -198,6 +263,8 @@ function ingestLogs(payload) {
         let e = events.get(name);
         if (!e) { e = { name, count: 0, first: t, last: t, attrKeys: new Set(), breakdown: new Map(), sums: new Map() }; events.set(name, e); }
         e.count++; e.last = t; u.events++;
+        if (a['session.id']) u.sc.sessions.add(a['session.id']);
+        u.sc.days.add(jstDay(t));
         for (const k of Object.keys(a)) {
           e.attrKeys.add(k);
           if (BREAKDOWN_KEYS.has(k)) bump(e.breakdown, `${k}=${a[k]}`);
@@ -219,6 +286,12 @@ function ingestLogs(payload) {
             agentWindows.push({ sess, start: t - dur, end: t });
           }
           if (ok) u.tools++;
+          // スコアカード側は係数をかけない生カウント
+          if (ok) {
+            u.sc.toolsOk++;
+            if (tn === 'Skill') u.sc.skill++;
+            if (tn === 'Agent' || tn === 'Task') u.sc.agent++;
+          } else u.sc.toolsNg++;
         }
         // api_request の query_source で親(sdk)と子(agent:*)を見分ける。
         // ツールは「直前に完了した api_request」の応答として実行されるので、
@@ -226,6 +299,34 @@ function ingestLogs(payload) {
         // バックグラウンド実行の Agent は duration_ms≈0 で区間が作れないため、これが主判定になる。
         if (norm(name) === 'api_request' && a.query_source) {
           apiEvents.push({ t, sess: a['session.id'] || '?', qs: a.query_source });
+          // カスタムサブエージェントを使っているかは「使いこなし度」の強い signal
+          if (a.query_source === 'agent:custom') u.sc.qsCustomAgent++;
+          else if (String(a.query_source).startsWith('agent:')) u.sc.qsBuiltinAgent++;
+          else if (a.query_source === 'sdk') u.sc.qsMain++;
+        }
+        // サブエージェントの完了報告。ヒューリスティックより正確な実測値が入っている
+        // （実測で照合: ヒューリスティック244件 vs total_tool_uses 合計259件 = 94%の精度）
+        if (norm(name) === 'subagent_completed') {
+          const sc2 = u.sc;
+          sc2.subAgents++;
+          if (a['agent.source'] && a['agent.source'] !== 'built-in') sc2.subAgentsCustom++;
+          if (a.is_async === true || a.is_async === 'true') sc2.subAgentsAsync++;
+          sc2.subToolUses += Number(a.total_tool_uses || 0);
+          sc2.subTokens += Number(a.total_tokens || 0);
+          const ty = `${a.agent_type || '?'}(${a['agent.source'] || '?'})`;
+          sc2.subTypes.set(ty, (sc2.subTypes.get(ty) || 0) + 1);
+        }
+        // Skill 起動（実測のイベント名は skill_activated）。
+        // 注意: 自作 Skill の名前は "custom_skill" に伏せられる（OTEL_LOG_TOOL_DETAILS=1 で開示）。
+        // 公式・プラグイン同梱の Skill は実名で届く（メトリクス側で skill.name=review-bug-fix を観測）。
+        if (norm(name) === 'skill_activated' || norm(name) === 'skill_executed') {
+          u.sc.skillExec++;
+          const sn = a['skill.name'] || a.skill_name || '(unnamed)';
+          u.sc.skillNames.set(sn, (u.sc.skillNames.get(sn) || 0) + 1);
+        }
+        // 導入済み Skill 数（使う前段階の環境整備度）
+        if (norm(name) === 'plugin_loaded' && typeof a.skill_path_count === 'number') {
+          u.sc.skillPathsInstalled = Math.max(u.sc.skillPathsInstalled, a.skill_path_count);
         }
 
         recent.push({ t, name, identity: identityOf(a), attrs: dimsOf(a) });
@@ -311,6 +412,7 @@ export function snapshot() {
   // キー = ツール名 + 親/子。親と子を別行にして内訳が見えるようにする
   const agg = new Map();   // key -> {tool, sub, ok, ng, wp}
   const perUser = new Map();
+  const delegation = new Map();      // id -> {sub, all}
   const minuteBuckets = new Map();   // `${id}|${分}` -> 生WP
   const addToMinute = (id, t, wp) => {
     const k = `${id}|${Math.floor(t / 60000)}`;
@@ -328,6 +430,10 @@ export function snapshot() {
     g.ok++; g.wp += w;
     perUser.set(e.id, (perUser.get(e.id) || 0) + w);
     addToMinute(e.id, e.t, w);
+    // 委譲率のための人ごとの内訳（係数はかけない生の件数）
+    let ds = delegation.get(e.id);
+    if (!ds) { ds = { sub: 0, all: 0 }; delegation.set(e.id, ds); }
+    ds.all++; if (sub) ds.sub++;
   }
   for (const e of metricWpEvents) addToMinute(e.id, e.t, e.wp);
 
@@ -359,9 +465,54 @@ export function snapshot() {
   // breakdown の合計は「生WP」。上限適用後が実際に使う wpTotal
   const wpTotal = wpCapped;
 
+  /* ==================== 業務スコアカード ====================
+     単一の合計値は作らない。多軸のまま並べてフロントで並べ替える。 */
+  const scorecard = [...users.values()].map(u => {
+    const s = u.sc;
+    const d = delegation.get(u.id) || { sub: 0, all: 0 };
+    const lines = s.linesAdded + s.linesRemoved;
+    const outcome = s.linesAdded + s.linesRemoved * SCORE.eff.removed + s.prs * SCORE.eff.prLines;
+    const eligible = s.prs >= SCORE.minPrs && lines >= SCORE.minLines;
+    return {
+      id: u.id, email: u.email, team: u.team,
+      // 成果（絶対量）
+      linesAdded: s.linesAdded, linesRemoved: s.linesRemoved, lines,
+      commits: s.commits, prs: s.prs,
+      // 使い方（subagent_completed / skill_executed の実測値を優先）
+      skill: Math.max(s.skill, s.skillExec),
+      skillNames: [...s.skillNames.entries()].sort((a, b) => b[1] - a[1]),
+      agent: Math.max(s.agent, s.subAgents),
+      customAgent: s.subAgentsCustom,
+      asyncAgent: s.subAgentsAsync,
+      subToolUses: s.subToolUses, subTokens: s.subTokens,
+      subTypes: [...s.subTypes.entries()].sort((a, b) => b[1] - a[1]),
+      skillPathsInstalled: s.skillPathsInstalled,
+      // 委譲率は total_tool_uses（実測）を優先し、無ければヒューリスティックにフォールバック
+      delegationPct: s.subToolUses && s.toolsOk
+        ? +(s.subToolUses / s.toolsOk * 100).toFixed(1)
+        : (d.all ? +(d.sub / d.all * 100).toFixed(1) : 0),
+      delegationSource: s.subToolUses ? 'subagent_completed' : 'heuristic',
+      // 投入
+      outputTokens: s.outputTokens, cacheReadTokens: s.cacheReadTokens, costUsd: +s.costUsd.toFixed(2),
+      toolsOk: s.toolsOk, toolsNg: s.toolsNg,
+      failPct: (s.toolsOk + s.toolsNg) ? +(s.toolsNg / (s.toolsOk + s.toolsNg) * 100).toFixed(1) : 0,
+      editAccept: s.editAccept, editReject: s.editReject,
+      reworkPct: (s.editAccept + s.editReject) ? +(s.editReject / (s.editAccept + s.editReject) * 100).toFixed(1) : 0,
+      // 効率（要: 最低成果フィルタ。満たさない人は null にしてランク外にする）
+      efficiency: eligible && s.outputTokens ? +(outcome / s.outputTokens * SCORE.eff.scale).toFixed(3) : null,
+      eligible,
+      toolsPerPr: s.prs ? Math.round(s.toolsOk / s.prs) : null,
+      // 活動
+      activeDays: s.days.size, sessions: s.sessions.size,
+      // ゲーム用WP（参考。業務評価には使わない）
+      gameWp: Math.round(perUserCapped.get(u.id) ?? 0),
+    };
+  }).sort((a, b) => b.lines - a.lines);
+
   return {
     stats: { ...stats, uptimeSec: Math.round((Date.now() - stats.startedAt) / 1000), rawFile: RAW_FILE },
     wpTotal, breakdown, weights: WP,
+    scorecard, scoreConfig: SCORE,
     cap: {
       perMinute: WP.perMinuteCap, wpRaw, wpCapped,
       clipped: wpRaw - wpCapped, clippedMinutes,

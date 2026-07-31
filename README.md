@@ -83,14 +83,19 @@ Claude Code ──OTLP/JSON──▶ :4318 /v1/metrics, /v1/logs   ← otel.mjs�
 |---|---|
 | イベント名 | `event.name` は `claude_code.` プレフィックス**無し**（`tool_result` 等） |
 | 識別属性 | `user.email` / `session.id` / `organization.id` は resource ブロックではなく**各 datapoint / logRecord の attributes 側**に入る |
-| 未記載イベント | `hook_registered` / `hook_execution_start` / `hook_execution_complete` が実在（`hook_event=PostToolUse:Bash` まで取れる） |
+| 未記載イベント | `hook_registered` / `hook_execution_start` / `hook_execution_complete`（`hook_event=PostToolUse:Bash` まで取れる）、**`subagent_completed`**（`total_tool_uses` / `total_tokens` / `agent_type` / `is_async`）、**`skill_activated`** |
+| Skill 名 | 自作 Skill は `custom_skill` に伏せられる（`OTEL_LOG_TOOL_DETAILS=1` で開示）。公式・同梱の Skill は実名で届く |
 | プロンプト内容 | `prompt` / `response` 属性は存在するが値は `<REDACTED>`（既定で内容は送られない） |
 | `DISABLE_TELEMETRY=1` との併存 | 併存可。OTel 送信はブロックされない |
 
 ### WP の重み（`otel.mjs` の `WP`）
 
 > 計測ロジックの全体・較正データ・**指標としての妥当性の限界**は [WP.md](WP.md) にまとめてある。
-> WP は「活動量」の指標であって「パフォーマンス」の指標ではない（人と人の比較には使えない）。
+>
+> ゲーム用WPと**業務スコアカード**は目的が違うので分離している。
+> ゲーム用WPは「活動量」であって「パフォーマンス」ではなく、**人と人の比較には使えない**
+> （実測で `Skill` 1.2% / `Agent` 0.9% しか占めず、`Bash` を大量に叩く人が上位になる）。
+> 使い方を見るための多軸スコアカードは [WP.md #9](WP.md#9-業務スコアカード)。
 
 ツール実行は `success=true` のみ加点。
 

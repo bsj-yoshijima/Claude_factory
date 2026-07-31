@@ -102,7 +102,32 @@
   </section>
 
   <section>
-    <h2>ユーザー別 WP（リーダーボード素案）</h2>
+    <h2>スコアカード（リーダーボード）</h2>
+    <p class="note">
+      Claude Code の<b>使い方</b>を可視化するための多軸表。<b>単一の合計値は作らない</b>（1つに混ぜると必ず誤った行動を強化するため）。
+      サブエージェント係数はかけず<b>生カウント</b>。下のボタンで並べ替え。
+    </p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="scSort"></div>
+    <table>
+      <thead><tr>
+        <th class="n">#</th><th>識別子</th><th>チーム</th>
+        <th class="n" title="(追加行 + 削除行×0.3 + PR×150) ÷ output_tokens × 1000">効率</th>
+        <th class="n">PR</th><th class="n">コミット</th><th class="n">追加行</th><th class="n">削除行</th>
+        <th class="n">Skill</th><th class="n" title="subagent_completed の件数">Agent</th>
+        <th class="n" title="agent.source が built-in 以外。自分でサブエージェントを定義している">自作Agent</th>
+        <th class="n" title="subagent_completed.total_tool_uses ÷ 全ツール実行">委譲率</th>
+        <th class="n" title="サブエージェントに委譲したツール実行数 / トークン">委譲量</th>
+        <th class="n" title="ツール実行数 ÷ PR数。低いほど効率的">PR単価</th>
+        <th class="n" title="user_reject / user_abort された編集の割合">手戻り</th>
+        <th class="n">outputTok</th><th class="n">稼働日</th>
+      </tr></thead>
+      <tbody id="scRows"></tbody>
+    </table>
+    <p class="note" id="scNote" style="margin-top:10px"></p>
+  </section>
+
+  <section>
+    <h2>ユーザー別 WP（ゲーム用・参考）</h2>
     <p class="note">resource 属性の <code>user.email</code> / <code>user.account_uuid</code> 単位。<code>OTEL_RESOURCE_ATTRIBUTES=team=xxx</code> を入れるとチーム列も埋まります。</p>
     <table>
       <thead><tr><th class="n">#</th><th>識別子</th><th>チーム</th><th class="n">有効WP</th><th class="n">生WP</th><th class="n">うちツール</th><th class="n">うちメトリクス</th><th class="n">ツール成功</th><th class="n">増減行数</th></tr></thead>
@@ -141,6 +166,8 @@ const E_LABEL_RAW = {
   'hook_registered':        '★ Hook 登録（起動時に何個のフックが有効か）',
   'hook_execution_start':   '★ Hook 実行開始',
   'hook_execution_complete':'★ Hook 実行完了（所要時間・成功数つき）',
+  'subagent_completed':     '★ サブエージェント完了（total_tool_uses / total_tokens / agent_type / is_async）',
+  'skill_activated':        '★ Skill 起動（自作Skill名は custom_skill に伏せられる）',
 };
 const E_LABEL = {
   'claude_code.user_prompt':        'ユーザー入力',
@@ -168,6 +195,9 @@ const A_LABEL = {
   'mcp_server.name':'MCPサーバ', 'mcp_tool.name':'MCPツール', start_type:'開始種別',
   decision:'判断', language:'言語', effort:'推論強度', speed:'速度',
 };
+let scSortKey = 'efficiency';   // スコアカードの並べ替え軸
+let lastData = null;            // 並べ替えボタンで再描画するために保持
+
 const n = v => (typeof v === 'number' ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(2)) : v);
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const ago = t => { if(!t) return '—'; const s=Math.round((Date.now()-t)/1000);
@@ -180,6 +210,8 @@ const SETUP = `<div class="empty">まだ 1 件も受信していません。<br>
 （既に起動中のセッションには反映されません）</div>`;
 
 function render(d){
+  if(!d) return;
+  lastData = d;
   document.getElementById('recv').className = 'pill ' + (d.stats.metricPosts + d.stats.logPosts > 0 ? 'live' : 'dead');
   document.getElementById('recv').textContent =
     d.stats.metricPosts + d.stats.logPosts > 0 ? `受信中 · 最終 ${ago(d.stats.lastSeen)}` : '未受信';
@@ -237,6 +269,44 @@ function render(d){
       <details><summary>届いた属性キー ${e.attrKeys.length}件</summary>
         <div class="attr">${e.attrKeys.map(k=>esc(k)).join(' · ')}</div></details>
     </div>`).join('') : `<div class="empty">イベント未受信。<code>OTEL_LOGS_EXPORTER=otlp</code> が設定されているか確認してください（メトリクスとは別設定です）。</div>`;
+
+  /* スコアカード（多軸・並べ替え可） */
+  const SC_AXES = [
+    ['efficiency','効率'], ['prs','PR数'], ['commits','コミット数'], ['lines','変更行数'],
+    ['skill','Skill利用'], ['agent','Agent起動'], ['customAgent','自作Agent'],
+    ['delegationPct','委譲率'], ['subToolUses','委譲量'], ['activeDays','稼働日数'],
+  ];
+  document.getElementById('scSort').innerHTML = SC_AXES.map(([k,l])=>
+    `<button class="tab" data-sc="${k}" style="${k===scSortKey?'background:var(--gold);color:#243b34;border-color:var(--gold)':''}">${l}順</button>`).join('');
+  for(const b of document.querySelectorAll('[data-sc]'))
+    b.onclick = ()=>{ scSortKey = b.dataset.sc; render(lastData); };
+
+  const rows = [...d.scorecard].sort((a,b)=>{
+    const av=a[scSortKey], bv=b[scSortKey];
+    if(av===null&&bv===null) return b.lines-a.lines;   // 効率がランク外の人同士は変更行数で
+    if(av===null) return 1;                            // ランク外は常に末尾
+    if(bv===null) return -1;
+    return bv-av;
+  });
+  document.getElementById('scRows').innerHTML = rows.length ? rows.map((u,i)=>`<tr>
+    <td class="n">${i+1}</td><td>${esc(u.id)}</td><td class="attr">${esc(u.team||'—')}</td>
+    <td class="n">${u.efficiency===null?'<span class="attr" title="最低成果の条件を満たしていないためランク外">—</span>':'<b>'+u.efficiency+'</b>'}</td>
+    <td class="n">${n(u.prs)}</td><td class="n">${n(u.commits)}</td>
+    <td class="n">${n(u.linesAdded)}</td><td class="n">${n(u.linesRemoved)}</td>
+    <td class="n" title="${u.skillNames.map(([k,v])=>esc(k)+' '+v).join(' / ')||'—'}">${n(u.skill)}</td>
+    <td class="n" title="${u.subTypes.map(([k,v])=>esc(k)+' '+v).join(' / ')||'—'}">${n(u.agent)}</td>
+    <td class="n">${n(u.customAgent)}</td>
+    <td class="n" title="判定元: ${u.delegationSource}">${u.delegationPct}%</td>
+    <td class="n attr">${n(u.subToolUses)}回 / ${n(u.subTokens)}tok</td>
+    <td class="n">${u.toolsPerPr===null?'—':n(u.toolsPerPr)}</td>
+    <td class="n">${u.reworkPct}%</td>
+    <td class="n">${n(u.outputTokens)}</td><td class="n">${n(u.activeDays)}</td>
+  </tr>`).join('') : `<tr><td colspan="17" class="attr">—</td></tr>`;
+  const off = d.scorecard.filter(u=>!u.eligible).length;
+  document.getElementById('scNote').innerHTML =
+    `効率のランク参加条件: <code>PR ≥ ${d.scoreConfig.minPrs}</code> かつ <code>変更行数 ≥ ${d.scoreConfig.minLines}</code>
+     （現在 ${off} 人がランク外）。この条件が無いと「数行しか書いていない人」が分母の小ささだけで1位になる。
+     <br>効率は難易度を補正しない（調査・デバッグ中心の人は不利）ので、<b>絶対量の列と必ず併せて見ること</b>。`;
 
   /* users */
   document.getElementById('uRows').innerHTML = d.users.length ? d.users.map((u,i)=>`<tr>
