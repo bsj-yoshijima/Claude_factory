@@ -440,14 +440,21 @@ export function snapshot() {
   // 1分バケットごとに上限でクリップ。削られた量は必ず外に出す（黙って上限をかけない）
   let wpRaw = 0, wpCapped = 0, clippedMinutes = 0;
   const perUserCapped = new Map();
+  const dayBuckets = new Map();      // JST の暦日 -> 上限適用後のWP（ゲームの「今日の累計」用）
   for (const [k, v] of minuteBuckets) {
-    const id = k.slice(0, k.lastIndexOf('|'));
+    const i = k.lastIndexOf('|');
+    const id = k.slice(0, i);
+    const minute = Number(k.slice(i + 1));
     wpRaw += v;
     const c = Math.min(v, WP.perMinuteCap);
     wpCapped += c;
     perUserCapped.set(id, (perUserCapped.get(id) || 0) + c);
+    const day = jstDay(minute * 60000);
+    dayBuckets.set(day, (dayBuckets.get(day) || 0) + c);
     if (v > WP.perMinuteCap) clippedMinutes++;
   }
+  const wpDaily = Object.fromEntries([...dayBuckets.entries()].sort());
+  const wpToday = wpDaily[jstDay(Date.now())] || 0;
 
   const breakdown = [
     ...[...agg.values()].sort((a, b) => b.wp - a.wp).map(g => ({
@@ -512,6 +519,7 @@ export function snapshot() {
   return {
     stats: { ...stats, uptimeSec: Math.round((Date.now() - stats.startedAt) / 1000), rawFile: RAW_FILE },
     wpTotal, breakdown, weights: WP,
+    wpDaily, wpToday,                 // ゲーム側の「今日の累計WP」用
     scorecard, scoreConfig: SCORE,
     cap: {
       perMinute: WP.perMinuteCap, wpRaw, wpCapped,

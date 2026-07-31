@@ -11,7 +11,9 @@
   #wrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
   #game{width:min(1300px,96vw);aspect-ratio:1024/572}
   #game canvas{image-rendering:pixelated;border-radius:8px;box-shadow:0 24px 80px rgba(0,0,0,.6)}
-  #topbar{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:6;font-size:12px}
+  /* タブが増えたので狭い画面では折り返す */
+  #topbar{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:6;font-size:12px;
+          flex-wrap:wrap;justify-content:center;max-width:min(760px,calc(100vw - 24px))}
   .tab{background:var(--panel);color:var(--mint);border:1px solid var(--edge);border-radius:8px;padding:5px 12px;cursor:pointer;backdrop-filter:blur(3px)}
   .tab:hover{border-color:var(--mint)} .tab.gacha{color:var(--gold)}
   #badge{position:absolute;top:10px;right:12px;font-size:12px;color:var(--ink);background:var(--panel);padding:6px 12px;border-radius:8px;z-index:6}
@@ -76,6 +78,39 @@
   .pitem .qn{position:absolute;top:1px;right:4px;font-size:9px;color:#7fe6ff;font-weight:700}
   .pitem.dim{opacity:.4;cursor:default}
   .phint{font-size:10px;color:#9fb0c0}
+  /* ===== 製造（抽出機に原材料をセット → WPを溜めて製品化） ===== */
+  #craft{position:absolute;left:12px;bottom:46px;z-index:7;width:224px;background:var(--panel);
+         border:1px solid var(--edge);border-radius:10px;padding:9px 11px;font-size:11px;backdrop-filter:blur(4px)}
+  #craft h3{margin:0 0 6px;font-size:11px;color:var(--gold);letter-spacing:.04em}
+  #craft .slots{display:flex;gap:5px;margin-bottom:7px}
+  #craft .slot{flex:1;height:44px;border:2px dashed #33443f;border-radius:8px;display:flex;flex-direction:column;
+               align-items:center;justify-content:center;cursor:pointer;background:#0e1417}
+  #craft .slot.set{border-style:solid;border-color:var(--mint)}
+  #craft .slot.none{opacity:.35;cursor:default;border-color:#26332f}
+  #craft .slot .e{font-size:17px;line-height:1}
+  #craft .slot small{font-size:8px;color:#cfeee0;margin-top:1px}
+  #craft .bar{height:7px;background:#0d1315;border:1px solid var(--edge);border-radius:4px;overflow:hidden;margin:4px 0 5px}
+  #craft .bar>i{display:block;height:100%;background:linear-gradient(90deg,#78d0a6,var(--gold));width:0}
+  #craft .kv{display:flex;justify-content:space-between;color:#9fb0c0}
+  #craft .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
+  #craft button{width:100%;margin-top:7px;background:var(--gold);color:#243b34;font-weight:700;border:none;
+                border-radius:7px;padding:8px;cursor:pointer;font-family:inherit;font-size:12px}
+  #craft button.stop{background:#3a4a45;color:#cfeee0}
+  #craft .warn{color:#ff9f7a;margin-top:5px;font-size:10px}
+  #doneBtn{position:absolute;top:44px;right:12px;z-index:8;display:none;cursor:pointer;font-size:12px;
+           background:var(--gold);color:#243b34;font-weight:700;padding:7px 13px;border-radius:8px}
+  #doneBtn.show{display:block}
+  #doneN{background:#243b34;color:var(--gold);border-radius:99px;padding:0 6px;margin-left:3px;font-size:10px}
+  /* 完成品 / 製品図鑑 のグリッド */
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:7px}
+  .pcard{position:relative;background:#10171b;border:1px solid #243036;border-radius:9px;padding:8px 4px;text-align:center}
+  .pcard .e{font-size:28px;line-height:1.1}
+  .pcard .nm{font-size:10px;color:#eafff4;margin-top:2px}
+  .pcard .rr{font-size:9px;margin-top:1px}
+  .pcard .qn{font-size:9px;color:#7fe6ff}
+  .pcard.miss{opacity:.28}
+  .pcard .new{position:absolute;top:-5px;left:-4px;background:#ff5d6c;color:#fff;font-size:8px;
+              font-weight:700;padding:1px 5px;border-radius:99px;transform:rotate(-8deg)}
 </style>
 </head>
 <body>
@@ -87,8 +122,11 @@
     <div class="tab" id="shopBtn">🏪 ショップ</div>
     <div class="tab" id="editBtn">🔧 編集</div>
     <div class="tab" id="dexBtn">📖 図鑑</div>
+    <div class="tab" id="lbBtn">🏆 リーダーボード</div>
     <a class="tab" id="metricsBtn" href="/metrics" style="text-decoration:none">📊 メトリクス</a>
   </div>
+  <div id="doneBtn">🎁 完成品 <span id="doneN"></span></div>
+  <div id="craft"></div>
   <div id="badge"><span id="prodN">⚙️ 0</span><span id="rateN" style="color:#7fe6ff;font-size:10px;margin-left:4px"></span> ・ <span id="moneyN" style="color:#ffd27a">💰 0</span></div>
   <div id="hud"></div>
   <div id="palette"></div>
@@ -224,13 +262,34 @@ function openGacha(){
     const h=panel.querySelector('h2 span'); if(h)h.textContent='⚙️ '+Math.floor(G.prodP).toLocaleString(); updateBadge(); };
   panel.querySelector('#p1').onclick=()=>run(1); panel.querySelector('#p10').onclick=()=>run(10);
 }
-function openDex(){
-  const owned=PRIZES.filter(p=>G.inv[p.id]).length;
-  const cells=PRIZES.map(p=>{ const have=G.inv[p.id]||0,col=RAR[p.r].c;
-    return have? `<div class="cell own" data-id="${p.id}" style="border-color:${col}" title="クリックで部屋に飾る">${p.e}<small style="color:${col}">${RAR[p.r].n}</small><span class="cnt">×${have}</span></div>`
-               : `<div class="cell" style="opacity:.45">❓<small style="color:#9fb0c0">${RAR[p.r].n}</small></div>`; }).join('');
-  openOverlay(`<h2>📖 コレクション図鑑 <span style="font-size:12px;color:#9fb0c0">${owned}/${PRIZES.length}</span></h2>
-    <div class="grid">${cells}</div><div class="rowline" style="font-size:11px;color:#9fb0c0">所持アイテムをクリックで部屋に飾る</div>`);
+let _dexTab='prod';   // 'prod'=製造した製品(ゲームのゴール) / 'prize'=ガチャ景品
+function openDex(tab){
+  if(tab)_dexTab=tab;
+  const c=craftState();
+  const pOwned=PRODS.filter(p=>c.dex[p.id]).length;
+  const zOwned=PRIZES.filter(p=>G.inv[p.id]).length;
+  const head=`<div class="sttabs">
+      <span class="sttab ${_dexTab==='prod'?'on':''}" data-dex="prod">🍮 製品 ${pOwned}/${PRODS.length}</span>
+      <span class="sttab ${_dexTab==='prize'?'on':''}" data-dex="prize">🎁 景品 ${zOwned}/${PRIZES.length}</span></div>`;
+  let body;
+  if(_dexTab==='prod'){
+    // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
+    body=`<div class="pgrid">${PRODS.map(p=>{ const n=c.dex[p.id]||0;
+      return n ? `<div class="pcard" style="border-color:${RAR[p.r].c}"><div class="e">${p.e}</div>
+                    <div class="nm">${p.n}</div><div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
+                    <div class="qn">×${n}</div></div>`
+               : `<div class="pcard miss"><div class="e">❓</div><div class="nm">？？？</div>
+                    <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`; }).join('')}</div>
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">
+        原材料の組み合わせを変えて未発見の製品を探そう。1製品 = ${CRAFT_WP}WP。</div>`;
+  } else {
+    body=`<div class="grid">${PRIZES.map(p=>{ const have=G.inv[p.id]||0,col=RAR[p.r].c;
+      return have? `<div class="cell own" data-id="${p.id}" style="border-color:${col}" title="クリックで部屋に飾る">${p.e}<small style="color:${col}">${RAR[p.r].n}</small><span class="cnt">×${have}</span></div>`
+                 : `<div class="cell" style="opacity:.45">❓<small style="color:#9fb0c0">${RAR[p.r].n}</small></div>`; }).join('')}</div>
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">所持アイテムをクリックで部屋に飾る</div>`;
+  }
+  openOverlay(`<h2>📖 図鑑</h2>${head}${body}`);
+  for(const el of panel.querySelectorAll('[data-dex]')) el.onclick=()=>openDex(el.dataset.dex);
   panel.querySelectorAll('.cell.own').forEach(el=>el.onclick=()=>{
     const p=PRIZES.find(x=>x.id===el.dataset.id);
     if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(p.e, RAR[p.r].c); snapLayout(); saveGame(); toast(`${p.e} ${p.n} を部屋に飾った！`); closeOverlay(); }
@@ -238,6 +297,280 @@ function openDex(){
 }
 document.getElementById('gachaBtn').addEventListener('click',openGacha);
 document.getElementById('dexBtn').addEventListener('click',openDex);
+
+/* =========================================================================
+   製造プロトタイプ — 抽出機に原材料をセット → 実WPを溜めて製品化
+   WP は /api/otel（OTel実測）の累計を参照する。セッション開始時点の累計を
+   startWp として記録し、差分を「現セッションWP」として扱う。
+   ========================================================================= */
+const CRAFT_WP = 50;          // 1製品あたりの必要WP（プロトタイプ値）
+const MAX_EXTRACTORS = 3;     // 原材料をセットできる抽出機の上限
+
+// 原材料（プロトタイプは食材のみ。将来は工場ジャンルで差し替える）
+const MATS = [
+  {id:'milk',  e:'🥛',n:'牛乳'},   {id:'flour', e:'🌾',n:'小麦粉'}, {id:'egg',   e:'🥚',n:'卵'},
+  {id:'butter',e:'🧈',n:'バター'}, {id:'sugar', e:'🍬',n:'砂糖'},   {id:'choco', e:'🍫',n:'チョコ'},
+  {id:'rice',  e:'🍚',n:'米'},     {id:'noodle',e:'🍥',n:'麺'},     {id:'cheese',e:'🧀',n:'チーズ'},
+  {id:'tomato',e:'🍅',n:'トマト'}, {id:'meat',  e:'🥩',n:'肉'},     {id:'veg',   e:'🥬',n:'野菜'},
+];
+const MAT = Object.fromEntries(MATS.map(m=>[m.id,m]));
+
+// 製品（r は RAR と共通のレア度 1..5 / m は相性のある原材料）
+// m は未定義の組み合わせから製品を選ぶときのスコアに使う。これが無いと
+// 「チョコ+卵+牛乳 → サラダ」のような噛み合わない結果が出る。
+const PRODS = [
+  {id:'bread',   e:'🍞',n:'食パン',        r:1,m:['flour','butter','milk']},
+  {id:'onigiri', e:'🍙',n:'おにぎり',      r:1,m:['rice','veg']},
+  {id:'cookie',  e:'🍪',n:'クッキー',      r:1,m:['flour','butter','sugar']},
+  {id:'pancake', e:'🥞',n:'パンケーキ',    r:1,m:['flour','egg','milk','sugar']},
+  {id:'omelet',  e:'🍳',n:'オムレツ',      r:1,m:['egg','butter','cheese']},
+  {id:'salad',   e:'🥗',n:'サラダ',        r:1,m:['veg','tomato','cheese']},
+  {id:'fries',   e:'🍟',n:'フライドポテト',r:1,m:['veg','butter']},
+  {id:'soup',    e:'🍲',n:'スープ',        r:1,m:['veg','tomato','meat']},
+  {id:'pudding', e:'🍮',n:'プリン',        r:2,m:['egg','milk','sugar']},
+  {id:'sandwich',e:'🥪',n:'サンドイッチ',  r:2,m:['flour','veg','cheese','meat']},
+  {id:'cupnoodle',e:'🍜',n:'カップラーメン',r:2,m:['noodle','meat','veg']},
+  {id:'pizza',   e:'🍕',n:'ピザ',          r:2,m:['flour','cheese','tomato']},
+  {id:'donut',   e:'🍩',n:'ドーナツ',      r:2,m:['flour','sugar','butter']},
+  {id:'croissant',e:'🥐',n:'クロワッサン', r:2,m:['flour','butter']},
+  {id:'pasta',   e:'🍝',n:'パスタ',        r:2,m:['noodle','tomato','cheese']},
+  {id:'curry',   e:'🍛',n:'カレー',        r:2,m:['rice','meat','veg']},
+  {id:'burger',  e:'🍔',n:'ハンバーガー',  r:2,m:['flour','meat','cheese','veg']},
+  {id:'taco',    e:'🌮',n:'タコス',        r:2,m:['flour','meat','veg','tomato']},
+  {id:'cake',    e:'🍰',n:'ショートケーキ',r:3,m:['flour','egg','sugar','butter','milk']},
+  {id:'icecream',e:'🍨',n:'アイスクリーム',r:3,m:['milk','sugar','egg']},
+  {id:'cupcake', e:'🧁',n:'カップケーキ',  r:3,m:['flour','egg','sugar','choco']},
+  {id:'sushi',   e:'🍣',n:'寿司',          r:3,m:['rice','veg']},
+  {id:'ramen',   e:'🍥',n:'特製ラーメン',  r:3,m:['noodle','meat','egg']},
+  {id:'crepe',   e:'🫓',n:'クレープ',      r:3,m:['flour','milk','egg','sugar']},
+  {id:'gratin',  e:'🥘',n:'グラタン',      r:3,m:['cheese','milk','butter','veg']},
+  {id:'honeytoast',e:'🍯',n:'ハニートースト',r:3,m:['flour','butter','sugar','milk']},
+  {id:'deco',    e:'🎂',n:'デコレーションケーキ',r:4,m:['flour','egg','sugar','butter','choco','milk']},
+  {id:'parfait', e:'🍧',n:'豪華パフェ',    r:4,m:['milk','sugar','choco','egg']},
+  {id:'bento',   e:'🍱',n:'特上弁当',      r:4,m:['rice','meat','veg','egg']},
+  {id:'course',  e:'🏆',n:'伝説のフルコース',r:5,m:['meat','cheese','tomato','butter','rice','veg']},
+];
+const PROD = Object.fromEntries(PRODS.map(p=>[p.id,p]));
+
+// 組み合わせ（重複を除いた原材料のソート済みキー）→ 出うる製品5種
+const RECIPES = {
+  'egg,milk,sugar'      : ['pudding','icecream','parfait','crepe','honeytoast'],
+  'butter,egg,flour'    : ['cookie','cake','donut','croissant','deco'],
+  'egg,flour,milk'      : ['pancake','crepe','bread','cake','cupcake'],
+  'flour,milk'          : ['bread','pancake','croissant','crepe','cupcake'],
+  'egg,milk'            : ['pudding','omelet','icecream','pancake','parfait'],
+  'meat,noodle'         : ['cupnoodle','ramen','pasta','curry','soup'],
+  'meat,rice'           : ['curry','onigiri','bento','sushi','soup'],
+  'cheese,flour,tomato' : ['pizza','gratin','pasta','sandwich','burger'],
+  'meat,veg'            : ['salad','burger','taco','soup','bento'],
+  'butter,choco,flour'  : ['cookie','donut','cupcake','cake','deco'],
+  'choco,milk'          : ['icecream','pudding','crepe','parfait','cupcake'],
+  'cheese,meat,veg'     : ['burger','taco','sandwich','gratin','pizza'],
+  'rice,veg'            : ['onigiri','salad','bento','soup','sushi'],
+  'egg,flour'           : ['bread','pancake','cookie','omelet','croissant'],
+  'noodle,veg'          : ['cupnoodle','ramen','pasta','salad','soup'],
+};
+
+// 未定義の組み合わせは、組み合わせ文字列から「決定的に」5種を選ぶ。
+// Math.random にすると開き直すたび候補が変わってしまうため、必ずハッシュ由来にする。
+function hash32(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+// 未定義の組み合わせは「原材料との相性」で上位5種を選ぶ。
+// 同点は組み合わせ文字列のハッシュで決める（=同じ組み合わせなら常に同じ5種。
+// Math.random にすると開き直すたび候補が変わって「探索」が成立しない）。
+function poolFor(key){
+  if(RECIPES[key]) return RECIPES[key].filter(id=>PROD[id]);
+  const mats=key.split(','), h=hash32(key);
+  const scored=PRODS.map((p,i)=>{
+    const hit=mats.filter(m=>p.m.includes(m)).length;
+    const miss=p.m.length-hit;                       // 余計な材料が多い製品は少し下げる
+    const rare=(RAR[p.r].w/100);                     // レアほど出にくくする
+    const jitter=((Math.imul(h^(i*2654435761),2246822519)>>>0)/4294967296)*0.9;
+    return { id:p.id, s: hit*3 - miss*0.35 + rare*0.6 + jitter };
+  }).sort((a,b)=>b.s-a.s);
+  return scored.slice(0,5).map(x=>x.id);
+}
+// 5種の中からレア度で重み付けして1つ引く（同じ組み合わせでも出るものが変わる）
+function rollProduct(key){
+  const pool=poolFor(key).map(id=>PROD[id]).filter(Boolean); if(!pool.length) return null;
+  const ws=pool.reduce((s,p)=>s+RAR[p.r].w,0); let x=Math.random()*ws;
+  for(const p of pool){ x-=RAR[p.r].w; if(x<=0) return p; }
+  return pool[pool.length-1];
+}
+
+function craftState(){
+  if(!G.craft||typeof G.craft!=='object') G.craft={};
+  const c=G.craft;
+  if(!c.mats||typeof c.mats!=='object') c.mats={};
+  if(!Array.isArray(c.made)) c.made=[];
+  if(!c.dex||typeof c.dex!=='object') c.dex={};
+  if(c.session&&typeof c.session!=='object') c.session=null;
+  return c;
+}
+// 抽出機は配置順に最大3台までを原材料スロットとして扱う
+function slotIds(){ const s=window.__scene; return (s&&s.extractors?s.extractors():[]).slice(0,MAX_EXTRACTORS); }
+function comboMats(){ const c=craftState(); return slotIds().map(id=>c.mats[id]).filter(Boolean); }
+function comboKey(){ const set=[...new Set(comboMats())].sort(); return set.length?set.join(','):null; }
+
+/* --- WP の取得（OTel実測） --- */
+let WPST={ total:0, today:0, ok:false, sc:[] };
+async function pollWp(){
+  try{
+    const r=await fetch('/api/otel',{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    WPST={ total:d.wpTotal||0, today:d.wpToday||0, ok:true, sc:d.scorecard||[] };
+  }catch(_){ WPST.ok=false; }
+  tickCraft(); renderCraft();
+}
+const sessionWp = ()=>{ const c=craftState(); return c.session ? Math.max(0, WPST.total - c.session.startWp) : 0; };
+
+/* --- 製造判定。1回のポーリングで複数個できることもある --- */
+function tickCraft(){
+  const c=craftState(); if(!c.session||!WPST.ok) return;
+  const key=comboKey(); if(!key) return;              // 原材料が全部外れたら進めない
+  let made=null, n=0;
+  while(WPST.total - c.session.startWp >= CRAFT_WP && n<20){
+    c.session.startWp += CRAFT_WP;                     // 超過分は次の製品に繰り越す
+    const p=rollProduct(key); if(!p) break;
+    c.made.push({ pid:p.id, at:Date.now(), key, viewed:false });
+    made=p; n++;
+  }
+  if(made){
+    saveGame(); updateDoneBtn();
+    if(window.__scene&&window.__scene.celebrate) window.__scene.celebrate(made.e);
+    toast(`${made.e} ${made.n} が完成！${n>1?`（${n}個）`:''} 🎁完成品で確認`);
+  }
+}
+
+/* --- 製造パネル（工場ビュー左下） --- */
+function renderCraft(){
+  const el=document.getElementById('craft'); if(!el) return;
+  const c=craftState(), ids=slotIds(), mats=comboMats(), on=!!c.session;
+  const wp=sessionWp(), pct=Math.min(100, wp/CRAFT_WP*100);
+  const slots = ids.length ? ids.map((id,i)=>{ const m=MAT[c.mats[id]];
+      return `<div class="slot ${m?'set':''}" data-mid="${id}" title="クリックで原材料を選ぶ">
+        <span class="e">${m?m.e:'＋'}</span><small>${m?m.n:'原材料'}</small></div>`; }).join('')
+    : `<div class="slot none"><span class="e">🟥</span><small>抽出機なし</small></div>`;
+  el.innerHTML = `<h3>🏭 製造</h3>
+    <div class="slots">${slots}</div>
+    <div class="kv"><span>現セッションWP</span><b>${Math.floor(wp)} / ${CRAFT_WP}</b></div>
+    <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+    <div class="kv"><span>今日の累計WP</span><b>${Math.floor(WPST.today).toLocaleString()}</b></div>
+    <div class="kv"><span>製造した数</span><b>${c.made.length}</b></div>
+    ${mats.length ? `<button class="${on?'stop':''}" id="craftGo">${on?'■ 製造を停止':'▶ 製造開始'}</button>`
+                  : `<div class="warn">抽出機をクリックして原材料をセットすると製造を開始できます</div>`}
+    ${!WPST.ok ? '<div class="warn">WP未取得（サーバ未接続）</div>' : ''}`;
+  for(const s of el.querySelectorAll('.slot[data-mid]')) s.onclick=()=>openMatPicker(s.dataset.mid);
+  const go=el.querySelector('#craftGo'); if(go) go.onclick=toggleSession;
+}
+function toggleSession(){
+  const c=craftState();
+  if(c.session){ c.session=null; toast('製造を停止しました'); }
+  else { c.session={ startWp:WPST.total, at:Date.now() };
+    toast(`製造開始！ここからのWPをカウントします（${CRAFT_WP}WPで1個）`); }
+  saveGame(); renderCraft();
+}
+
+/* --- 原材料の選択 --- */
+function openMatPicker(machineId){
+  const c=craftState(), cur=c.mats[machineId];
+  openOverlay(`<h2>🥫 原材料をセット</h2>
+    <div class="rowline" style="font-size:11px;color:#9fb0c0">
+      選んだ組み合わせで作られる製品が変わります。同じ組み合わせでも5種類の中からランダムです。<br>
+      <b style="color:#ff9f7a">変更すると現セッションのWPは0にリセットされます。</b></div>
+    <div class="pgrid">${MATS.map(m=>`
+      <div class="pcard" data-mat="${m.id}" style="cursor:pointer;${cur===m.id?'border-color:var(--gold)':''}">
+        <div class="e">${m.e}</div><div class="nm">${m.n}</div></div>`).join('')}</div>
+    ${cur?`<div class="rowline"><button id="matClear" style="background:#3a4a45;color:#cfeee0;border:none;border-radius:7px;padding:8px 13px;cursor:pointer;font-family:inherit">原材料を外す</button></div>`:''}`);
+  for(const el of panel.querySelectorAll('[data-mat]')) el.onclick=()=>{ setMat(machineId, el.dataset.mat); closeOverlay(); };
+  const cl=panel.querySelector('#matClear'); if(cl) cl.onclick=()=>{ setMat(machineId,null); closeOverlay(); };
+}
+function setMat(machineId, matId){
+  const c=craftState();
+  if(matId) c.mats[machineId]=matId; else delete c.mats[machineId];
+  // 原材料を変えたらセッション途中でもWPはリセット（仕様）
+  if(c.session) c.session.startWp = WPST.total;
+  saveGame();
+  if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
+  renderCraft();
+  toast(matId?`${MAT[matId].e} ${MAT[matId].n} をセット（WPリセット）`:'原材料を外しました（WPリセット）');
+}
+// main.js から呼ばれる: 機械の上に出す原材料バッジ / 機械クリック
+window.__matBadge = (machineId)=>{ const m=MAT[(G.craft&&G.craft.mats&&G.craft.mats[machineId])]; return m?m.e:''; };
+window.__machineClick = (machineId, sub)=>{
+  if(sub!=='red'){ toast('原材料をセットできるのは🟥抽出機だけです'); return; }
+  if(!slotIds().includes(machineId)){ toast(`原材料をセットできる抽出機は${MAX_EXTRACTORS}台までです`); return; }
+  openMatPicker(machineId);
+};
+
+/* --- 完成品 --- */
+function updateDoneBtn(){
+  const c=craftState(), b=document.getElementById('doneBtn'); if(!b) return;
+  const unseen=c.made.filter(m=>!m.viewed).length;
+  b.classList.toggle('show', c.made.length>0);
+  document.getElementById('doneN').textContent = unseen ? unseen : '';
+}
+function openDone(){
+  const c=craftState();
+  const had={}; for(const k in c.dex) had[k]=c.dex[k];      // 「初めて」の判定は登録前の図鑑で行う
+  const seenNow={};
+  const cards=[...c.made].reverse().slice(0,200).map(m=>{
+    const p=PROD[m.pid]; if(!p) return '';
+    const isNew = !had[m.pid] && !seenNow[m.pid]; if(!had[m.pid]) seenNow[m.pid]=1;
+    const ks=(m.key||'').split(',').map(x=>MAT[x]?MAT[x].e:'').join('');
+    return `<div class="pcard">${isNew?'<span class="new">NEW</span>':''}
+      <div class="e">${p.e}</div><div class="nm">${p.n}</div>
+      <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
+      <div class="qn">${ks}</div></div>`;
+  }).join('');
+  // 一覧を表示したタイミングで図鑑に登録する（仕様）
+  let reg=0; for(const m of c.made){ if(!m.viewed){ c.dex[m.pid]=(c.dex[m.pid]||0)+1; m.viewed=true; reg++; } }
+  saveGame(); updateDoneBtn();
+  openOverlay(`<h2>🎁 完成品 <span style="font-size:12px;color:#9fb0c0">${c.made.length}個</span></h2>
+    <div class="rowline" style="font-size:11px;color:#9fb0c0">
+      ${reg?`${reg}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。図鑑を埋めていこう。</div>
+    <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`);
+}
+document.getElementById('doneBtn').addEventListener('click',openDone);
+
+/* --- リーダーボード（/api/otel のスコアカードを工場内から見る） --- */
+const LB_AXES=[['efficiency','効率'],['prs','PR数'],['commits','コミット数'],['lines','変更行数'],
+               ['skill','Skill利用'],['agent','Agent起動'],['customAgent','自作Agent'],
+               ['delegationPct','委譲率'],['activeDays','稼働日数']];
+let _lbKey='efficiency';
+async function openLb(){
+  openOverlay('<h2>🏆 リーダーボード</h2><div class="cost">読み込み中…</div>');
+  let sc=[]; try{ sc=(await (await fetch('/api/otel',{cache:'no-store'})).json()).scorecard||[]; }catch(_){}
+  const draw=()=>{
+    const rows=[...sc].sort((a,b)=>{
+      const av=a[_lbKey], bv=b[_lbKey];
+      if(av==null&&bv==null) return b.lines-a.lines;
+      if(av==null) return 1; if(bv==null) return -1; return bv-av;
+    });
+    panel.querySelector('.pbody').innerHTML=`<h2>🏆 リーダーボード</h2>
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">
+        Claude Code の使い方を軸ごとに並べたもの。単一の合計点は出しません（1つに混ぜると誤った使い方が上位に来るため）。
+        上位の人にどう使っているか聞いてみよう。</div>
+      <div class="sttabs">${LB_AXES.map(([k,l])=>`<span class="sttab ${k===_lbKey?'on':''}" data-lb="${k}">${l}順</span>`).join('')}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="color:#9fb0c0;text-align:right">
+          <th style="text-align:left">#</th><th style="text-align:left">識別子</th>
+          <th>効率</th><th>PR</th><th>コミット</th><th>追加行</th><th>Skill</th><th>Agent</th><th>自作</th><th>委譲率</th><th>稼働日</th>
+        </tr></thead><tbody>${rows.length?rows.map((u,i)=>`
+          <tr style="text-align:right;border-top:1px solid #22322e">
+            <td style="text-align:left">${i+1}</td><td style="text-align:left;color:#eafff4">${u.id}</td>
+            <td><b style="color:var(--gold)">${u.efficiency==null?'—':u.efficiency}</b></td>
+            <td>${u.prs}</td><td>${u.commits}</td><td>${u.linesAdded}</td>
+            <td>${u.skill}</td><td>${u.agent}</td><td>${u.customAgent}</td>
+            <td>${u.delegationPct}%</td><td>${u.activeDays}</td></tr>`).join('')
+          :'<tr><td colspan="11" style="color:#9fb0c0;padding:10px">データがありません（OTelの設定を確認）</td></tr>'}</tbody></table>
+      <div class="rowline" style="font-size:10px;color:#9fb0c0">
+        効率 = (追加行 + 削除行×0.3 + PR×150) ÷ output_tokens × 1000 ／ PR1件・100行以上でランク対象。
+        効率は難易度を補正しないので絶対量と併せて見ること。</div>`;
+    for(const el of panel.querySelectorAll('[data-lb]')) el.onclick=()=>{ _lbKey=el.dataset.lb; draw(); };
+  };
+  draw();
+}
+document.getElementById('lbBtn').addEventListener('click',openLb);
 
 /* ===== ショップ（景品の売却＋購入/強化） ===== */
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
@@ -383,6 +716,9 @@ loadGame().then(async ()=>{
   await waitScene(); applyOwned(); updateBadge();
   setInterval(()=>{ const r=prodRate(); G.prodP+=r; G.produced+=r; updateBadge(); }, 1000);
   setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
+  // 製造: 原材料バッジを反映してからWPの取得を開始（3秒ごと = OTelのログ送信間隔に合わせる）
+  if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
+  updateDoneBtn(); renderCraft(); pollWp(); setInterval(pollWp, 3000);
   const q=new URLSearchParams(location.search);
   if(q.get('unlockall')){   // 全背景・全アイテムを所持(テスト用)。何度開いても増殖しないよう max で設定
     G.bgOwned=Array.from(new Set([...G.bgOwned,'auto',...SKY_THEMES]));

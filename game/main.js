@@ -185,7 +185,13 @@ class Main extends Phaser.Scene {
       const img=this.add.image(p.x,p.y,tex).setOrigin(0.5,1).setDepth(p.y); img.setScale(2.0*CELL/img.height).setTint(tint);
       const sh=this.add.image(p.x+CELL*0.24,p.y+CELL*0.12,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.15,img.displayWidth*0.52).setAlpha(0.5);
       const lbl=this.add.text(p.x,p.y-2.0*CELL-4,(MACHS_JP[e.sub]||'')+(e.lvl>1?` Lv${e.lvl}`:''),{fontFamily:'monospace',fontSize:'10px',color:'#eafff6'}).setOrigin(0.5,1).setDepth(p.y+1); lbl.setShadow(0,1,'#000',3,true,true);
-      objs.push(sh,img,lbl); main=img; e._lit=img; this.lit.push({sp:img,u,v}); this.machineCells.push({c,r});
+      // セット中の原材料を機械の上に出す（移動で作り直されるので毎回外部から引く）
+      const badge=this.add.text(p.x,p.y-2.0*CELL-15,(window.__matBadge&&window.__matBadge(e.id))||'',
+        {fontFamily:'monospace',fontSize:'15px'}).setOrigin(0.5,1).setDepth(p.y+2);
+      // 編集モード外のクリックで原材料の選択を開く（編集中はドラッグを邪魔しない）
+      img.setInteractive({useHandCursor:true});
+      img.on('pointerup',()=>{ if(this.editMode) return; if(window.__machineClick) window.__machineClick(e.id,e.sub); });
+      objs.push(sh,img,lbl,badge); main=img; e._badge=badge; e._lit=img; this.lit.push({sp:img,u,v}); this.machineCells.push({c,r});
     } else if(e.kind==='belt'){
       const s=this.add.image(p.x,p.y,'belt_seg').setOrigin(0.5,0.72).setScale(1.28*CELL/965).setDepth(p.y).setTint(tint);
       const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.07,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(s.displayWidth*0.82,s.displayWidth*0.36).setAlpha(0.45);
@@ -236,6 +242,17 @@ class Main extends Phaser.Scene {
     for(const it of (list||[])) this.addPlaced(it.kind, it.sub, {cell:{c:it.c,r:it.r}, lvl:it.lvl, id:it.id, silent:true});
     this._oid=Math.max(0,...this.placed.map(e=>parseInt(String(e.id).replace(/\D/g,''))||0)); }
   setMachineLevel(id,lvl){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e)return; e.lvl=lvl; this.moveItem(id,e.cell.c,e.cell.r); }
+  // 原材料バッジの再描画（セット/解除のたびに呼ぶ）
+  refreshMachineBadges(){ for(const e of this.placed){ if(e.kind!=='machine'||!e._badge) continue;
+    e._badge.setText((window.__matBadge&&window.__matBadge(e.id))||''); } }
+  // 抽出機(red)の一覧を配置順で返す。原材料スロットの割り当てに使う
+  extractors(){ return this.placed.filter(e=>e.kind==='machine'&&e.sub==='red').map(e=>e.id); }
+  // 製造完了の演出（機械の上でポップ＋絵文字が浮き上がる）
+  celebrate(emoji){ const ms=this.placed.filter(e=>e.kind==='machine'&&e.sub==='red');
+    const t=ms.length?ms[0]:this.placed[0]; if(!t) return;
+    const p=cellXY(t.cell.c,t.cell.r); this._spawnPop(p.x,p.y);
+    const tx=this.add.text(p.x,p.y-CELL*1.2,emoji,{fontSize:Math.round(CELL*1.1)+'px'}).setOrigin(0.5,1).setDepth(9001);
+    this.tweens.add({targets:tx,y:p.y-CELL*3.2,alpha:0,duration:1500,ease:'Cubic.easeOut',onComplete:()=>tx.destroy()}); }
   // 旧API互換（ショップ購入から呼ばれる）
   placeMachine(type){ return this.addPlaced('machine', type); }
   placeBelt(){ return this.addPlaced('belt', null); }
