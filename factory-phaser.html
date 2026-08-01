@@ -78,6 +78,9 @@
   .pcat{display:flex;gap:5px;flex-wrap:wrap}
   .pcat .c{background:#141b20;border:1px solid var(--edge);border-radius:7px;padding:4px 11px;cursor:pointer;font-size:12px;color:#9fdcc6}
   .pcat .c.on{border-color:var(--gold);color:var(--gold);background:#1d262c}
+  /* 装飾のテーマ絞り込み行。数が多いので少し小さめ＋横スクロールで1〜2段に収める */
+  .pfil{max-width:min(860px,90vw);max-height:56px;overflow-y:auto}
+  .pfil .c{font-size:11px;padding:3px 8px}
   .pitems{display:flex;gap:6px;flex-wrap:wrap;width:min(860px,90vw);max-height:132px;overflow-y:auto}
   .pitem{width:62px;height:64px;border:2px solid #2c3a38;border-radius:8px;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative}
   .pitem:hover{border-color:#5f8a80}
@@ -503,10 +506,11 @@ function applyBg(k){ G.bg=k; if(window.__scene){ window.__scene.setSkyTheme(k); 
 const paletteEl=document.getElementById('palette');
 let editCat='bg', editSel=null; window.__editSel=null;
 let selMode=false, selN=0;                       // 収納の複数選択モードと選択数
+let propFilter=null;                             // 装飾の絞り込みテーマ(null=すべて / ''=汎用)
 window.__selChanged=(n)=>{ selN=n; renderPalette(); };
 function renderPalette(){
   const cats=[['bg','🌏 背景'],['prop','🧰 装飾'],['machine','🏭 製造機'],['belt','🛗 コンベア']];
-  let items='', hint='', acts='';
+  let items='', hint='', acts='', fil='';
   const cell=(dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
   if(editCat==='bg'){ hint='背景を選ぶと即適用（部屋ごと切替）';
     items=ownedBgs().map(k=>`<div class="pitem ${G.bg===k?'cur':''}" data-bg="${k}">${BG_META[k].e}<small>${BG_META[k].n}</small></div>`).join('');
@@ -516,9 +520,20 @@ function renderPalette(){
       items=`<div class="phint" style="padding:8px">選択モード中です。戻したい装飾を床でクリックしてください。</div>`;
     } else {
       hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
-      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
-      const D=Object.keys(DECO).filter(t=>availN('deco',t)>0).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
-      items=(P.concat(D).join(''))||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
+      // テーマ(=背景)で絞り込む。propFilter が null なら全部。DECO は汎用('')扱い
+      const inFilter=(th)=> propFilter===null || (th||'')===propFilter;
+      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
+      const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
+      items=(P.concat(D).join(''))||`<div class="phint" style="padding:8px">${propFilter===null?'在庫なし。🏪ショップ→設備 で購入してください。':'このテーマの在庫がありません。「すべて」に戻すか、🏪ショップで購入してください。'}</div>`;
+      // 絞り込み行: 在庫のあるテーマだけ出す。適用中の背景と同じテーマには印を付ける
+      const nOf=(th)=> Object.keys(PROP).filter(t=>(PROP[t].th||'')===th&&availN('prop',t)>0).length
+                     + (th===''?Object.keys(DECO).filter(t=>availN('deco',t)>0).length:0);
+      const chips=PROP_GROUPS.filter(([th])=>nOf(th)>0).map(([th,label])=>{
+        const cur=(th&&th===G.bg)?' ●':'';                      // いま適用中の背景と同じテーマ
+        return `<span class="c ${propFilter===th?'on':''}" data-pfil="${th}">${label}${cur} <span style="color:#9fb0c0">${nOf(th)}</span></span>`; });
+      const allN=Object.keys(PROP).filter(t=>availN('prop',t)>0).length
+               + Object.keys(DECO).filter(t=>availN('deco',t)>0).length;
+      fil=`<span class="c ${propFilter===null?'on':''}" data-pfil="*">すべて <span style="color:#9fb0c0">${allN}</span></span>`+chips.join('');
     }
     // 収納(設置済みを在庫に戻す)。位置は失われるが、在庫に戻るので置き直せる
     acts = selMode
@@ -531,8 +546,10 @@ function renderPalette(){
     const a=availN('belt'); items = a>0? cell(`data-place="belt:"`,'🛗','コンベア',0,a,editSel&&editSel.kind==='belt') : '<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
   }
   paletteEl.innerHTML=`<div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
+    ${fil?`<div class="pcat pfil">${fil}</div>`:''}
     <div class="pitems">${items}</div>${acts?`<div class="pcat">${acts}</div>`:''}<div class="phint">${hint}</div>`;
   paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; setSelMode(false); renderPalette(); });
+  paletteEl.querySelectorAll('[data-pfil]').forEach(el=>el.onclick=()=>{ propFilter=el.dataset.pfil==='*'?null:el.dataset.pfil; renderPalette(); });
   paletteEl.querySelectorAll('[data-selmode]').forEach(el=>el.onclick=()=>{ setSelMode(el.dataset.selmode==='1'); renderPalette(); });
   paletteEl.querySelectorAll('[data-stow]').forEach(el=>el.onclick=()=>stow(el.dataset.stow));
   paletteEl.querySelectorAll('[data-bg]').forEach(el=>el.onclick=()=>{ applyBg(el.dataset.bg); renderPalette(); });
