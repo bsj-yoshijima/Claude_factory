@@ -36,8 +36,14 @@
            background:var(--panel);border:1px solid var(--edge);border-radius:9px;padding:8px 13px;color:var(--mint);backdrop-filter:blur(3px)}
   #editFab:hover{border-color:var(--mint)}
   #editFab.on{background:#78d0a6;border-color:#78d0a6;color:#17251f;font-weight:700}
-  #hud{position:absolute;left:12px;bottom:12px;font-size:12px;color:var(--ink);background:var(--panel);padding:5px 10px;border-radius:6px;z-index:6}
-  #hud b{color:var(--gold)}
+  /* 稼働/休憩は Claude君の絵で示す（稼働=作業ポーズ+火花 / 休憩=座り+☕） */
+  #hud{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;gap:8px;background:var(--panel);
+       border:1px solid var(--edge);border-radius:10px;padding:5px 9px;backdrop-filter:blur(3px)}
+  #hud .st{position:relative;display:flex;align-items:flex-end;gap:2px}
+  #hud .st img{width:30px;height:32px;image-rendering:pixelated;display:block}
+  #hud .st .fx{position:absolute;top:-2px;right:12px;font-size:12px;font-style:normal;line-height:1}
+  #hud b{font-size:15px;color:var(--gold);font-variant-numeric:tabular-nums;line-height:1.6}
+  #hud b.idle{color:#9fdcc6}
   #note{position:absolute;top:10px;left:12px;font-size:10px;color:#9fdcc6;background:var(--panel);padding:4px 9px;border-radius:6px;z-index:6}
   /* overlay */
   #overlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(6,10,12,.72);backdrop-filter:blur(4px)}
@@ -99,7 +105,9 @@
   /* ===== 製造（抽出機に原材料をセット → WPを溜めて製品化）。コア機能なので上中央 ===== */
   #craft{position:absolute;top:76px;left:50%;transform:translateX(-50%);z-index:7;background:var(--panel);
          border:1px solid var(--edge);border-radius:11px;padding:8px 11px;font-size:11px;backdrop-filter:blur(4px);
-         display:flex;align-items:center;gap:11px;max-width:min(760px,calc(100vw - 24px))}
+         display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+         /* max-content にしないと折り返しの都合でボックスが不必要に細くなる */
+         width:max-content;max-width:min(760px,calc(100vw - 24px))}
   #craft .slots{display:flex;gap:5px}
   #craft .slot{width:52px;height:46px;border:2px dashed #33443f;border-radius:8px;display:flex;flex-direction:column;
                align-items:center;justify-content:center;cursor:pointer;background:#0e1417}
@@ -116,7 +124,9 @@
   #craft button{background:var(--gold);color:#243b34;font-weight:700;border:none;white-space:nowrap;
                 border-radius:8px;padding:10px 15px;cursor:pointer;font-family:inherit;font-size:12px}
   #craft button.stop{background:#3a4a45;color:#cfeee0}
-  #craft .warn{color:#ff9f7a;font-size:10px;max-width:200px}
+  /* 注意文は横に伸びるとボックスが歪むので、下段に横長で置く */
+  #craft .warn{color:#ff9f7a;font-size:10.5px;flex-basis:100%;text-align:center;
+               border-top:1px solid var(--edge);padding-top:7px;margin-top:1px}
   /* メニューのドロップダウンと重ならないよう右の中央に置く */
   #doneBtn{position:absolute;top:50%;right:12px;transform:translateY(-50%);z-index:8;display:none;cursor:pointer;
            font-size:12px;background:var(--gold);color:#243b34;font-weight:700;padding:9px 14px;border-radius:9px;
@@ -303,6 +313,8 @@ document.getElementById('dexBtn').addEventListener('click',openDex);
    startWp として記録し、差分を「現セッションWP」として扱う。
    ========================================================================= */
 const CRAFT_WP = 50;          // 1製品あたりの必要WP（プロトタイプ値）
+// 製品の売価（レア度別）。完成品一覧を開いたタイミングで 💰 に加算される
+const PROD_PRICE = {1:60, 2:200, 3:700, 4:2600, 5:9000};
 const MAX_EXTRACTORS = 3;     // 原材料をセットできる抽出機の上限
 
 // 原材料（プロトタイプは食材のみ。将来は工場ジャンルで差し替える）
@@ -431,7 +443,7 @@ function tickCraft(){
   if(made){
     saveGame(); updateDoneBtn();
     if(window.__scene&&window.__scene.celebrate) window.__scene.celebrate(made.e);
-    toast(`${made.e} ${made.n} が完成！${n>1?`（${n}個）`:''} 🎁完成品で確認`);
+    toast(`${made.e} ${made.n} が完成！(💰${(PROD_PRICE[made.r]||0).toLocaleString()})${n>1?` ×${n}個`:''} 🎁完成品で確認`);
   }
 }
 
@@ -441,14 +453,11 @@ const jstDayOf = t => new Date(t + 9*3600*1000).toISOString().slice(0,10);
 function madeToday(){ const d=jstDayOf(Date.now()); return craftState().made.filter(m=>jstDayOf(m.at)===d).length; }
 function renderBoard(){
   const el=document.getElementById('board'); if(!el) return;
-  const c=craftState();
   el.innerHTML=`
     <div class="m"><div class="v">${WPST.ok?Math.floor(WPST.today).toLocaleString():'—'}<small>WP</small></div>
       <div class="l">今日の労働量</div></div>
     <div class="m prod"><div class="v">${madeToday()}<small>個</small></div>
-      <div class="l">今日の製造</div></div>
-    <div class="m"><div class="v" style="color:#cfeee0;font-size:19px;padding-top:5px">${c.made.length}<small>個</small></div>
-      <div class="l">累計の製造</div></div>`;
+      <div class="l">今日の製造</div></div>`;
 }
 
 /* --- 製造パネル（画面上中央・コア機能） --- */
@@ -532,10 +541,26 @@ function openDone(){
       <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
       <div class="qn">${ks}</div></div>`;
   }).join('');
-  // 一覧を表示したタイミングで図鑑に登録する（仕様）
-  let reg=0; for(const m of c.made){ if(!m.viewed){ c.dex[m.pid]=(c.dex[m.pid]||0)+1; m.viewed=true; reg++; } }
-  saveGame(); updateDoneBtn();
+  // 一覧を表示したタイミングで図鑑に登録し、同時に売上を💰に加算する（仕様）
+  let reg=0, gain=0, byRar={};
+  for(const m of c.made){
+    if(m.viewed) continue;
+    const p=PROD[m.pid]; if(!p){ m.viewed=true; continue; }
+    c.dex[m.pid]=(c.dex[m.pid]||0)+1; m.viewed=true; reg++;
+    const price=PROD_PRICE[p.r]||0; gain+=price;
+    byRar[p.r]=(byRar[p.r]||0)+1;
+  }
+  if(gain){ G.money+=gain; }
+  saveGame(); updateDoneBtn(); updateBadge();
+  const bd=Object.keys(byRar).sort().map(r=>
+    `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
   openOverlay(`<h2>🎁 完成品 <span style="font-size:12px;color:#9fb0c0">${c.made.length}個</span></h2>
+    ${gain?`<div class="invbar" style="font-size:12px">
+        <span style="color:#9fb0c0">今回の売上</span>
+        <b style="color:#ffd27a;font-size:19px">💰 ${gain.toLocaleString()}</b>
+        <span style="color:#9fb0c0">（${reg}個・所持 💰${Math.floor(G.money).toLocaleString()}）</span>
+        ${bd}</div>`
+      :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません（売上は初回表示時に加算されます）。</div>`}
     <div class="rowline" style="font-size:11px;color:#9fb0c0">
       ${reg?`${reg}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。図鑑を埋めていこう。</div>
     <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`);

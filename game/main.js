@@ -25,6 +25,12 @@ const PRESETS = [
 ];
 const MTOP = [3,2,1,1,0,0,1,2,3,3,2,1,0,0,1,1,2,3];
 function makeMascot(scene, key, pal, pose){
+  const cv=mascotCanvas(pal,pose);
+  if(scene.textures.exists(key)) scene.textures.remove(key);
+  scene.textures.addCanvas(key, cv);
+}
+// マスコットを描いた canvas を返す。Phaserテクスチャにも HUD用の <img> にも使う
+function mascotCanvas(pal, pose){
   const P=3, w=26, h=28;
   const cv=document.createElement('canvas'); cv.width=w*P; cv.height=h*P;
   const g=cv.getContext('2d');
@@ -41,8 +47,16 @@ function makeMascot(scene, key, pal, pose){
     let c=pal.b; if(i>=bw-5||r>=rows-2) c=pal.s; else if(r===MTOP[i]+1) c=pal.l; px(X,Y,c);
   }
   const ey=topBase+4; px(x0+5,ey,EYE); px(x0+6,ey,EYE); px(x0+11,ey,EYE); px(x0+12,ey,EYE);
-  if(scene.textures.exists(key)) scene.textures.remove(key);
-  scene.textures.addCanvas(key, cv);
+  return cv;
+}
+// HUD用アイコン(稼働=作業ポーズ / 休憩=座りポーズ)。初回だけ描いて data URL を使い回す
+let _mascotIcons=null;
+function mascotIcons(){
+  if(!_mascotIcons) _mascotIcons={
+    work: mascotCanvas(PRESETS[0],'work').toDataURL(),
+    sit:  mascotCanvas(PRESETS[1],'sit').toDataURL(),
+  };
+  return _mascotIcons;
 }
 
 const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
@@ -491,7 +505,10 @@ class Main extends Phaser.Scene {
     });
     for(const k of Object.keys(this.agents)){ if(!present.has(k)){ const a=this.agents[k]; this.clearDeco(a); a.sp.destroy(); a.lbl.destroy(); a.shadow.destroy(); delete this.agents[k]; } }
     this.busyCount=busyN;
-    if(this.hud) this.hud.innerHTML=`稼働 <b>${busyN}</b> ・ 休憩 ${idleN} ・ Phaser基盤`;
+    if(this.hud){ const ic=mascotIcons();
+      this.hud.innerHTML=
+        `<span class="st" title="稼働中"><img src="${ic.work}" alt=""><i class="fx">✨</i><b>${busyN}</b></span>`+
+        `<span class="st" title="休憩中"><img src="${ic.sit}" alt=""><i class="fx">☕</i><b class="idle">${idleN}</b></span>`; }
   }
   update(time){
     // 星のまたたき(夜)
