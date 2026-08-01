@@ -17,8 +17,12 @@
 **素材は `+u`（右斜め下）方向の1種類だけ作らせる。** もう一方の対角（右斜め上↔左斜め下）は
 ゲーム側が左右反転して使うので生成不要（`game/main.js` の `if(e.dir==='v') img.setFlipX(true)`）。
 
-過去の失敗: 「long axis running from upper-left down-to-the-right」と書いても、
-**マスが横一列に並んだ絵**が返ってくる。文章ではなく**1マスあたりのピクセル送りを数字で**書くこと。
+過去の失敗（2段階）:
+1. 「long axis running from upper-left down-to-the-right」と書くと**マスが横一列**に並ぶ。
+   → 1マスあたりのピクセル送りを数字で書いて解決。
+2. 送りを数字で書くと斜めには並ぶが、今度は**正面を向いた箱を斜めに数珠つなぎ**にしてくる
+   （各要素に正面パネルがある＝アイソメになっていない）。
+   → 「水平線を1本も描くな」「見える面は2つだけ」「天面は菱形」で解決。
 
 ---
 
@@ -34,17 +38,30 @@ column with wide magenta gaps between rows. Never place two machines side by sid
 Every machine starts at the SAME left edge; each is longer than the one above it.
 
 === ORIENTATION — THE MOST IMPORTANT RULE ===
-Each machine is a straight run of N tile units laid along ONE DIAGONAL of an isometric grid.
-It runs from the BACK END at the UPPER-LEFT down to the FRONT END at the LOWER-RIGHT.
+The machine is ONE SINGLE CONTINUOUS BOX drawn in true 2:1 isometric projection.
+It is NOT several front-facing boxes chained together. It is one long bench, turned diagonally.
 
-Measured in pixels, tile number k sits offset from tile number 0 by exactly:
-    ( k * 32 px to the RIGHT , k * 16 px DOWNWARD )
-So each successive tile steps 32 right and 16 down — a 2:1 downhill slope to the right.
+Read these five rules as a checklist. If any of them fails, the drawing is wrong:
 
-The row of ingredient spots therefore forms a DESCENDING DIAGONAL LINE, not a horizontal line.
-DO NOT lay the tiles out in a horizontal row. DO NOT draw the machine flat/side-on.
-Imagine a long bench standing on an isometric checkerboard floor, aligned to the floor's
-lower-right diagonal — that is the required orientation for all four machines.
+1. NO HORIZONTAL LINES. Every structural edge of the machine runs at one of exactly two slopes:
+   down-to-the-RIGHT at 2:1 (2 px across for every 1 px down), or down-to-the-LEFT at 2:1.
+   The only vertical lines are the corner edges of the body. Nothing is drawn flat/level.
+2. THE TOP FACE IS A RHOMBUS — a long parallelogram, i.e. a rectangle seen in isometric.
+   It is never a rectangle seen head-on.
+3. EXACTLY TWO FACES ARE VISIBLE: the LONG SIDE face, which faces down-and-to-the-LEFT, and
+   the SHORT END face, which faces down-and-to-the-RIGHT. They meet at one vertical corner
+   edge at the near-bottom corner of the machine.
+4. NO FACE IS PARALLEL TO THE IMAGE PLANE. There is no flat front-facing panel anywhere.
+   If you can see a panel square-on, it is wrong.
+5. The long axis runs from the BACK END at the UPPER-LEFT down to the FRONT END at the
+   LOWER-RIGHT. Tile number k sits offset from tile number 0 by exactly
+   ( k * 32 px to the RIGHT , k * 16 px DOWNWARD ).
+
+Consequences to draw correctly:
+- The row of ingredient spots forms a DESCENDING DIAGONAL LINE, never a horizontal line.
+- Each ingredient spot is an ELLIPSE (a circle foreshortened 2:1), never a full circle.
+- Make the tile count countable on the LONG SIDE face: divide it into N identical panels
+  (arches / doors / vents), one per tile, separated by a thin vertical strip.
 Only this one orientation is needed; do not draw a mirrored version.
 
 === LENGTHS ===

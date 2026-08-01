@@ -3,7 +3,8 @@
 
     使い方: python3 tools/cut_machines.py
 
-入力 : assets/mach-sheets/<theme>.png   … 左上から 2/3/4/5 マス機の順(2x2)
+入力 : assets/mach-sheets/<theme>.png   … 2/3/4/5 マス機が4台。並びは 2x2 でも縦1列でもよい
+       (連結成分で4台を拾い、幅の小さい順に 2/3/4/5 と割り当てる)
 出力 : assets/mach-<theme>-s<N>.png     … 透過PNG・ゲーム内の表示サイズちょうど
 
 サイズの決め方（ここが肝）:
@@ -27,9 +28,9 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHEETS = os.path.join(ROOT, 'assets', 'mach-sheets')
 OUT = os.path.join(ROOT, 'assets')
-SIZES = [2, 3, 4, 5]          # 左上→右上→左下→右下
-COLS, ROWS = 2, 2
+SIZES = [2, 3, 4, 5]          # 幅の小さい順に割り当てる
 ERODE = 1                     # マゼンタのハロー除去(alpha収縮 px)
+MIN_AREA = 2000               # これ未満の連結成分はゴミとして捨てる
 
 
 def main_js_consts():
@@ -92,6 +93,38 @@ def key_out(im):
         for x, y in drop:
             px[x, y] = (0, 0, 0, 0)
     return im
+
+
+def split_machines(sheet):
+    """シートから機械を4台切り出す。並び(2x2 / 縦1列)に依存しないよう連結成分で拾う。
+    ゴミを捨てて面積上位4つを取り、幅の小さい順に返す(= 2,3,4,5 マス機の順)。"""
+    w, h = sheet.size
+    px = sheet.load()
+    seen = [[False] * h for _ in range(w)]
+    boxes = []
+    for x in range(w):
+        for y in range(h):
+            if seen[x][y] or px[x, y][3] == 0:
+                continue
+            q = deque([(x, y)]); seen[x][y] = True
+            x0 = x1 = x; y0 = y1 = y; area = 0
+            while q:
+                cx, cy = q.popleft(); area += 1
+                if cx < x0: x0 = cx
+                if cx > x1: x1 = cx
+                if cy < y0: y0 = cy
+                if cy > y1: y1 = cy
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        nx, ny = cx + dx, cy + dy
+                        if 0 <= nx < w and 0 <= ny < h and not seen[nx][ny] and px[nx, ny][3] != 0:
+                            seen[nx][ny] = True; q.append((nx, ny))
+            if area >= MIN_AREA:
+                boxes.append((area, (x0, y0, x1 + 1, y1 + 1)))
+    boxes.sort(key=lambda b: -b[0])
+    picks = [b[1] for b in boxes[:len(SIZES)]]
+    picks.sort(key=lambda bb: bb[2] - bb[0])       # 幅の小さい順 = 2,3,4,5 マス
+    return picks
 
 
 def _unused_slot_centers(sp, n):
@@ -182,15 +215,12 @@ def main():
         sw, sh = sheet.size
         print(f'== {f} ({sw}x{sh})')
         # 1周目: 切り出して、幅を占有外周に合わせたときの「筐体の高さ」を測る
+        picks = split_machines(sheet)
+        if len(picks) < len(SIZES):
+            print(f'   !! 機械を{len(picks)}台しか検出できませんでした(4台必要)。スキップ'); continue
         cut = []
-        for i, n in enumerate(SIZES):
-            cx, cy = i % COLS, i // COLS
-            quad = sheet.crop((cx * sw // COLS, cy * sh // ROWS,
-                               (cx + 1) * sw // COLS, (cy + 1) * sh // ROWS))
-            bb = quad.getbbox()
-            if not bb:
-                print(f'   s{n}: 中身なし・スキップ'); continue
-            sp = quad.crop(bb)
+        for n, bb in zip(SIZES, picks):
+            sp = sheet.crop(bb)
             tw = target_width(n, W, H, GU, GV, iso, IN)
             fh = target_height(n, W, H, GU, GV, iso, IN)
             hw = sp.height * tw / sp.width          # 幅だけ合わせたときの高さ
