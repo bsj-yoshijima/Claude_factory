@@ -70,7 +70,7 @@ ok(await ev(`window.__scene.editMode===false`), 'もう一度押すと編集モ�
 ok(await ev(`(()=>{const cv=document.querySelector('#game canvas');
   return document.elementFromPoint(${gapX},${gapY})===cv;})()`), 'パレット非表示のときも同じ点がキャンバスに届く');
 
-console.log('\n=== 製造機クリック → 素材パネル ===');
+console.log('\n=== 製造機クリック → 設定パネル（中身は🏭製造の一覧と同じ行 + 配置） ===');
 const mid=await ev(`window.__scene.placed.find(x=>x.kind==='machine').id`);
 // localStorage が前回の実行から残るので、素材を空にしてから始める（前回の素材が残ると差分が出ない）
 const clearSlots=async(id)=>{ await ev(`(()=>{const m=window.__factory.getMachine(${JSON.stringify(id)});
@@ -80,27 +80,25 @@ await ev(`window.__openMachine(${JSON.stringify(mid)})`); await sleep(400);
 ok(await ev(`document.getElementById('overlay').classList.contains('show')`), '製造機の設定パネルが開く');
 ok(await ev(`document.getElementById('panel').innerHTML.includes('製造機')`), 'パネルに製造機の見出しが出る');
 const before=await ev(`JSON.stringify(window.__factory.getMachine(${JSON.stringify(mid)}).slots)`);
-ok((await ev(`document.querySelectorAll('[data-slot]').length`))>0, 'マスの一覧が出る');
-await ev(`document.querySelector('[data-slot]').click()`); await sleep(300);   // 1マス目を選ぶ
-const nmat=await ev(`document.querySelectorAll('[data-mat]').length`);
-ok(nmat>0, `マスを選ぶと素材の一覧が出る (${nmat}種)`);
-// 素材はジャンルで切り替える。1段目がジャンル、2段目がそのジャンルの素材
-ok((await ev(`document.querySelectorAll('[data-pg]').length`))===(await ev(`GENRES.length`)),
-   `ジャンル選択チップが全ジャンルぶん出る (${await ev(`GENRES.length`)})`);
-ok(await ev(`[...document.querySelectorAll('[data-mat]')].every(e=>MAT[e.dataset.mat].g===_pickG)`),
-   '出ているのは選択中ジャンルの素材だけ');
-await ev(`document.querySelector('[data-pg="mech"]').click()`); await sleep(300);
-ok(await ev(`[...document.querySelectorAll('[data-mat]')].every(e=>MAT[e.dataset.mat].g==='mech')`),
-   'ジャンルを切り替えると素材が入れ替わる（⚙️機械）');
-await ev(`document.querySelector('[data-mat="iron"]').click()`); await sleep(400);    // 素材を選ぶ
+ok((await ev(`document.querySelectorAll('#panel .mrow').length`))===1, '一覧と同じ行(.mrow)が1台ぶん出る');
+ok((await ev(`document.querySelectorAll('#panel .mrow [data-cslot]').length`))===(await ev(`window.__factory.getMachine(${JSON.stringify(mid)}).size`)), 'マス数ぶんのスロットが出る');
+ok((await ev(`document.querySelectorAll('#panel [data-crun]').length`))===1, '行の中に▶製造開始がある');
+await ev(`document.querySelector('#panel [data-cslot]').click()`); await sleep(300);   // 1マス目を選ぶ
+const nmat=await ev(`document.querySelectorAll('[data-cmat]').length`);
+ok(nmat===(await ev(`MATS.length`)), `マスを選ぶと全ジャンルの素材が一度に出る (${nmat}種)`);
+ok((await ev(`document.querySelectorAll('#panel .pgroup .ghead').length`))===(await ev(`GENRES.length`)),
+   'ジャンルごとの見出しの下に原材料が並ぶ（タブ切り替えではない）');
+ok(!(await ev(`/マス目 ▸/.test(document.getElementById('panel').textContent)`)), '「Nマス目 ▸」のラベルは出さない');
+await ev(`document.querySelector('[data-cmat="iron"]').click()`); await sleep(400);    // 素材を選ぶ
 const after=await ev(`JSON.stringify(window.__factory.getMachine(${JSON.stringify(mid)}).slots)`);
 ok(before!==after&&(await ev(`window.__factory.getMachine(${JSON.stringify(mid)}).slots[0]==='iron'`)),
    `素材を選ぶとスロットに入る ${before} → ${after}`);
-// 外す
-await ev(`(function(){const c=document.querySelector('[data-clear]'); if(c)c.click();})()`); await sleep(400);
-ok((await ev(`JSON.stringify(window.__factory.getMachine(${JSON.stringify(mid)}).slots)`))===before, '「外す」で元に戻る');
+// ✕で外す
+await ev(`(function(){const c=document.querySelector('#panel [data-cclear]'); if(c)c.click();})()`); await sleep(400);
+ok((await ev(`JSON.stringify(window.__factory.getMachine(${JSON.stringify(mid)}).slots)`))===before, '✕で元に戻る');
 ok(await ev(`/製造機なし|待機中|製造中/.test(document.getElementById('craft').textContent)`), 'コンパクト製造は稼働状況を出す');
 ok((await ev(`document.querySelectorAll('[data-del]').length`))===0, '設定パネルに🗑撤去ボタンは無い（D&Dに一本化）');
+ok((await ev(`document.querySelectorAll('#panel [data-rot]').length`))>0, '一覧との違いは「配置」が付くことだけ（↻回転がある）');
 
 console.log('\n=== 製造機パネルの「✥ 移動」 ===');
 ok((await ev(`document.querySelectorAll('[data-move]').length`))>0, '配置の行に移動ボタンがある');
@@ -129,20 +127,17 @@ ok(nslot===(await ev(`window.__factory.getMachine(${JSON.stringify(mid)}).size`)
 await ev(`document.querySelector('${sel}').click()`); await sleep(250);
 const ncm=await ev(`document.querySelectorAll('[data-cmat]').length`);
 ok(ncm>0, `マスをクリックで原材料の一覧が出る (${ncm}種)`);
-ok((await ev(`document.querySelectorAll('[data-pg]').length`))===(await ev(`GENRES.length`)), '原材料はジャンルで切り替えられる');
-await ev(`document.querySelector('[data-pg="mech"]').click()`); await sleep(250);
+ok(ncm===(await ev(`MATS.length`)), '全ジャンルの原材料が一度に出る（切り替え不要）');
+ok(await ev(`[...document.querySelectorAll('#panel .pgroup')].every(g=>
+  [...g.querySelectorAll('[data-cmat]')].every(e=>MAT[e.dataset.cmat].g===MAT[g.querySelector('[data-cmat]').dataset.cmat].g))`),
+   'ジャンルの見出しごとに、その ジャンルの原材料だけがまとまっている');
 await ev(`document.querySelector('[data-cmat="glass"]').click()`); await sleep(350);
 ok(await ev(`window.__factory.getMachine(${JSON.stringify(mid)}).slots[0]==='glass'`), 'ダイアログから原材料をセットできる');
-// 2マス目も同じジャンルで埋める（ガラス+銅線 = ⚙️機械のレシピ）
+// 2マス目も埋める（ガラス+銅線 = ⚙️機械のレシピ）
 await ev(`document.querySelectorAll('${sel}')[1].click()`); await sleep(250);
 await ev(`document.querySelector('[data-cmat="wire"]').click()`); await sleep(350);
-ok(await ev(`document.querySelector('.mrow .gtag').textContent.includes('機械')`), '同ジャンルなら行にそのジャンルが出る');
-ok(!(await ev(`!!document.querySelector('.mrow .gtag.cross')`)), '同ジャンルでは「跨ぎ」警告は出ない');
-// ジャンルを跨がせると「跨ぎ」が出る（ほぼ🪨なので必ず気づけるようにしている）
-await ev(`document.querySelectorAll('${sel}')[1].click()`); await sleep(250);
-await ev(`document.querySelector('[data-pg="food"]').click()`); await sleep(250);
-await ev(`document.querySelector('[data-cmat="milk"]').click()`); await sleep(350);
-ok(await ev(`!!document.querySelector('.mrow .gtag.cross')`), 'ジャンル跨ぎだと行に「✨跨ぎ」が出る');
+ok(await ev(`window.__factory.getMachine(${JSON.stringify(mid)}).slots[1]==='wire'`), '2マス目にもセットできる');
+ok(!(await ev(`!!document.querySelector('.mrow .gtag')`)), 'プログレスバー左のジャンルラベルは出さない');
 // ▶製造開始（行のボタン）。前回の実行が localStorage に残るので停止状態から始める
 await ev(`machState(${JSON.stringify(mid)}).running=false; saveGame(); openCraft();`); await sleep(350);
 const gobtn=`document.querySelector('[data-crun=${JSON.stringify(mid)}]')`;
@@ -201,12 +196,49 @@ await ev(`document.querySelector('[data-dlgtab="mach"]').click()`); await sleep(
 ok(await ev(`document.querySelector('[data-dlgtab="mach"]').classList.contains('on')`), 'タブをクリックで切り替わる');
 ok(await ev(`document.getElementById('panel').innerHTML.includes('製造機を購入')`), '切り替えた本文が描かれる');
 await ev(`closeOverlay()`); await sleep(150);
-// フッターの操作ボタン（原材料ピッカーの「原材料を外す」）
-await ev(`window.__factory.setSlot(${JSON.stringify(mid)},0,'milk')`); await sleep(150);
-await ev(`openMatPicker(${JSON.stringify(mid)},0)`); await sleep(250);
-ok((await ev(`document.querySelectorAll('#panel .dlgFoot [data-dlgact]').length`))>0, 'フッターに操作ボタンが出る（原材料を外す）');
-await ev(`document.querySelector('#panel .dlgFoot [data-dlgact]').click()`); await sleep(300);
-ok(await ev(`window.__factory.getMachine(${JSON.stringify(mid)}).slots[0]===null`), 'フッターのボタンが機能する（原材料が外れる）');
+// フッターの操作ボタン（製造機パネルの「🏭 製造タブへ」）
+await ev(`window.__openMachine(${JSON.stringify(mid)})`); await sleep(300);
+ok((await ev(`document.querySelectorAll('#panel .dlgFoot [data-dlgact]').length`))>0, 'フッターに操作ボタンが出る（🏭製造タブへ）');
+await ev(`document.querySelector('#panel .dlgFoot [data-dlgact]').click()`); await sleep(350);
+ok(await ev(`document.querySelector('#panel .dlgHead h2').textContent.includes('製造')&&!document.querySelector('[data-rot]')`),
+   'フッターのボタンが機能する（配置なしの🏭製造一覧に移る）');
+await ev(`closeOverlay()`); await sleep(150);
+
+console.log('\n=== 🎁完成品は「新着だけ」／📊今日の製造・今日の売上 ===');
+// 完成品を2個ぶん仕込む（実WPを待たずに検証したいので直接積む）
+// 前回の実行ぶんが localStorage に残るので、記録と売上をいったん空にしてから数える
+await ev(`(()=>{const c=craftState(); const now=Date.now(); c.made=[]; c.log=[]; c.sales={};
+  for(const pid of ['bulb','cat']){ const rec={pid, at:now, key:'glass,wire', mid:${JSON.stringify(mid)}};
+    c.made.push({...rec,viewed:false}); c.log.push(rec); }
+  saveGame(); updateDoneBtn(); renderBoard();})()`); await sleep(200);
+ok(await ev(`document.getElementById('doneBtn').classList.contains('show')`), '製品ができると🎁完成品ボタンが出る');
+ok((await ev(`document.getElementById('doneN').textContent`))==='2', 'バッジは新着の個数（2）');
+const money0=await ev(`Math.floor(G.money)`), sales0=await ev(`salesToday()`);
+await ev(`openDone()`); await sleep(350);
+ok((await ev(`document.querySelectorAll('#panel .pgrid .pcard').length`))===2, '開くと今回の2個が並ぶ');
+ok(await ev(`document.querySelector('.dlgSub').textContent.includes('2個')`), '見出しは今回の個数');
+ok(!(await ev(`/所持 💰/.test(document.getElementById('panel').textContent)`)), '「（N個・所持 💰…）」は出さない');
+const gain=(await ev(`Math.floor(G.money)`))-money0;
+ok(gain>0 && (await ev(`salesToday()`))===sales0+gain, `売上が💰と今日の売上に入る (+${gain})`);
+await ev(`closeOverlay()`); await sleep(200);
+ok((await ev(`craftState().made.length`))===0, '1回開いたら中身はリセットされる');
+ok(!(await ev(`document.getElementById('doneBtn').classList.contains('show')`)), '次の製品ができるまで🎁ボタンは出ない');
+await ev(`openDone()`); await sleep(300);
+ok((await ev(`document.querySelectorAll('#panel .pgrid .pcard').length`))===0, '空のまま開いても前回の分は出てこない');
+await ev(`closeOverlay()`); await sleep(150);
+// 📊今日の製造（記録は完成品を開いても消えない）
+ok(await ev(`/今日の売上/.test(document.getElementById('board').textContent)`), 'ボードに「今日の売上」が出る');
+ok(await ev(`salesToday()>0 && document.getElementById('board').textContent.includes(Math.floor(salesToday()).toLocaleString())`), '今日の売上の金額が出る');
+await ev(`document.getElementById('todayBtn').click()`); await sleep(350);
+ok(await ev(`document.querySelector('#panel .dlgHead h2').textContent.includes('今日の製造')`), '「今日の製造」クリックで一覧が開く');
+const tcards=await ev(`document.querySelectorAll('#panel .pgrid .pcard').length`);
+ok(tcards===2, `今日つくった製品が種類ごとに並ぶ (${tcards}種)`);
+ok(await ev(`(()=>{const r=[...document.querySelectorAll('#panel .pcard .rr')].map(e=>e.textContent);
+  const ord=Object.keys(RAR).map(k=>RAR[k].n); return r.every((x,i)=>i===0||ord.indexOf(r[i-1])>=ord.indexOf(x));})()`),
+   'レア度の高い順に並ぶ');
+ok(await ev(`document.querySelector('#panel .pcard .qn').textContent.includes('×')`), '製造した個数が出る');
+ok(await ev(`document.getElementById('panel').textContent.includes('🪟')`), '使った原材料の組み合わせが出る（🪟ガラス+🔌銅線）');
+await ev(`closeOverlay()`); await sleep(150);
 
 console.log('\n=== エージェント一覧 → スキン変更 ===');
 ok(!(await ev(`!!document.getElementById('legend')`)), '常時表示のエージェント凡例は無くなっている');

@@ -40,6 +40,10 @@
   #board .v small{font-size:12px;color:#9fdcc6;font-weight:400;margin-left:2px}
   #board .l{font-size:9.5px;color:#9fb0c0;letter-spacing:.06em;margin-top:1px}
   #board .m.prod .v{color:#7fe6ff}
+  #board .m.sales .v{color:#ffd27a}
+  #board .m.sales .v small{margin:0 2px 0 0;color:#ffd27a}
+  #board .m.hit{cursor:pointer}                     /* クリックで今日の製造を開く */
+  #board .m.hit:hover{background:rgba(127,230,255,.09)}
   /* 工場レイアウト編集は常時アクセスできるよう右下に固定 */
   #editFab{position:absolute;right:12px;bottom:12px;z-index:9;cursor:pointer;font-size:12px;
            background:var(--panel);border:1px solid var(--edge);border-radius:9px;padding:8px 13px;color:var(--mint);backdrop-filter:blur(3px)}
@@ -180,20 +184,16 @@
   /* 原材料ピッカー: 小さいチップを折り返して並べる */
   .mpick{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px;
          background:#0c1215;border:1px solid var(--edge);border-radius:8px;padding:6px 7px}
-  .mpick .lbl{font-size:10px;color:#7fe6ff;margin-right:2px}
   .mchip{display:inline-flex;align-items:center;gap:3px;font-size:14px;cursor:pointer;
          background:#141b20;border:1px solid #2c3a38;border-radius:6px;padding:3px 7px}
   .mchip small{font-size:9.5px;color:#cfeee0}
   .mchip:hover{border-color:#5f8a80}
   .mchip.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
-  /* ジャンル選択チップ（原材料ピッカーの1段目） */
-  .mchip.gsel{background:#101a1c}
-  .mchip.gsel.on{border-color:var(--mint);box-shadow:0 0 0 1px var(--mint) inset}
-  .mchip.gsel.on small{color:var(--mint)}
-  /* 製造一覧の行に出す「いま何ジャンルの素材が入っているか」 */
-  .gtag{flex:none;font-size:9.5px;color:#9fdcc6;background:#16211d;border:1px solid #2b3a35;
-        border-radius:6px;padding:2px 6px;white-space:nowrap}
-  .gtag.cross{color:#ffd27a;background:#241f14;border-color:#6b5a2f}
+  /* ピッカーはジャンルごとの見出し + その下に原材料（タブでは切り替えない） */
+  .mpick{flex-direction:column;align-items:stretch;gap:5px}
+  .pgroup{display:flex;flex-direction:column;gap:3px}
+  .pgroup .ghead{font-size:10px;color:var(--mint);letter-spacing:.04em}
+  .pgroup .grow{display:flex;flex-wrap:wrap;gap:4px}
   .wpline .kv{display:flex;justify-content:space-between;color:#9fb0c0;font-size:11px}
   .wpline .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
   .wpline .bar{height:9px;background:#0d1315;border:1px solid var(--edge);border-radius:5px;overflow:hidden;margin-top:5px}
@@ -906,13 +906,29 @@ function migrateCraftMats(){
   for(const id of keys){ if(F.setSlot(id, 0, c.mats[id])) moved++; }
   c.mats={}; if(moved){ snapLayout(); saveGame(); toast(`原材料 ${moved} 件を製造機のマスへ移しました`); }
 }
+/* 製造の記録は「今日の集計」にしか使わないので7日ぶん・2000件までに抑える。
+   売上も同じ期間だけ残す（セーブがじわじわ膨らむのを防ぐ） */
+function trimCraftLog(c){
+  const keepFrom=Date.now()-7*24*3600*1000;
+  if(c.log.length>2000 || c.log.some(m=>!(m.at>=keepFrom)))
+    c.log=c.log.filter(m=>m.at>=keepFrom).slice(-2000);
+  const keepDay=jstDayOf(keepFrom);
+  for(const d in c.sales) if(d<keepDay) delete c.sales[d];
+}
 function craftState(){
   if(!G.craft||typeof G.craft!=='object') G.craft={};
   const c=G.craft;
   if(!c.mats||typeof c.mats!=='object') c.mats={};
   if(c.activeId===undefined) c.activeId=null;
+  // made = 🎁完成品の「まだ見ていない分」だけ。一覧を開いたら空にする（＝毎回が新着）
   if(!Array.isArray(c.made)) c.made=[];
   if(!c.dex||typeof c.dex!=='object') c.dex={};
+  /* log = 製造の記録（📊今日の製造で使う）。made は開くと消えるので別に持つ。
+     旧セーブには log が無いので、そのときだけ made から起こす。 */
+  if(!Array.isArray(c.log)) c.log=c.made.map(m=>({pid:m.pid, at:m.at, key:m.key||'', mid:m.mid}));
+  // sales = 日付(JST)ごとの売上。💰の加算と同じタイミングで積む
+  if(!c.sales||typeof c.sales!=='object') c.sales={};
+  trimCraftLog(c);
   // 製造は機械ごとに独立。mach[id] = {running, wp}
   if(!c.mach||typeof c.mach!=='object') c.mach={};
   // 旧セーブ移行: 単一セッション → いま選んでいた機械を稼働中にする
@@ -994,7 +1010,9 @@ function tickCraft(){
       const key=keyOfSlots(m.slots);                // ここで初めて組み合わせを見る
       const p=key ? rollProduct(key) : PROD[BLOB];  // 空なら「レシピに無い」扱い
       if(!p) break;
-      c.made.push({ pid:p.id, at:Date.now(), key:key||'', mid:m.id, viewed:false });
+      const rec={ pid:p.id, at:Date.now(), key:key||'', mid:m.id };
+      c.made.push({...rec, viewed:false});   // 🎁完成品（開くと消える新着分）
+      c.log.push(rec);                       // 📊今日の製造（記録として残る分）
       last=p; total++; n++;
     }
   }
@@ -1010,14 +1028,49 @@ function tickCraft(){
 /* --- 今日の労働量ボード（画面上中央・このゲームの主役の数字） ---
    「今日どれだけ働いたか」を示す数字なので、製造の設定とは切り離して大きく出す。 */
 const jstDayOf = t => new Date(t + 9*3600*1000).toISOString().slice(0,10);
-function madeToday(){ const d=jstDayOf(Date.now()); return craftState().made.filter(m=>jstDayOf(m.at)===d).length; }
+// 今日の製造は記録(c.log)から数える。🎁完成品を開いても消えない
+function logToday(){ const d=jstDayOf(Date.now()); return craftState().log.filter(m=>jstDayOf(m.at)===d); }
+const madeToday = ()=>logToday().length;
+const salesToday = ()=>craftState().sales[jstDayOf(Date.now())]||0;
 function renderBoard(){
   const el=document.getElementById('board'); if(!el) return;
   el.innerHTML=`
     <div class="m"><div class="v">${WPST.ok?Math.floor(WPST.today).toLocaleString():'—'}<small>WP</small></div>
       <div class="l">今日の労働量</div></div>
-    <div class="m prod"><div class="v">${madeToday()}<small>個</small></div>
-      <div class="l">今日の製造</div></div>`;
+    <div class="m prod hit" id="todayBtn" title="クリックで今日つくったものを見る">
+      <div class="v">${madeToday()}<small>個</small></div>
+      <div class="l">今日の製造</div></div>
+    <div class="m sales"><div class="v"><small>💰</small>${Math.floor(salesToday()).toLocaleString()}</div>
+      <div class="l">今日の売上</div></div>`;
+  const b=document.getElementById('todayBtn'); if(b) b.onclick=openToday;
+}
+/* 📊 今日の製造 — 今日つくったものをレア度順に並べる（図鑑に近い見た目）。
+   原材料の組み合わせも出すので、当たった組み合わせを見返す用途にも使える。 */
+function openToday(){
+  return openDialog({ title:'📊 今日の製造',
+    sub:()=>`${madeToday()}個 / 売上 💰${Math.floor(salesToday()).toLocaleString()}`,
+    live:2000,
+    body:()=>{
+      const rows={};
+      for(const m of logToday()){ const p=PROD[m.pid]; if(!p) continue;
+        const r=rows[m.pid]||(rows[m.pid]={p, n:0, keys:{}});
+        r.n++; if(m.key) r.keys[m.key]=(r.keys[m.key]||0)+1; }
+      const list=Object.values(rows).sort((a,b)=>(b.p.r-a.p.r)||(b.n-a.n));
+      if(!list.length) return '<div class="cost" style="padding:12px">今日はまだ何も作っていません。🏭製造で原材料をセットして ▶製造開始。</div>';
+      const gain=list.reduce((s,r)=>s+(PROD_PRICE[r.p.r]||0)*r.n,0);
+      return `<div class="pgrid">${list.map(r=>{
+          // 組み合わせは多い順に3つまで。原材料は絵文字で出す（図鑑のヒントと同じ見せ方）
+          const ks=Object.keys(r.keys).sort((a,b)=>r.keys[b]-r.keys[a]).slice(0,3)
+            .map(k=>`<div class="qn" title="${k.split(',').map(x=>MAT[x]?MAT[x].n:x).join(' + ')}">${
+              k.split(',').map(x=>MAT[x]?MAT[x].e:'').join('')}${r.keys[k]>1?` ×${r.keys[k]}`:''}</div>`).join('');
+          return `<div class="pcard" style="border-color:${RAR[r.p.r].c}"><div class="e">${r.p.e}</div>
+            <div class="nm">${r.p.n}</div><div class="rr" style="color:${RAR[r.p.r].c}">${RAR[r.p.r].n}</div>
+            <div class="qn"><b style="color:#eafff4">×${r.n}</b></div>${ks}</div>`; }).join('')}</div>
+        <div class="rowline" style="font-size:11px;color:#9fb0c0">
+          レア度の高い順。数字は今日つくった個数、その下は使った原材料の組み合わせ。
+          今日つくったものの合計価値は 💰${gain.toLocaleString()}（🎁完成品を開いた時点で 💰 に入る）。</div>`;
+    },
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openDex('prod')}] });
 }
 
 /* --- 製造のコンパクト表示（画面上中央）。詳しい操作は🏭製造ダイアログに寄せ、
@@ -1055,12 +1108,47 @@ function toggleMachine(id){
    開いている間は1秒ごとに再描画してWPに追従する。
    ========================================================================= */
 let _craftPick=null;                       // {mid, idx} = いま原材料を選んでいるマス
-let _pickG=GENRES[0].id;                   // 原材料ピッカーで開いているジャンル（全ピッカー共通）
 const matsOfGenre=(g)=>MATS.filter(m=>m.g===g);
-// ジャンル選択チップ（原材料ピッカーの1行目）。data-pg で切り替える
-const genreChips=()=>GENRES.map(g=>`<span class="mchip gsel ${_pickG===g.id?'on':''}" data-pg="${g.id}"
-  title="${g.n}の原材料">${g.e}<small>${g.n}</small></span>`).join('');
 const machTitle=(m)=>`${(MACH['s'+m.size]||{}).e||'🏭'} ${m.no}号機`;
+/* 機械1台ぶんの行。🏭製造の一覧と、機械単体のダイアログで同じものを使う（見た目を揃える）。
+   マス → クリックで原材料ピッカー / ▶製造開始・停止 / WPの進捗。 */
+function machRow(m){
+  const st=machState(m.id), need=needWp(m), pct=Math.min(100, st.wp/need*100);
+  const nSet=m.slots.filter(Boolean).length;
+  const slots=m.slots.map((mid,i)=>{ const mt=MAT[mid];
+    const on=_craftPick&&_craftPick.mid===m.id&&_craftPick.idx===i;
+    return `<div class="mslot ${mt?'set':''} ${on?'pick':''}" data-cslot="${i}" data-cmid="${m.id}"
+      title="${i+1}マス目${mt?`: ${mt.n}`:''} — クリックで原材料を選ぶ">
+      <span class="e">${mt?mt.e:'＋'}</span>
+      ${mt?`<span class="x" data-cclear="${i}" data-cmid="${m.id}" title="外す">✕</span>`:''}</div>`; }).join('');
+  // ピッカーはジャンルごとの見出し + その下に原材料（タブで切り替えない。跨いだセットもできる）
+  const picker = (_craftPick&&_craftPick.mid===m.id) ? `<div class="mpick">
+    ${GENRES.map(g=>`<div class="pgroup"><div class="ghead">${g.e} ${g.n}</div><div class="grow">
+      ${matsOfGenre(g.id).map(x=>`<span class="mchip ${m.slots[_craftPick.idx]===x.id?'on':''}"
+        data-cmat="${x.id}" data-cmid="${m.id}" title="${x.n}">${x.e}<small>${x.n}</small></span>`).join('')}
+      </div></div>`).join('')}</div>` : '';
+  return `<div class="mrow ${st.running?'run':''}" title="${machTitle(m)}（${m.size}マス / 必要 ${need}WP）">
+    <div class="mslots">${slots}
+      <button class="dbtn ${st.running?'ghost':''}" data-crun="${m.id}"${(!st.running&&!nSet)?' disabled':''}
+        title="${(!st.running&&!nSet)?'原材料を1つ以上セットしてください':''}">${st.running?'■ 停止':'▶ 製造開始'}</button>
+    </div>${picker}
+    <div class="wpline"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <b${WPST.ok?'':' style="color:#ff9f7a"'}>${Math.floor(st.wp)} / ${need} WP</b></div>
+  </div>`;
+}
+/* machRow のクリックを結線する。dlg.refresh() で描き直す前提。 */
+function bindMachRow(p,d){
+  p.querySelectorAll('[data-crun]').forEach(el=>el.onclick=()=>{ toggleMachine(el.dataset.crun); d.refresh(); });
+  p.querySelectorAll('[data-cslot]').forEach(el=>el.onclick=(ev)=>{
+    if(ev.target.dataset && ev.target.dataset.cclear!=null) return;   // ✕(外す)は別扱い
+    const mid=el.dataset.cmid, i=+el.dataset.cslot;
+    _craftPick=(_craftPick&&_craftPick.mid===mid&&_craftPick.idx===i)?null:{mid,idx:i};
+    d.refresh(); });
+  p.querySelectorAll('[data-cclear]').forEach(el=>el.onclick=(ev)=>{
+    ev.stopPropagation(); setMat(el.dataset.cmid, +el.dataset.cclear, null); _craftPick=null; d.refresh(); });
+  p.querySelectorAll('[data-cmat]').forEach(el=>el.onclick=()=>{
+    if(!_craftPick) return; setMat(el.dataset.cmid, _craftPick.idx, el.dataset.cmat); _craftPick=null; d.refresh(); });
+}
 function openCraft(){
   _craftPick=null;
   return openDialog({ title:'🏭 製造',
@@ -1069,72 +1157,14 @@ function openCraft(){
     body:()=>{
       const ms=machinesSorted();
       if(!ms.length) return '<div class="cost" style="padding:12px">製造機がありません。🏪ショップで購入 → 🔧レイアウト編集で床に設置してください。</div>';
-      return ms.map(m=>{
-        const st=machState(m.id), need=needWp(m), pct=Math.min(100, st.wp/need*100);
-        const slots=m.slots.map((mid,i)=>{ const mt=MAT[mid];
-          const on=_craftPick&&_craftPick.mid===m.id&&_craftPick.idx===i;
-          return `<div class="mslot ${mt?'set':''} ${on?'pick':''}" data-cslot="${i}" data-cmid="${m.id}"
-            title="${i+1}マス目${mt?`: ${mt.n}`:''} — クリックで原材料を選ぶ">
-            <span class="e">${mt?mt.e:'＋'}</span>
-            ${mt?`<span class="x" data-cclear="${i}" data-cmid="${m.id}" title="外す">✕</span>`:''}</div>`; }).join('');
-        // ピッカーは「ジャンル行 → そのジャンルの原材料行」の2段。ジャンルを跨いだセットもできる
-        const picker = (_craftPick&&_craftPick.mid===m.id) ? `
-          <div class="mpick"><span class="lbl">${_craftPick.idx+1}マス目 ▸</span>${genreChips()}</div>
-          <div class="mpick">
-          ${matsOfGenre(_pickG).map(x=>`<span class="mchip ${m.slots[_craftPick.idx]===x.id?'on':''}"
-             data-cmat="${x.id}" data-cmid="${m.id}" title="${x.n}">${x.e}<small>${x.n}</small></span>`).join('')}</div>` : '';
-        const nSet=m.slots.filter(Boolean).length;
-        // いまのマスが何ジャンルか。跨いでいると基本ハズレなので、そこだけは明示する
-        const gs=genresOfMats(m.slots);
-        const gtag = !gs.length ? '<span class="gtag">素材なし</span>'
-          : gs.length>1 ? `<span class="gtag cross" title="ジャンル跨ぎ: ほとんど🪨謎のカタマリ。特定の組み合わせだけシークレット">✨ 跨ぎ ${gs.map(g=>GENRE[g].e).join('')}</span>`
-          : `<span class="gtag">${GENRE[gs[0]].e} ${GENRE[gs[0]].n}</span>`;
-        return `<div class="mrow ${st.running?'run':''}" title="${machTitle(m)}（${m.size}マス / 必要 ${need}WP）">
-          <div class="mslots">${slots}
-            <button class="dbtn ${st.running?'ghost':''}" data-crun="${m.id}"${(!st.running&&!nSet)?' disabled':''}
-              title="${(!st.running&&!nSet)?'原材料を1つ以上セットしてください':''}">${st.running?'■ 停止':'▶ 製造開始'}</button>
-          </div>${picker}
-          <div class="wpline">${gtag}<div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
-            <b${WPST.ok?'':' style="color:#ff9f7a"'}>${Math.floor(st.wp)} / ${need} WP</b></div>
-        </div>`;
-      }).join('');
+      return ms.map(machRow).join('');
     },
-    onRender:(p,d)=>{
-      p.querySelectorAll('[data-crun]').forEach(el=>el.onclick=()=>{ toggleMachine(el.dataset.crun); d.refresh(); });
-      p.querySelectorAll('[data-cslot]').forEach(el=>el.onclick=(ev)=>{
-        if(ev.target.dataset && ev.target.dataset.cclear!=null) return;   // ✕(外す)は別扱い
-        const mid=el.dataset.cmid, i=+el.dataset.cslot;
-        _craftPick=(_craftPick&&_craftPick.mid===mid&&_craftPick.idx===i)?null:{mid,idx:i};
-        if(_craftPick){ const mm=machines().find(x=>x.id===mid);       // 入っている素材のジャンルを開く
-          const g=mm&&genreOf(mm.slots[i]); if(g) _pickG=g; }
-        d.refresh(); });
-      p.querySelectorAll('[data-pg]').forEach(el=>el.onclick=()=>{ _pickG=el.dataset.pg; d.refresh(); });
-      p.querySelectorAll('[data-cclear]').forEach(el=>el.onclick=(ev)=>{
-        ev.stopPropagation(); setMat(el.dataset.cmid, +el.dataset.cclear, null); _craftPick=null; d.refresh(); });
-      p.querySelectorAll('[data-cmat]').forEach(el=>el.onclick=()=>{
-        if(!_craftPick) return; setMat(el.dataset.cmid, _craftPick.idx, el.dataset.cmat); _craftPick=null; d.refresh(); });
-    } });
+    onRender:bindMachRow });
 }
 document.getElementById('craftBtn').addEventListener('click',()=>openCraft());
 document.getElementById('craft').addEventListener('click',()=>openCraft());
 
-/* --- 原材料の選択 --- */
-function openMatPicker(machineId, slotIdx){
-  const F=window.__factory, mm=F&&F.getMachine(machineId);
-  const cur=mm?mm.slots[slotIdx]:null;
-  craftState().activeId = machineId;
-  if(genreOf(cur)) _pickG=genreOf(cur);
-  openDialog({ title:`🥫 原材料をセット（${(slotIdx|0)+1}マス目）`, tabs:()=>GENRES.map(g=>({id:g.id,label:`${g.e} ${g.n}`})), tab:_pickG,
-    onTab:(id,d)=>{ _pickG=id; d.tab=id; d.refresh(); },
-    body:()=>`<div class="rowline" style="font-size:11px;color:#9fb0c0">
-        選んだ組み合わせで作られる製品が変わります。同じ組み合わせでも複数の候補からランダムです。<br>
-        ジャンルを跨いでセットすると、ほとんどは 🪨 謎のカタマリ。特定の組み合わせだけ ✨シークレット が出ます。</div>
-      <div class="pgrid">${matsOfGenre(_pickG).map(m=>`
-        <div class="pcard" data-mat="${m.id}" style="cursor:pointer;${cur===m.id?'border-color:var(--gold)':''}">
-          <div class="e">${m.e}</div><div class="nm">${m.n}</div></div>`).join('')}</div>`,
-    actions: cur ? [{label:'原材料を外す',kind:'ghost',on:()=>{ setMat(machineId, slotIdx, null); closeOverlay(); }}] : null,
-    onRender:(p)=>{ p.querySelectorAll('[data-mat]').forEach(el=>el.onclick=()=>{ setMat(machineId, slotIdx, el.dataset.mat); closeOverlay(); }); } });
-}
+/* --- 原材料の選択（ピッカーは machRow の中にある。ここはセットの実体だけ） --- */
 function setMat(machineId, slotIdx, matId){
   const c=craftState(), F=window.__factory;
   if(!F||!F.setSlot(machineId, slotIdx, matId||null)) return;   // 素材の実体は機械のマス(レイアウトに保存)
@@ -1149,17 +1179,17 @@ function setMat(machineId, slotIdx, matId){
 window.__matBadge = ()=>'';   // 原材料は機械のマス(スロット)に直接描かれるのでバッジは使わない
 window.__machineClick = (machineId)=>{ if(window.__openMachine) window.__openMachine(machineId); };
 
-/* --- 完成品 --- */
+/* --- 完成品（新着だけを見せる箱。1回開いたら中身は空になる） --- */
 function updateDoneBtn(){
   const c=craftState(), b=document.getElementById('doneBtn'); if(!b) return;
-  const unseen=c.made.filter(m=>!m.viewed).length;
   b.classList.toggle('show', c.made.length>0);
-  document.getElementById('doneN').textContent = unseen ? unseen : '';
+  document.getElementById('doneN').textContent = c.made.length || '';
 }
 function openDone(){
   const c=craftState();
+  const batch=c.made.slice();                                // 今回見せる分（あとで空にする）
   const had={}; for(const k in c.dex) had[k]=c.dex[k];      // 「初めて」の判定は登録前の図鑑で行う
-  const cards=[...c.made].reverse().slice(0,200).map(m=>{
+  const cards=[...batch].reverse().slice(0,200).map(m=>{
     const p=PROD[m.pid]; if(!p) return '';
     // 未登録の製品は該当する全部に NEW を付ける（3個できていれば3個とも）
     const isNew = !had[m.pid];
@@ -1171,26 +1201,27 @@ function openDone(){
   }).join('');
   // 一覧を表示したタイミングで図鑑に登録し、同時に売上を💰に加算する（仕様）
   let reg=0, gain=0, byRar={};
-  for(const m of c.made){
-    if(m.viewed) continue;
-    const p=PROD[m.pid]; if(!p){ m.viewed=true; continue; }
-    c.dex[m.pid]=(c.dex[m.pid]||0)+1; m.viewed=true; reg++;
+  for(const m of batch){
+    const p=PROD[m.pid]; if(!p) continue;
+    c.dex[m.pid]=(c.dex[m.pid]||0)+1; reg++;
     const price=PROD_PRICE[p.r]||0; gain+=price;
     byRar[p.r]=(byRar[p.r]||0)+1;
   }
-  if(gain){ G.money+=gain; }
-  saveGame(); updateDoneBtn(); updateBadge();
+  if(gain){ G.money+=gain; c.sales[jstDayOf(Date.now())]=(c.sales[jstDayOf(Date.now())]||0)+gain; }
+  // 見せたら箱は空にする。次に製品ができるまで🎁ボタンは出ない（常に「新着だけ」を見せる）
+  c.made=[];
+  saveGame(); updateDoneBtn(); updateBadge(); renderBoard();
   const bd=Object.keys(byRar).sort().map(r=>
     `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
-  openDialog({ title:'🎁 完成品', sub:`${c.made.length}個`,
+  openDialog({ title:'🎁 完成品', sub:`${batch.length}個`,
     body:`${gain?`<div class="invbar" style="font-size:12px">
           <span style="color:#9fb0c0">今回の売上</span>
           <b style="color:#ffd27a;font-size:19px">💰 ${gain.toLocaleString()}</b>
-          <span style="color:#9fb0c0">（${reg}個・所持 💰${Math.floor(G.money).toLocaleString()}）</span>
           ${bd}</div>`
-        :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません（売上は初回表示時に加算されます）。</div>`}
+        :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
-        ${reg?`${reg}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。図鑑を埋めていこう。</div>
+        ${reg?`${reg}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。図鑑を埋めていこう。
+        今日つくったものは 📊今日の製造 でいつでも見返せる。</div>
       <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
     actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openDex('prod')}] });
 }
@@ -1499,53 +1530,23 @@ window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
   if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
   const s=window.__scene; const id = s.addPlaced(sel.kind, sel.sub, {cell:{c,r}, dir:s.placeDir});
   if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
-/* ===== 製造機の設定パネル: マスごとの素材 / 向き / 移動 / 撤去。編集中に機械をクリックで開く ===== */
-let _matPick=null;   // 素材を選んでいる最中のスロット番号
+/* ===== 製造機の設定パネル: 中身は🏭製造の一覧と同じ行（machRow）。
+       違いは「その下に配置（↻回転 / ✥移動）が付く」ことだけ。編集中に機械をクリックで開く ===== */
 window.__openMachine=(id)=>{
-  const F=window.__factory; if(!F) return; _matPick=null;
+  const F=window.__factory; if(!F) return; _craftPick=null;
   const dlg=openDialog({ title:'🏭 製造機', sub:()=>{ const m=F.getMachine(id); return m?`${m.size}マス${m.lvl>1?` Lv${m.lvl}`:''}`:''; },
+    live:1000,
     body:()=>{
-    const m=F.getMachine(id); if(!m){ setTimeout(closeOverlay,0); return ''; }
-    const slots=m.slots.map((mat,i)=>{ const d=mat&&MAT[mat];
-      return `<div class="rc" style="cursor:pointer" data-slot="${i}">
-        <div class="ic">${d?d.e:'➕'}</div>
-        <div class="mid"><div class="nm">${i+1}マス目</div>
-        <div class="cost">${d?d.n:'素材を選ぶ'}</div></div>
-        ${d?`<button data-clear="${i}">外す</button>`:''}</div>`; }).join('');
-    const picker = _matPick==null ? '' :
-      `<div class="cost" style="margin:10px 0 6px;color:#7fe6ff">${_matPick+1}マス目に入れる素材（ジャンルで切り替え）</div>`
-      + `<div class="mpick">${genreChips()}</div>`
-      + `<div class="pitems" style="display:flex;flex-wrap:wrap;gap:6px;width:auto;max-height:none">`
-      + matsOfGenre(_pickG).map(m2=>`<div class="pitem" data-mat="${m2.id}" style="cursor:pointer">${m2.e}<small>${m2.n}</small></div>`).join('')
-      + `</div>`;
-    const st=machState(id), need=needWp(m), pct=Math.min(100, st.wp/need*100);
-    const nSet=m.slots.filter(Boolean).length;
-    const run = `<div class="wpline" style="margin-top:12px"><div class="kv">
-        <span${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得':(st.running?'次の製品まで':'停止中（溜めたWPは保持）')}</span>
-        <b>${Math.floor(st.wp)} / ${need} WP</b></div>
-        <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div></div>
-      <div class="rc" style="margin-top:8px"><div class="mid"><div class="nm">${st.running?'⚙️ 製造中':'⏸ 待機中'}</div>
-        <div class="cost">必要WP = ${m.size}マス × ${WP_PER_SLOT}WP</div></div>
-        <button data-mrun="1"${(!st.running&&!nSet)?' disabled':''}>${st.running?'■ 停止':'▶ 製造開始'}</button></div>`;
-    return `<div class="cost" style="margin:2px 0 8px">1マスにつき素材1つ。入っている素材の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。素材は🏭製造タブでもまとめてセットできます。</div>`
-      + slots + picker + run
+    const m=machinesSorted().find(x=>x.id===id);
+    if(!m){ setTimeout(closeOverlay,0); return ''; }
+    return machRow(m)
       + `<div class="rc" style="margin-top:12px"><div class="mid"><div class="nm">配置</div>`
       + `<div class="cost">向きを変える / 別の場所へ移す（撤去は🗑ゴミ箱へドラッグ）</div></div>`
       + `<button data-rot="1">↻ 回転</button><button data-move="1" style="margin-left:5px">✥ 移動</button></div>`;
   },
     actions:[{label:'🏭 製造タブへ',kind:'ghost',on:()=>openCraft()}],
     onRender:(p,d)=>{
-    p.querySelectorAll('[data-slot]').forEach(el=>el.onclick=(ev)=>{
-      if(ev.target.dataset && ev.target.dataset.clear!=null) return;
-      _matPick=+el.dataset.slot;
-      const mm=F.getMachine(id), g=mm&&genreOf(mm.slots[_matPick]); if(g) _pickG=g;   // 入っている素材のジャンルを開く
-      d.refresh(); });
-    p.querySelectorAll('[data-pg]').forEach(el=>el.onclick=()=>{ _pickG=el.dataset.pg; d.refresh(); });
-    p.querySelectorAll('[data-clear]').forEach(el=>el.onclick=(ev)=>{
-      ev.stopPropagation(); setMat(id, +el.dataset.clear, null); _matPick=null; d.refresh(); });
-    p.querySelectorAll('[data-mat]').forEach(el=>el.onclick=()=>{
-      setMat(id, _matPick, el.dataset.mat); _matPick=null; d.refresh(); });
-    p.querySelectorAll('[data-mrun]').forEach(el=>el.onclick=()=>{ toggleMachine(id); d.refresh(); });
+    bindMachRow(p,d);                        // マス・ピッカー・製造開始は一覧と同じ結線
     p.querySelectorAll('[data-rot]').forEach(el=>el.onclick=()=>{
       if(!F.rotateMachine(id)){ toast('回した先に空きがありません'); return; } window.__layoutChanged(); renderCraft(); d.refresh(); });
     // 移動: シーンが「掴んで床クリックで置き直す」モードに入る。
