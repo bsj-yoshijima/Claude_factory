@@ -61,7 +61,7 @@ s.textures = textures;
 s.input = { on(){}, setDraggable(){}, keyboard:{ on(){} } };
 s.time = { addEvent(){} };
 s.tweens = { add(){} };
-s.cache = { json:{ get:()=>({}) } };
+s.cache = { json:{ get:()=>({}) }, text:{ get:()=>'{}' } };
 s.poll = async()=>{};
 s.createNightFx = function(){ this.windows=[]; this.uLen=0.55; this.sh=0.04;
   this.skyLayer=obj(); this.sun=obj(); this.sunG=obj(); this.moon=obj(); this.moonG=obj(); this.stars=[];

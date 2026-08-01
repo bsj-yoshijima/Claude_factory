@@ -168,11 +168,13 @@ class Main extends Phaser.Scene {
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
     for(const s of SKINS) if(s.id!=='none') this.load.image('hat_'+s.id, `assets/hat-${s.id}.png`);   // 被り物。未生成でもPhaserは欠損扱い→描画側でexistsチェック
-    this.load.json('hatfit','assets/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る
+    this.load.text('hatfit','assets/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る(machfitと同じ理由でtext読み)
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     // 製造機スプライト(Stitch製)。命名規約 mach_<theme>_s<N>。無いテーマは normal → 手続き描画 の順にフォールバック
     for(const th of MACH_ART) for(const n of MACH_SIZES) this.load.image(`mach_${th}_s${n}`, `assets/mach-${th}-s${n}.png`);
-    this.load.json('machfit','assets/mach-fit.json');   // 絵から実測したスロット中心(幅/高さ比)。素材アイコンを穴にぴったり載せる
+    // 絵から実測したスロット中心(幅/高さ比)。素材アイコンを穴にぴったり載せる。
+    // load.json は中身が壊れているとローダーごと例外で落ちる(=create()が走らない)ので text で読んで自前parse
+    this.load.text('machfit','assets/mach-fit.json');
   }
   create(){
     this.bgImg=this.add.image(0,0,'bg_room').setOrigin(0,0).setDisplaySize(W,H).setDepth(-1000);
@@ -275,8 +277,14 @@ class Main extends Phaser.Scene {
       if(th && this.textures.exists(k)) return {key:k, theme:th, n}; }
     return null; }
   /* 絵のスロット中心(幅/高さ比)。v向きは左右反転して描くので x も反転する */
+  hatFit(){ if(this._hatFit) return this._hatFit;
+    try{ this._hatFit=JSON.parse(this.cache.text.get('hatfit')||'{}'); }catch(_){ this._hatFit={}; }
+    return this._hatFit; }
+  machFit(){ if(this._machFit) return this._machFit;
+    try{ this._machFit=JSON.parse(this.cache.text.get('machfit')||'{}'); }catch(_){ this._machFit={}; }
+    return this._machFit; }
   machSlotPts(tex, img, flip){
-    const fit=((this.cache.json.get('machfit')||{})[tex.theme]||{})[String(tex.n)];
+    const fit=((this.machFit()[tex.theme])||{})[String(tex.n)];
     if(!fit) return null;
     const L=img.x-img.displayWidth/2, T=img.y-img.displayHeight;
     return fit.map(([fx,fy])=>({ x:L+(flip?1-fx:fx)*img.displayWidth, y:T+fy*img.displayHeight })); }
@@ -678,7 +686,7 @@ class Main extends Phaser.Scene {
     if(has){
       if(!a.hat){ a.hat=this.add.sprite(a.sp.x,a.sp.y,'hat_'+a.skinId); }
       else if(a.hat.texture.key!=='hat_'+a.skinId){ a.hat.setTexture('hat_'+a.skinId); }
-      const hf=(this.cache.json.get('hatfit')||{})[a.skinId];
+      const hf=(this.hatFit())[a.skinId];
       a.hat.setOrigin(hf&&typeof hf.cx==='number'?hf.cx:0.5, 1);   // ツバ中心=頭に載る中心。飾りが非対称でも中央に被る
       const nw=a.hat.texture.getSourceImage().width;
       a.hat.setScale((HAT_W_DOT*DOTP*a.scl)/nw).setVisible(true);
