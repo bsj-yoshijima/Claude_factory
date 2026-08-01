@@ -460,16 +460,28 @@ function ownedBgs(){ const a=['auto']; for(const k of SKY_THEMES) if(G.bgOwned.i
 function applyBg(k){ G.bg=k; if(window.__scene){ window.__scene.setSkyTheme(k); window.__scene.setFloor(ROOM_THEMES.includes(k)?'wood':G.floor); } saveGame(); updateBadge(); }
 const paletteEl=document.getElementById('palette');
 let editCat='bg', editSel=null; window.__editSel=null;
+let selMode=false, selN=0;                       // 収納の複数選択モードと選択数
+window.__selChanged=(n)=>{ selN=n; renderPalette(); };
 function renderPalette(){
   const cats=[['bg','🌏 背景'],['prop','🧰 装飾'],['machine','🏭 製造機'],['belt','🛗 コンベア']];
-  let items='', hint='';
+  let items='', hint='', acts='';
   const cell=(dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
   if(editCat==='bg'){ hint='背景を選ぶと即適用（部屋ごと切替）';
     items=ownedBgs().map(k=>`<div class="pitem ${G.bg===k?'cur':''}" data-bg="${k}">${BG_META[k].e}<small>${BG_META[k].n}</small></div>`).join('');
-  } else if(editCat==='prop'){ hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
-    const P=Object.keys(PROP).filter(t=>availN('prop',t)>0).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
-    const D=Object.keys(DECO).filter(t=>availN('deco',t)>0).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
-    items=(P.concat(D).join(''))||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
+  } else if(editCat==='prop'){
+    const s=window.__scene, placedN=s?s.stowables().length:0;
+    if(selMode){ hint=`床の装飾をクリックで選択（もう一度クリックで解除）・ ${selN}個 選択中`;
+      items=`<div class="phint" style="padding:8px">選択モード中です。戻したい装飾を床でクリックしてください。</div>`;
+    } else {
+      hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
+      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
+      const D=Object.keys(DECO).filter(t=>availN('deco',t)>0).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
+      items=(P.concat(D).join(''))||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
+    }
+    // 収納(設置済みを在庫に戻す)。位置は失われるが、在庫に戻るので置き直せる
+    acts = selMode
+      ? `<span class="c ${selN?'on':''}" data-stow="sel">📦 選択した${selN}個を収納</span><span class="c" data-selmode="0">✖ 選択をやめる</span>`
+      : `<span class="c" data-stow="all">📦 すべて収納 (${placedN})</span><span class="c" data-selmode="1">☑️ 選んで収納</span>`;
   } else if(editCat==='machine'){ hint=(editSel?'床をクリックで設置（生産＆作業先が増える）':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
     const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.sub===t));
     items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
@@ -477,20 +489,41 @@ function renderPalette(){
     const a=availN('belt'); items = a>0? cell(`data-place="belt:"`,'🛗','コンベア',0,a,editSel&&editSel.kind==='belt') : '<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
   }
   paletteEl.innerHTML=`<div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
-    <div class="pitems">${items}</div><div class="phint">${hint}</div>`;
-  paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; renderPalette(); });
+    <div class="pitems">${items}</div>${acts?`<div class="pcat">${acts}</div>`:''}<div class="phint">${hint}</div>`;
+  paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; setSelMode(false); renderPalette(); });
+  paletteEl.querySelectorAll('[data-selmode]').forEach(el=>el.onclick=()=>{ setSelMode(el.dataset.selmode==='1'); renderPalette(); });
+  paletteEl.querySelectorAll('[data-stow]').forEach(el=>el.onclick=()=>stow(el.dataset.stow));
   paletteEl.querySelectorAll('[data-bg]').forEach(el=>el.onclick=()=>{ applyBg(el.dataset.bg); renderPalette(); });
   paletteEl.querySelectorAll('[data-place]').forEach(el=>el.onclick=()=>{ const p=el.dataset.place.split(':'); editSel={kind:p[0],sub:p[1]||null}; window.__editSel=editSel; renderPalette(); });
 }
 window.renderPalette=renderPalette;
+function setSelMode(on){ const s=window.__scene; if(!s) return;
+  selMode=!!on; selN=0; s.setSelectMode(selMode);
+  if(selMode){ editSel=null; window.__editSel=null; }   // 選択中は誤って設置しないように
+}
+// 収納 = 設置済みの装飾を在庫に戻す(位置は失われるが置き直せる)
+function stow(mode){ const s=window.__scene; if(!s) return;
+  let n=0;
+  if(mode==='all'){
+    const total=s.stowables().length;
+    if(!total){ toast('床に装飾がありません'); return; }
+    if(!confirm(`床の装飾 ${total} 個をすべて在庫に戻します。配置はやり直しになります。よろしいですか？`)) return;
+    n=s.stowAll();
+  } else {
+    if(!selN){ toast('戻す装飾を床でクリックして選んでください'); return; }
+    n=s.stowSelected();
+  }
+  snapLayout(); saveGame(); updateBadge(); renderPalette();
+  toast(`${n}個を在庫に戻しました`);
+}
 window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
   if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
   const s=window.__scene; const id = s.addPlaced(sel.kind, sel.kind==='belt'?null:sel.sub, {cell:{c,r}});
   if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
 document.getElementById('editBtn').addEventListener('click',()=>{ if(!window.__scene)return;
   const on=window.__scene.toggleEdit(); document.getElementById('editBtn').classList.toggle('gacha',on);
-  paletteEl.classList.toggle('show',on); if(on) renderPalette(); else { editSel=null; window.__editSel=null; }
-  toast(on?'🔧 編集: 上のパレットで選ぶ→床クリックで設置 / ドラッグで移動 / 左下🗑で撤去':'編集モードを終了'); });
+  paletteEl.classList.toggle('show',on); if(on) renderPalette(); else { editSel=null; window.__editSel=null; selMode=false; selN=0; }
+  toast(on?'🔧 編集: 上のパレットで選ぶ→床クリックで設置 / ドラッグで移動 / 左下🗑で撤去 / 📦で在庫に戻す':'編集モードを終了'); });
 loadGame().then(async ()=>{
   if(G.lastT){ const dt=Math.min((Date.now()-G.lastT)/1000, 8*3600); const g=prodRate()*dt*0.5; if(g>0){ G.prodP+=g; G.produced+=g; } } // オフライン分(50%/最大8h)
   G.lastT=Date.now(); updateBadge();

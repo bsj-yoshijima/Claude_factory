@@ -81,6 +81,9 @@ const PROP_SPAN = {
 };
 const propSpan = (name)=> PROP_SPAN[name] || 1;
 window.PROP_SPAN = PROP_SPAN;   // ショップ表示(factory-phaser.html)から参照
+// 収納(=在庫に戻す)の対象。在庫を持つ種類だけ。絵文字装飾やガチャ景品は在庫が無く、
+// 戻すと復元できないので対象外にする。
+const STOWABLE = ['prop','deco'];
 // エージェントのスキン(id=テーマキー・31種＋'none')。スキン=被り物(帽子)だけ。ベースのマスコットは常にそのまま、
 // 頭上に被り物テクスチャ hat_<id>(形状指定でStitch生成→マゼンタ抜き)を1枚重ねる。定義のあるidだけ帽子が乗る。プロジェクト単位で永続化。
 const SKINS = [
@@ -258,6 +261,7 @@ class Main extends Phaser.Scene {
     if(e._lit){ const i=this.lit.findIndex(x=>x.sp===e._lit); if(i>=0)this.lit.splice(i,1); }
     if(e.kind==='machine'){ const i=this.machineCells.findIndex(m=>m.c===e.cell.c&&m.r===e.cell.r); if(i>=0)this.machineCells.splice(i,1); } }
   removeItem(id){ const i=this.placed.findIndex(e=>e.id===id); if(i<0)return false; const e=this.placed[i];
+    if(this.sel) this.sel.delete(id);
     this._detach(e); this.occ.delete(K(e.cell.c,e.cell.r)); this.placed.splice(i,1); return true; }
   moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
     const same=(e.cell.c===c&&e.cell.r===r); if(!same && !this.isFree(c,r)) return false;
@@ -294,7 +298,7 @@ class Main extends Phaser.Scene {
     this.trash=this.add.container(72,H-52,[ this.add.rectangle(0,0,124,72,0x3a1418,0.85).setStrokeStyle(2,0xe05a4e), this.add.text(0,0,'🗑 ここへ撤去',{fontSize:'13px',color:'#ffd0c8'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     this._trashRect=new Phaser.Geom.Rectangle(10,H-88,124,74);
     // 空き床クリックで、パレットで選択中のアイテムを設置
-    this.input.on('pointerdown',(po,over)=>{ if(!this.editMode) return; if(over&&over.length) return;
+    this.input.on('pointerdown',(po,over)=>{ if(!this.editMode||this.selectMode) return; if(over&&over.length) return;
       if(!window.__editSel) return; const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       if(window.__editPlaceAt) window.__editPlaceAt(c,r); });
@@ -305,10 +309,38 @@ class Main extends Phaser.Scene {
       if(!this.moveItem(e.id,c,r)) this.moveItem(e.id,e.cell.c,e.cell.r);
       if(window.__layoutChanged)window.__layoutChanged(); });
   }
-  _enableDrag(e){ const m=e.main; if(!m)return; m._e=e; m.setInteractive({useHandCursor:true}); this.input.setDraggable(m,true); }
-  _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; }
-  toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode); this.trash.setVisible(this.editMode);
+  // 通常は「ドラッグで移動」、選択モード中は「クリックで選択」に付け替える
+  _enableDrag(e){ const m=e.main; if(!m)return; m._e=e; m.setInteractive({useHandCursor:true});
+    m.removeAllListeners('pointerdown');
+    const selectable = this.selectMode && STOWABLE.includes(e.kind);
+    this.input.setDraggable(m, !this.selectMode);
+    if(selectable) m.on('pointerdown', ()=>this.toggleSelect(e.id));
+  }
+  _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.removeAllListeners('pointerdown'); m.disableInteractive(); m._e=null; }
+  toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode);
+    if(!this.editMode) this.setSelectMode(false);
+    this.trash.setVisible(this.editMode && !this.selectMode);
     for(const e of this.placed){ this.editMode?this._enableDrag(e):this._disableDrag(e); } return this.editMode; }
+  /* ===== 収納(在庫に戻す) ===== */
+  stowables(){ return this.placed.filter(e=>STOWABLE.includes(e.kind)); }
+  stowAll(){ const list=this.stowables(); for(const e of list) this.removeItem(e.id); this._drawSel(); return list.length; }
+  setSelectMode(on){ const v=!!on; if(v===!!this.selectMode) return v;
+    this.selectMode=v; this.sel=new Set();
+    this.trash.setVisible(this.editMode && !v);
+    for(const e of this.placed) if(this.editMode) this._enableDrag(e);
+    this._drawSel(); this._notifySel(); return v; }
+  toggleSelect(id){ if(!this.sel) this.sel=new Set();
+    this.sel.has(id) ? this.sel.delete(id) : this.sel.add(id);
+    this._drawSel(); this._notifySel(); }
+  stowSelected(){ const ids=[...(this.sel||[])]; for(const id of ids) this.removeItem(id);
+    this.sel=new Set(); this._drawSel(); this._notifySel(); return ids.length; }
+  _notifySel(){ if(window.__selChanged) window.__selChanged(this.sel?this.sel.size:0); }
+  _drawSel(){ if(!this.selGfx) this.selGfx=this.add.graphics().setDepth(8400);
+    const g=this.selGfx; g.clear(); if(!this.selectMode) return;
+    for(const e of this.placed){ if(!this.sel || !this.sel.has(e.id)) continue;
+      const p=cellXY(e.cell.c,e.cell.r);
+      g.fillStyle(0x7fe6ff,0.20); g.fillEllipse(p.x,p.y-2,CELL*1.12,CELL*0.56);
+      g.lineStyle(2,0x7fe6ff,0.95); g.strokeEllipse(p.x,p.y-2,CELL*1.12,CELL*0.56); } }
   /* 窓オブジェクトを座標で定義(左壁 u=0)。床エッジ uvXY(0,v) を基準に壁の高さ方向へ立ち上げる。
      光源(採光の床帯・月/星のマスク)はすべてこの窓定義から導出する。 */
   defineWindows(){
