@@ -379,10 +379,15 @@ class Main extends Phaser.Scene {
       const img=this.add.image((bx0+bx1)/2, by1, tex.key).setOrigin(0.5,1).setDepth(C.y).setTint(tint);
       if(flip) img.setFlipX(true);   // 素材はu方向。v方向は左右反転で角度が合う
       objs.push(img); e._lit=img; this.lit.push({sp:img,u,v});
-      const iw=img.width, ih=img.height, L=img.x-iw/2, T=img.y-ih;
+      const iw=img.width, ih=img.height;
       const fitA=((this.machFit()[tex.theme])||{})[String(tex.n)];
       if(fitA){
-        // 投入口0番の実位置。以降のマスは「ゲームの1マス送り」ぶんずらせば絵の口に乗る
+        // 投入口0番が「マス0の中心」の真上に来るよう横位置を合わせる。
+        // bbox中央で置くと絵ごとに数px〜十数px 横へズレ、マスの一部に床が見えてしまう。
+        const c0=cellXY(e.cell.c, e.cell.r);
+        const sx0=(img.x-iw/2)+(flip?1-fitA.ax:fitA.ax)*iw;
+        img.x += c0.x - sx0;
+        const L=img.x-iw/2, T=img.y-ih;
         const sx=L+(flip?1-fitA.ax:fitA.ax)*iw, sy=T+fitA.ay*ih;
         const du=cellXY(1,0).x-cellXY(0,0).x, dv=cellXY(1,0).y-cellXY(0,0).y;
         spotPts=this.cellsOf(e).map((q,i)=>({x:sx+(flip?-1:1)*du*i, y:sy+dv*i}));
@@ -390,6 +395,12 @@ class Main extends Phaser.Scene {
       } else {
         HG = Math.max(2, ih-(by1-by0));
       }
+      // 絵の本体の奥行はゲームの1マスより浅いことがあり、占有マスの手前側に床が残る。
+      // そこに後ろのキャラが覗くので、占有マスを暗い土台で塞いでからスプライトを重ねる。
+      const base=this.add.graphics().setDepth(C.y-0.3);
+      base.fillStyle(sk.edge,1); base.fillPoints([A,B,C,D],true);
+      base.lineStyle(2,sk.side,1); base.strokePoints([A,B,C,D],true);
+      objs.push(base);
       const sh=this.add.image((bx0+bx1)/2+3, by1-2, 'shadow').setDepth(C.y-0.5)
         .setDisplaySize(iw*0.9,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);
     } else {

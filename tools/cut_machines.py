@@ -37,7 +37,7 @@ MIN_AREA = 2000               # これ未満の連結成分はゴミとして捨
 # 投入口(素材を置く場所)の色。テーマごとに違うので判定を持たせる。
 # 未登録のテーマは較正できないので、従来どおり幅合わせにフォールバックする。
 SPOT_TEST = {
-    'halloween': lambda p: p[3] > 128 and p[0] > 140 and p[1] > 140 and p[2] < 140 and abs(p[0]-p[1]) < 45,   # 真鍮の漏斗
+    'halloween': lambda p: p[3] > 128 and max(p[:3]) < 60,                                                    # ホッパーの暗い口
     'onsen':     lambda p: p[3] > 128 and p[1] > 140 and p[2] > 140 and p[0] < 170 and p[1]-p[0] > 25,        # 湯(ターコイズ)
 }
 SPOT_MIN_AREA = 120

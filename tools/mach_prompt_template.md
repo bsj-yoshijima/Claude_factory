@@ -99,6 +99,18 @@ parallelogram, roughly as visually prominent as the side face.
 The long axis runs from the BACK END at the UPPER-LEFT down to the FRONT END at the LOWER-RIGHT.
 Only this one orientation; do not draw a mirrored version.
 
+=== FOOTPRINT & PROPORTIONS (CRITICAL) ===
+1. NARROW SLAB: each machine is several tiles long but exactly ONE TILE DEEP.
+   The top plate is a narrow strip.
+2. DEPTH RULER: the rim of one funnel almost spans the entire depth of the top
+   plate, leaving only a tiny margin of plate on either side.
+3. LOW PROFILE: the housing is very low — only half a tile tall. The long side
+   face is a short band, not a tall wall.
+4. HEIGHT RATIO: from feet to funnel rim, the funnels are 1/4 of the total
+   height and the housing is 3/4.
+5. NO CUBES: even the shortest 2-unit machine is a long rectangle (twice as long
+   as it is deep), never a square or a cube.
+
 === THE FOUR MACHINES — ONE SHARED TILE PITCH ===
 The four machines sit in a 2x2 grid with wide magenta gaps.
 The distance between the centres of two neighbouring hoppers is called
