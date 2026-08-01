@@ -89,22 +89,50 @@ parallelogram, roughly as visually prominent as the side face.
 The long axis runs from the BACK END at the UPPER-LEFT down to the FRONT END at the LOWER-RIGHT.
 Only this one orientation; do not draw a mirrored version.
 
-=== LAYOUT AND SCALE ===
-All four machines on ONE sheet, FOUR ROWS, EXACTLY ONE MACHINE PER ROW, stacked in a single
-vertical column with magenta gaps. Never two machines side by side. All left-aligned.
-Row 1: 2 tiles. Row 2: 3 tiles. Row 3: 4 tiles. Row 4: 5 tiles.
+=== THE FOUR MACHINES — ONE SHARED TILE PITCH ===
+The four machines sit in a 2x2 grid with wide magenta gaps.
+The distance between the centres of two neighbouring hoppers is called
+ONE STEP. One step is exactly the same length in all four machines. This
+is the single most important measurement on the sheet: never stretch or
+squeeze it to make a machine fit its area.
+Set one step to about one eighth of the sheet width, and keep it constant.
 
-All four are THE SAME MACHINE at THE SAME SCALE, only different lengths. Never resize one to
-fill its row, never compress a long one to fit.
-The tile step is identical in all four: 1/12 of the image width to the RIGHT and half that DOWN
-(on a 1024x1024 canvas, 85 px right and 43 px down per tile).
-First spot to last spot:
-  2 tiles ->  85 px right,  43 px down      4 tiles -> 255 px right, 128 px down
-  3 tiles -> 170 px right,  85 px down      5 tiles -> 340 px right, 170 px down
-The 2-tile machine is small; the 5-tile one is big and spans about half the sheet. Lots of empty
-magenta to the right of the short one is CORRECT.
-Make the tile count countable on the LONG SIDE face: N identical machine bays, one per tile,
-separated by a vertical rib or strut.
+Measured from the first hopper to the last hopper:
+  upper left  — 2 hoppers, so 1 step from first to last
+  upper right — 3 hoppers, so 2 steps from first to last
+  lower left  — 4 hoppers, so 3 steps from first to last
+  lower right — 5 hoppers, so 4 steps from first to last
+
+The number of arched furnace windows on the long side face equals the
+number of hoppers, each window directly below its own hopper.
+
+Because one step never changes, the machines get steadily longer: the
+longest is four times the first-to-last span of the shortest. The lower
+right machine must be one full step longer than the lower left machine.
+If those two look the same length, the sheet is wrong.
+Everything else is identical: body height, hopper size, funnel shape,
+end pieces, decoration. Length is the only difference.
+
+=== HOW TALL AND HOW DEEP — KEEP IT LOW ===
+Everything is measured in STEPs, so the machine always matches the game's tiles.
+
+- DEPTH: the body is exactly ONE STEP deep. It is one tile deep, no more.
+  Do not draw a fat, chunky block that spills over its tile.
+- TOTAL HEIGHT: from the ground line to the very top of the tallest part is
+  TWO AND A HALF STEPS. That is all. It is a low, wide machine, not a tower.
+- THE HOPPERS ARE THE TOP THIRD: the funnels occupy only the top third of that
+  total height. The solid body occupies the lower two thirds.
+- Nothing on the machine — no chimney, no cauldron, no lamp — may go higher than
+  the top of the hoppers.
+
+To picture it: the 5-tile machine is five steps long but only two and a half steps
+tall. It is clearly a long low machine, about twice as wide as it is tall.
+If it looks like a tall cabinet or a tower, it is wrong.
+
+=== FILL NOTHING ===
+Do not scale any machine up or down to fill its area. Do not compress a
+long machine to fit. The short machines are simply small and leave large
+areas of bare magenta around them, which is correct and intended.
 
 === THE INGREDIENT INTAKE ===
 Each tile has ONE intake where a raw material is loaded, centred on its tile, all identical,

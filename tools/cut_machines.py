@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
-"""Stitch生成の製造機シート(2x2・マゼンタ背景)を1台ずつ切り出し、ゲームの表示サイズへ焼く。
+"""Stitch生成の製造機シート(マゼンタ背景・4台)を1台ずつ切り出し、ゲームの座標系へ焼く。
 
     使い方: python3 tools/cut_machines.py
 
 入力 : assets/mach-sheets/<theme>.png   … 2/3/4/5 マス機が4台。並びは 2x2 でも縦1列でもよい
-       (連結成分で4台を拾い、幅の小さい順に 2/3/4/5 と割り当てる)
-出力 : assets/mach-<theme>-s<N>.png     … 透過PNG・ゲーム内の表示サイズちょうど
+出力 : assets/mach-<theme>-s<N>.png     … 透過PNG。1マスの送りがゲームの1マスと一致する大きさ
+       assets/mach-fit.json             … 素材アイコンを絵の投入口に乗せるためのアンカー
 
-サイズの決め方（ここが肝）:
-  4台は「同じ機械の長さ違い」なので、**筐体の高さは4台とも同じ**でなければならない。
-  ところが生成された絵は台ごとにマスピッチが違う（例: アラビアで1マス 92/69/58/48px）。
-  幅だけ占有外周に合わせると、長い台ほど筐体が高くなってしまう（実測で最大+37%）。
-  そこで幅=占有外周の幅、高さ=占有外周の高さ+共通の筐体高、として**縦横別々に**合わせる。
-  共通の筐体高は4台の中央値。歪みは数%に収まるが、閾値を超えたら警告を出す。
+較正の考え方（ここが肝）:
+  4台は「同じ機械の長さ違い」なので、1マスの送り(隣り合う投入口の中心間距離)は4台とも同じはず。
+  ところが生成された絵は毎回、長い台ほど送りを詰めてくる(実測 43.7→40.6→38.1→36.9px, ±9.6%)。
 
-なぜ表示幅まで縮小するか:
-  Phaser は pixelArt:true (NEAREST) なので、245px の素材を 155px で描くとピクセルが
-  間引かれて描き込みが壊れる。あらかじめ LANCZOS で表示幅へ落としておけば ほぼ 1:1 で描ける。
+  そこで **投入口を検出して送りを実測し、テーマ全体で1つの倍率**
+  (ゲームの送り ÷ 実測の送りの中央値) を4台すべてに等倍でかける。
+  サイズごとに違う倍率をかけると「サイズごとにデザインの見え方が変わる」ので絶対にやらない。
+  残る ±9.6% のばらつきは、2マス機がやや大きめ・5マス機がやや小さめに見える程度で吸収する。
 
-表示幅は game/main.js の定数から算出する(二重管理を避けるため):
-  占有マスの外周(inset込み)を画面へ射影した bbox の幅 = スプライトの幅
+  絵の長軸が「右斜め上」向き(送りのdyが負)なら、切り出し時に左右反転して
+  ゲームが基準とする「右斜め下」向きに揃える。もう一方の対角はゲーム側が更に反転して使う。
+
+なぜゲームの表示サイズまで縮小するか:
+  Phaser は pixelArt:true (NEAREST) なので、大きい素材を縮めて描くとピクセルが間引かれて
+  描き込みが壊れる。あらかじめ LANCZOS で表示サイズへ落としておけば ほぼ 1:1 で描ける。
 """
 import os, re, math, itertools
 from collections import deque
@@ -31,6 +33,14 @@ OUT = os.path.join(ROOT, 'assets')
 SIZES = [2, 3, 4, 5]          # 幅の小さい順に割り当てる
 ERODE = 1                     # マゼンタのハロー除去(alpha収縮 px)
 MIN_AREA = 2000               # これ未満の連結成分はゴミとして捨てる
+
+# 投入口(素材を置く場所)の色。テーマごとに違うので判定を持たせる。
+# 未登録のテーマは較正できないので、従来どおり幅合わせにフォールバックする。
+SPOT_TEST = {
+    'halloween': lambda p: p[3] > 128 and p[0] > 140 and p[1] > 140 and p[2] < 140 and abs(p[0]-p[1]) < 45,   # 真鍮の漏斗
+    'onsen':     lambda p: p[3] > 128 and p[1] > 140 and p[2] > 140 and p[0] < 170 and p[1]-p[0] > 25,        # 湯(ターコイズ)
+}
+SPOT_MIN_AREA = 120
 
 
 def main_js_consts():
@@ -205,43 +215,134 @@ def target_height(n, W, H, GU, GV, iso, IN):
 MAX_WARP = 0.15   # 縦の歪みがこれを超えたら警告(背の高い意匠を潰している可能性)
 
 
+def spot_blobs(sp, test):
+    """投入口の候補を連結成分で拾う。((cx,cy), area) のリスト"""
+    w, h = sp.size
+    px = sp.load()
+    seen = [[False] * h for _ in range(w)]
+    out = []
+    for x in range(w):
+        for y in range(h):
+            if seen[x][y] or not test(px[x, y]):
+                continue
+            q = deque([(x, y)]); seen[x][y] = True; pts = []
+            while q:
+                cx, cy = q.popleft(); pts.append((cx, cy))
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < w and 0 <= ny < h and not seen[nx][ny] and test(px[nx, ny]):
+                        seen[nx][ny] = True; q.append((nx, ny))
+            if len(pts) >= SPOT_MIN_AREA:
+                xs = [q0[0] for q0 in pts]; ys = [q0[1] for q0 in pts]
+                out.append(((sum(xs) / len(xs), sum(ys) / len(ys)), len(pts)))
+    return out
+
+
+def pick_spots(cands, n):
+    """候補から「等間隔・一直線・同じ大きさ」に最も近い n 個を選ぶ(装飾の誤検出を落とす)"""
+    if len(cands) < n:
+        return None
+    if n == 1:
+        return [max(cands, key=lambda t: t[1])]
+    best, bv = None, 1e18
+    for sub in itertools.combinations(cands, n):
+        sub = sorted(sub, key=lambda t: t[0][0])
+        xs = [t[0][0] for t in sub]; ys = [t[0][1] for t in sub]; ar = [t[1] for t in sub]
+        g = [xs[i + 1] - xs[i] for i in range(n - 1)]
+        if min(g) <= 2:
+            continue
+        gm = sum(g) / len(g)
+        even = sum((q - gm) ** 2 for q in g) / len(g) / (gm * gm)
+        x0, y0, x1, y1 = xs[0], ys[0], xs[-1], ys[-1]
+        dx, dy = x1 - x0, y1 - y0
+        L = math.hypot(dx, dy) or 1
+        line = sum(abs((xs[i] - x0) * dy - (ys[i] - y0) * dx) / L for i in range(n)) / n / max(1, gm)
+        am = sum(ar) / len(ar)
+        size = sum(abs(a - am) for a in ar) / len(ar) / am
+        v = even * 3 + line * 3 + size
+        if v < bv:
+            bv, best = v, sub
+    return best
+
+
 def main():
+    import json
     W, H, GU, GV, iso, IN = main_js_consts()
+    step_x = abs(iso['ux'] * W / GU)      # ゲームの1マス送り(u方向)
+    step_y = abs(iso['uy'] * H / GU)
+    fit = {}
     for f in sorted(os.listdir(SHEETS)):
         if not f.lower().endswith('.png'):
             continue
         theme = os.path.splitext(f)[0]
         sheet = key_out(Image.open(os.path.join(SHEETS, f)))
-        sw, sh = sheet.size
-        print(f'== {f} ({sw}x{sh})')
-        # 1周目: 切り出して、幅を占有外周に合わせたときの「筐体の高さ」を測る
+        print(f'== {f} ({sheet.width}x{sheet.height})')
         picks = split_machines(sheet)
         if len(picks) < len(SIZES):
             print(f'   !! 機械を{len(picks)}台しか検出できませんでした(4台必要)。スキップ'); continue
-        cut = []
+        test = SPOT_TEST.get(theme)
+
+        # 1周目: 投入口を検出して、各台の送りを測る
+        found = []
         for n, bb in zip(SIZES, picks):
             sp = sheet.crop(bb)
-            tw = target_width(n, W, H, GU, GV, iso, IN)
-            fh = target_height(n, W, H, GU, GV, iso, IN)
-            hw = sp.height * tw / sp.width          # 幅だけ合わせたときの高さ
-            cut.append((n, sp, tw, fh, hw - fh))    # 末尾 = そのときの筐体高
-        if not cut:
+            spots = pick_spots(spot_blobs(sp, test), n) if test else None
+            found.append((n, sp, spots))
+        measured = [( (s[-1][0][0]-s[0][0][0])/(n-1), (s[-1][0][1]-s[0][0][1])/(n-1) )
+                    for n, _, s in found if s and n > 1]
+        if len(measured) < 2:
+            print('   !! 投入口を検出できないテーマなので、従来の幅合わせにフォールバック')
+            legacy_fit(theme, found, W, H, GU, GV, iso, IN)
             continue
-        bodies = sorted(c[4] for c in cut)
-        body = bodies[len(bodies) // 2]             # 共通の筐体高 = 中央値
-        print(f'   共通の筐体高 = {body:.1f}px (実測 {", ".join(f"{c[4]:.0f}" for c in cut)})')
 
-        # 2周目: 幅=占有外周の幅 / 高さ=占有外周の高さ+共通の筐体高 で焼く
-        for n, sp, tw, fh, b in cut:
-            th = fh + body
-            warp = th / (fh + b) - 1                # 縦の歪み
-            out = sp.resize((round(tw), round(th)), Image.LANCZOS)
-            path = os.path.join(OUT, f'mach-{theme}-s{n}.png')
-            out.save(path)
-            flag = '  !! 縦の歪みが大きい' if abs(warp) > MAX_WARP else ''
-            print(f'   s{n}: 原寸 {sp.width}x{sp.height} → {out.width}x{out.height}'
-                  f'  筐体 {b:.0f}→{body:.0f}px  縦{warp*+100:+.1f}%{flag}')
+        # 絵の長軸が「右斜め上」向き(dyが負)なら左右反転して「右斜め下」に揃える
+        flip = (sum(m[1] for m in measured) / len(measured)) < 0
+        dxs = sorted(abs(m[0]) for m in measured)
+        med = dxs[len(dxs) // 2]                       # 送りの中央値
+        scale = step_x / med                            # テーマ全体で1つの倍率(等倍)
+        spread = (max(dxs) - min(dxs)) / med * 100
+        print(f'   投入口の送り: {[round(abs(m[0]),1) for m in measured]} (ばらつき ±{spread:.1f}%)'
+              f' / 中央値 {med:.1f}px → 倍率 {scale:.3f}{"  ※左右反転" if flip else ""}')
 
+        for n, sp, spots in found:
+            if flip:
+                sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
+                spots = [((sp.width - 1 - c[0][0], c[0][1]), c[1]) for c in spots][::-1] if spots else None
+            ow, oh = max(1, round(sp.width * scale)), max(1, round(sp.height * scale))
+            out = sp.resize((ow, oh), Image.LANCZOS)
+            out.save(os.path.join(OUT, f'mach-{theme}-s{n}.png'))
+            if spots:
+                ax = spots[0][0][0] * scale / ow
+                ay = spots[0][0][1] * scale / oh
+                fit.setdefault(theme, {})[str(n)] = {'ax': round(ax, 4), 'ay': round(ay, 4)}
+                got = abs(spots[-1][0][0] - spots[0][0][0]) / (n - 1) * scale if n > 1 else step_x
+                print(f'   s{n}: {sp.width}x{sp.height} → {ow}x{oh}  送り {got:.1f}px (目標 {step_x:.1f})'
+                      f'  アンカー ({ax:.3f}, {ay:.3f})')
+            else:
+                print(f'   s{n}: {sp.width}x{sp.height} → {ow}x{oh}  !! 投入口を検出できずアンカーなし')
+
+    with open(os.path.join(OUT, 'mach-fit.json'), 'w', encoding='utf-8') as fp:
+        json.dump(fit, fp, ensure_ascii=False, indent=1)
+    print('\nwrote assets/mach-fit.json')
+
+
+def legacy_fit(theme, found, W, H, GU, GV, iso, IN):
+    """投入口を検出できないテーマ用。占有外周の幅に合わせ、筐体高を4台で揃える従来方式"""
+    cut = []
+    for n, sp, _ in found:
+        tw = target_width(n, W, H, GU, GV, iso, IN)
+        fh = target_height(n, W, H, GU, GV, iso, IN)
+        cut.append((n, sp, tw, fh, sp.height * tw / sp.width - fh))
+    bodies = sorted(c[4] for c in cut)
+    body = bodies[len(bodies) // 2]
+    print(f'   共通の筐体高 = {body:.1f}px (実測 {", ".join(f"{c[4]:.0f}" for c in cut)})')
+    for n, sp, tw, fh, b in cut:
+        th = fh + body
+        warp = th / (fh + b) - 1
+        out = sp.resize((round(tw), round(th)), Image.LANCZOS)
+        out.save(os.path.join(OUT, f'mach-{theme}-s{n}.png'))
+        flag = '  !! 縦の歪みが大きい' if abs(warp) > MAX_WARP else ''
+        print(f'   s{n}: → {out.width}x{out.height}  筐体 {b:.0f}→{body:.0f}px  縦{warp*100:+.1f}%{flag}')
 
 
 if __name__ == '__main__':

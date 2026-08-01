@@ -48,7 +48,7 @@ const MACH_GEO = { inset:0.10, height:0.42, slot:0.52 };
 const MACH_SIZES = [2,3,4,5];
 const KINDS = ['machine','deco','prop','emoji','prize'];   // 設置できる種類（belt/outlet は廃止）
 const MACH_MIN = 2;
-const MACH_ART = ['normal','arabia'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
+const MACH_ART = ['normal','arabia','diner','halloween'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
 const machSize = (sub)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(sub||'').replace(/\D/g,''))||MACH_MIN));
 
 /* ===== 素材の見た目 =====
@@ -236,6 +236,7 @@ class Main extends Phaser.Scene {
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
     for(const s of SKINS) if(s.id!=='none') this.load.image('hat_'+s.id, `assets/hat-${s.id}.png`);   // 被り物。未生成でもPhaserは欠損扱い→描画側でexistsチェック
+    this.load.text('machfit','assets/mach-fit.json');   // 投入口のアンカー。素材アイコンを絵の口に乗せる
     this.load.text('hatfit','assets/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る(load.json は中身が壊れるとローダーごと落ちるので text 読み)
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     // 製造機スプライト(Stitch製)。命名規約 mach_<theme>_s<N>。無いテーマは normal → 手続き描画 の順にフォールバック
@@ -356,6 +357,9 @@ class Main extends Phaser.Scene {
       if(th && this.textures.exists(k)) return {key:k, theme:th, n}; }
     return null; }
   /* 絵のスロット中心(幅/高さ比)。v向きは左右反転して描くので x も反転する */
+  machFit(){ if(this._machFit) return this._machFit;
+    try{ this._machFit=JSON.parse(this.cache.text.get('machfit')||'{}'); }catch(_){ this._machFit={}; }
+    return this._machFit; }
   hatFit(){ if(this._hatFit) return this._hatFit;
     try{ this._hatFit=JSON.parse(this.cache.text.get('hatfit')||'{}'); }catch(_){ this._hatFit={}; }
     return this._hatFit; }
@@ -367,16 +371,27 @@ class Main extends Phaser.Scene {
     const u=(e.cell.c+0.5)/GU, v=(e.cell.r+0.5)/GV, tint=this.tintByLight(u,v);
     const tex=this.machTex(e);
     const g=this.add.graphics().setDepth(C.y+0.1); objs.push(g); e._gfx=g;
-    let HG;   // 天面の高さ(px)。素材アイコンはこのぶん持ち上げて各マスの真上に置く
+    let HG, spotPts=null;   // 天面の高さ(px) / 投入口の実位置(スプライトのときアンカーから算出)
     if(tex){
-      // 素材の footprint 幅はゲーム側の占有外周と一致するよう焼いてある(tools/cut_machines.py)
+      // 1マスの送りがゲームと一致するよう焼いてある(tools/cut_machines.py)ので拡縮しない。
+      // 拡縮すると送りが崩れて素材アイコンが投入口からズレる。
+      const flip=(e.dir==='v');
       const img=this.add.image((bx0+bx1)/2, by1, tex.key).setOrigin(0.5,1).setDepth(C.y).setTint(tint);
-      img.setDisplaySize(bx1-bx0, img.height*(bx1-bx0)/img.width);
-      if(e.dir==='v') img.setFlipX(true);   // 素材はu方向。v方向は左右反転で角度が合う
+      if(flip) img.setFlipX(true);   // 素材はu方向。v方向は左右反転で角度が合う
       objs.push(img); e._lit=img; this.lit.push({sp:img,u,v});
-      HG = Math.max(2, img.displayHeight-(by1-by0));
+      const iw=img.width, ih=img.height, L=img.x-iw/2, T=img.y-ih;
+      const fitA=((this.machFit()[tex.theme])||{})[String(tex.n)];
+      if(fitA){
+        // 投入口0番の実位置。以降のマスは「ゲームの1マス送り」ぶんずらせば絵の口に乗る
+        const sx=L+(flip?1-fitA.ax:fitA.ax)*iw, sy=T+fitA.ay*ih;
+        const du=cellXY(1,0).x-cellXY(0,0).x, dv=cellXY(1,0).y-cellXY(0,0).y;
+        spotPts=this.cellsOf(e).map((q,i)=>({x:sx+(flip?-1:1)*du*i, y:sy+dv*i}));
+        HG = Math.max(2, by1-sy);      // 天面の高さ = 接地点から投入口までの高さ
+      } else {
+        HG = Math.max(2, ih-(by1-by0));
+      }
       const sh=this.add.image((bx0+bx1)/2+3, by1-2, 'shadow').setDepth(C.y-0.5)
-        .setDisplaySize((bx1-bx0)*0.95,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);
+        .setDisplaySize(iw*0.9,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);
     } else {
       HG = MACH_GEO.height*CELL;
       const up=(q)=>({x:q.x, y:q.y-HG});
@@ -398,7 +413,7 @@ class Main extends Phaser.Scene {
     const SL=MACH_GEO.slot;
     this.cellsOf(e).forEach((q,idx)=>{
       const mat=e.slots[idx], m=matArt(mat);
-      const ctr = up(cellXY(q.c,q.r));   // 各マスの中心の真上。筐体高さは4台で揃えてある
+      const ctr = (spotPts && spotPts[idx]) || up(cellXY(q.c,q.r));   // 絵の投入口 > マス中心の真上
       if(tex){ // スプライトは意匠が自由なので穴は描かない。素材が入っているマスだけ光らせる
         if(m){ g.fillStyle(m.c,0.5); g.fillEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24);
                g.lineStyle(1.5,sk.glow,0.85); g.strokeEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24); } }
