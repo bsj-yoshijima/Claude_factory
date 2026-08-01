@@ -97,6 +97,11 @@ ROWS = 2
 # 背景と同じ紺で塗られた模様(ダイナーのチェッカー柄の黒マス等)を持つ物は、
 # ポケット除去が模様ごと抜いてしまうので除外する。
 NO_POCKET = {'din_rug'}
+# 背景と同系色の暗い陰影を持つ物。通常判定だと縫い目や陰から背景が食い込むので、
+# 「背景と同じ明るさの色」だけを背景とみなす厳しい判定に切り替える。
+STRICT_BG = {'tky_sofa'}
+# 影の剥がしと破片除去が本体の陰影まで持っていく物。影は1回だけ剥がし、破片除去はしない。
+SAFE_ITEMS = {'tky_sofa'}
 PAD = 3          # 切り出し後に足す余白(px)
 ERODE = 2        # 影判定の収縮半径(px)
 BLOB_MIN = 150   # 収縮後にこれだけ残れば「塊」=影
@@ -446,15 +451,15 @@ def main(src_dir, out_dir):
             x0, x1 = max(0, xs[cx] - margin), min(W, xs[cx + 1] + margin)
             y0, y1 = (0, splits[cx]) if cy == 0 else (splits[cx], H)
             cell = Cell(px, x0, y0, x1, y1)
-            cell.fill_from_edges(test)
+            cell.fill_from_edges(make_bg_test(bgc, 0.85) if name in STRICT_BG else test)
             pockets = 0 if name in NO_POCKET else cell.fill_pockets(make_bg_test(bgc, 0.85), 300)
             shadows = []
-            for _ in range(3):
+            for _ in range(1 if name in SAFE_ITEMS else 3):
                 s_ = cell.strip_shadow()
                 if not s_: break
                 shadows.append(s_)
             outside = cell.drop_outside(xs[cx] - x0, xs[cx + 1] - x0)  # のりしろで拾った隣の物を捨てる
-            specks = cell.clean_specks()
+            specks = 0 if name in SAFE_ITEMS else cell.clean_specks()
             minx, miny, maxx, maxy = cell.bbox()
             if maxx < 0:
                 print(f'  !! {name}: 本体が見つからない'); continue
