@@ -341,8 +341,11 @@ class Cell:
             ccx = sum(cxs) / len(c)
             if x0 <= ccx < x1:
                 continue
-            if gap_x <= 20 and gap_y <= 20 and len(c) <= 0.2 * len(prim):
-                continue                       # セル外だが主体のすぐ近くの小片(はみ出した装飾)
+            if gap_x <= 8 and gap_y <= 8 and len(c) <= 0.08 * len(prim) \
+                    and x0 - 40 <= ccx < x1 + 40:
+                continue                       # セル外だが主体に密着した極小の片(はみ出した装飾)
+                                               # のりしろを広く取ると隣の破片を拾うので、
+                                               # セルから大きく離れた片は例外にしない
             for x, y in c:
                 self.bg[y][x] = True
             dropped += 1
@@ -438,7 +441,8 @@ def main(src_dir, out_dir):
             cx, cy = i % COLS, i // COLS
             xs = top if cy == 0 else bot
             # セル幅を超える物(ラグ等)が切れないよう、左右に のりしろ を取って読む
-            margin = round((xs[cx + 1] - xs[cx]) * 0.35)
+            # ラグはセル幅を大きく超えるので、のりしろをさらに広く取る(右下の角が切れるのを防ぐ)
+            margin = round((xs[cx + 1] - xs[cx]) * (0.95 if name.endswith('_rug') else 0.6))
             x0, x1 = max(0, xs[cx] - margin), min(W, xs[cx + 1] + margin)
             y0, y1 = (0, splits[cx]) if cy == 0 else (splits[cx], H)
             cell = Cell(px, x0, y0, x1, y1)
