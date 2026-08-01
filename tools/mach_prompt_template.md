@@ -43,7 +43,10 @@
    → 題材を **INDUSTRIAL PROCESSING MACHINE** と言い切り、機械の部品（モーター、歯車、
      ベルト、ピストン、圧力計、排気筒、**製品が出てくるシュート**）を必ず持たせる。
      テーマは素材と装飾だけを決め、家具に戻さない。
-6. 向きは規則を並べても従わない。**既知のアイソメ作品を参照**させ（Habbo Hotel / SimCity 2000）、
+6. **`runes` / `hieroglyphs` / `glyphs` と書くと文字が描き込まれる。** 冒頭の「no text」だけでは
+   足りない（模様のつもりの語が文字を呼ぶ）。文字禁止を独立した段落にして、ルーン・象形文字・
+   紋章・銘まで名指しで禁止し、代わりに使う語（notches / studs / bolt heads / grooves）を示す。
+7. 向きは規則を並べても従わない。**既知のアイソメ作品を参照**させ（Habbo Hotel / SimCity 2000）、
    失敗形を名指しで禁止する（「天面が細い水平の帯になって前面が大きな長方形になったら、
    それは正面図であって間違い」「天面は側面と同じくらい目立つ大きな菱形であること」）。
 
@@ -53,8 +56,15 @@
 
 ```
 Pixel art sprite sheet on a FLAT SOLID PURE MAGENTA (#FF00FF) background.
-No floor, no walls, no cast shadows, no text, no labels, no borders, no grid lines.
+No floor, no walls, no cast shadows, no borders, no grid lines.
 The magenta must be the ONLY background colour.
+
+ABSOLUTELY NO WRITING OF ANY KIND ANYWHERE IN THE IMAGE.
+No text, no labels, no letters, no numbers, no words, no runes, no glyphs, no hieroglyphs,
+no sigils, no inscriptions, no engraved characters, no signage — not in any real language and
+not in any invented or decorative one. If a surface needs detail, use notches, studs, bolt
+heads, grooves, rivets, chevrons or plain geometric shapes, never anything that reads as a
+character. This applies to every part: hopper collars, side panels, plaques and end caps.
 
 === WHAT THIS IS ===
 FOUR INDUSTRIAL PROCESSING MACHINES for a factory game, themed as <THEME>.
@@ -155,6 +165,12 @@ flat colors, no gradients, no anti-aliasing. Palette: <PALETTE>.
 
 ## `<SPOT_DESIGN>` の書き方の注意
 
+**文字を呼ぶ語を使わないこと。** `runes` / `hieroglyphs` / `glyphs` / `sigils` /
+`engraved symbols` / `inscription` と書くと、**そのまま文字を描かれる**。実際にハロウィンで
+「notched with poison-green glowing runes on the lip」と書いた結果、漏斗の帯に緑の文字が
+入った（ユーザー指摘）。ディテールが欲しいときは `notches` / `studs` / `bolt heads` /
+`grooves` / `rivets` / `chevrons` など**文字に見えない語**を使う。
+
 **水回りに見える語を使わないこと。** `well` / `basin` / `sunk into` / `stainless` /
 `polished steel ring` は、テーマが水でなくても**流し台**を描かせる。実際にダイナーで
 「chrome-rimmed griddle well sunk into the stainless counter」と書いた結果、
@@ -170,5 +186,5 @@ flat colors, no gradients, no anti-aliasing. Palette: <PALETTE>.
 |---|---|---|
 | 露天風呂 | 黒石のリングに乳白色の湯、湯気（楕円） | 竹の掛け流し樋、石灯籠、藍の暖簾を吊る竹の桁、湯桶の積み重ね、紅葉の枝、簾、木札 |
 | ダイナー | 天板に面一で嵌まった鋳鉄のホットプレート（楕円）、クロムの縁と赤いランプ ※`well`/`sunk`は使わない | ネオンアーチ、ミルクシェイクミキサー、ケチャップとマスタード、ナプキン入れ、ガラスのケーキドーム、メニュー板 |
-| ピラミッド | 石灰岩の天板に面一の金の献納皿（楕円）、縁に象形文字 | オベリスク、カノプス壺、スカラベ、アンク、青蓮、松明、パピルスの巻物 |
-| ハロウィン | 黒い板の天板に面一の鋳鉄のトリベット（楕円）、縁のルーンが緑に光る | 提灯かぼちゃ、蝋燭、蜘蛛の巣、蝙蝠、緑の薬瓶、歪んだランタン、大鍋 |
+| ピラミッド | 石灰岩の天板に面一の金の献納皿（楕円）、縁に彫り込みの刻み ※`hieroglyphs`は使わない | オベリスク、カノプス壺、スカラベ、アンク、青蓮、松明、パピルスの巻物 |
+| ハロウィン | 鋳鉄の短いホッパー襟（楕円）、縁の刻みが緑に光る ※`runes`は使わない | 提灯かぼちゃ、蝋燭、蜘蛛の巣、蝙蝠、緑の薬瓶、歪んだランタン、大鍋 |
