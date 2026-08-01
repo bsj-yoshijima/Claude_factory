@@ -216,17 +216,13 @@ class Main extends Phaser.Scene {
       const lbl=this.add.text(p.x,p.y-2.0*CELL-4,(MACHS_JP[e.sub]||'')+(e.lvl>1?` Lv${e.lvl}`:''),{fontFamily:'monospace',fontSize:'10px',color:'#eafff6'}).setOrigin(0.5,1).setDepth(p.y+1); lbl.setShadow(0,1,'#000',3,true,true);
       objs.push(sh,img,lbl); main=img; e._lit=img; this.lit.push({sp:img,u,v}); this.machineCells.push({c,r});
     } else if(e.kind==='belt'){
-      if(e.mode==null) e.mode='auto';
-      // 可視スプライト(接続に応じて renderBeltSprites がテクスチャ/反転を差し替え) + 掴む/クリック用の透明ヒット矩形
-      const vis=this.add.image(p.x,p.y,'belt_'+(this.beltSkin||'normal')+'_straight').setOrigin(0.5,0.58).setDepth(p.y).setTint(tint);
-      const hit=this.add.rectangle(p.x,p.y,CELL*0.82,CELL*0.5,0xffffff,0.002).setDepth(p.y+0.1);
-      objs.push(vis,hit); main=hit; e.vis=vis; e._lit=vis; this.lit.push({sp:vis,u,v});
+      // 見た目は共有 beltGfx が rot に応じて無地描画。ここは掴む/クリック(回転)用の透明ヒット矩形のみ。
+      const hit=this.add.rectangle(p.x,p.y,CELL*0.82,CELL*0.5,0xffffff,0.002).setDepth(p.y);
+      objs.push(hit); main=hit;
     } else if(e.kind==='outlet'){
-      // 目立たない出荷口(絵文字なし): 床面の暗いスロット + 細い縁 + 控えめな下向き矢印(投入口の示唆)
-      const slot=this.add.rectangle(p.x,p.y-CELL*0.02,CELL*0.5,CELL*0.28,0x171b1f,0.92).setDepth(p.y-0.2).setStrokeStyle(1,0x5f7a72);
-      const g=this.add.graphics().setDepth(p.y-0.1); g.lineStyle(2,0x7f8f89,0.6);
-      g.beginPath(); g.moveTo(p.x-CELL*0.08,p.y-CELL*0.05); g.lineTo(p.x,p.y+CELL*0.03); g.lineTo(p.x+CELL*0.08,p.y-CELL*0.05); g.strokePath();
-      objs.push(slot,g); main=slot;
+      // 目立たない出荷口(絵文字/矢印なし): 床面の暗いスロット + 細い縁だけ
+      const slot=this.add.rectangle(p.x,p.y-CELL*0.02,CELL*0.46,CELL*0.26,0x171b1f,0.9).setDepth(p.y-0.2).setStrokeStyle(1,0x4a5a54);
+      objs.push(slot); main=slot;
     } else if(e.kind==='deco'){
       const img=this.add.image(p.x,p.y,'dec_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.0*CELL/img.height).setTint(tint);
       const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
@@ -252,7 +248,7 @@ class Main extends Phaser.Scene {
   addPlaced(kind, sub, extra){ extra=extra||{};
     if(kind==='deco' && !this.textures.exists('dec_'+sub)) return null;
     const cell=(extra.cell && this.isFree(extra.cell.c,extra.cell.r)) ? extra.cell : this.freeCell();
-    const e={ id: extra.id||('o'+(this._oid=(this._oid||0)+1)), kind, sub, lvl:extra.lvl||1, cell, mode:extra.mode||(kind==='belt'?'auto':null), fixed:!!extra.fixed };
+    const e={ id: extra.id||('o'+(this._oid=(this._oid||0)+1)), kind, sub, lvl:extra.lvl||1, cell, rot:(kind==='belt' ? (extra.rot!=null?extra.rot:null) : undefined), fixed:!!extra.fixed };
     this._makeObjs(e); this.occ.add(K(cell.c,cell.r)); this.placed.push(e);
     if(this.editMode) this._enableDrag(e);
     if(!extra.silent){ const p=cellXY(cell.c,cell.r); this._spawnPop(p.x,p.y); }
@@ -272,9 +268,9 @@ class Main extends Phaser.Scene {
     e.cell={c,r}; this._makeObjs(e); this.occ.add(K(c,r));
     if(e.kind==='belt'||e.kind==='machine') this.computeBelts();
     if(this.editMode) this._enableDrag(e); return true; }
-  getLayout(){ return this.placed.filter(e=>e.kind!=='outlet').map(e=>({id:e.id,kind:e.kind,sub:e.sub,lvl:e.lvl,mode:e.mode,c:e.cell.c,r:e.cell.r})); }
+  getLayout(){ return this.placed.filter(e=>e.kind!=='outlet').map(e=>({id:e.id,kind:e.kind,sub:e.sub,lvl:e.lvl,rot:e.rot,c:e.cell.c,r:e.cell.r})); }
   buildLayout(list){ for(const e of this.placed.slice()) if(e.kind!=='outlet') this.removeItem(e.id);
-    for(const it of (list||[])) this.addPlaced(it.kind, it.sub, {cell:{c:it.c,r:it.r}, lvl:it.lvl, id:it.id, mode:it.mode, silent:true});
+    for(const it of (list||[])) this.addPlaced(it.kind, it.sub, {cell:{c:it.c,r:it.r}, lvl:it.lvl, id:it.id, rot:it.rot, silent:true});
     this._oid=Math.max(0,...this.placed.map(e=>parseInt(String(e.id).replace(/\D/g,''))||0)); this.computeBelts(); }
   setMachineLevel(id,lvl){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e)return; e.lvl=lvl; this.moveItem(id,e.cell.c,e.cell.r); }
   // 旧API互換（ショップ購入から呼ばれる）
@@ -284,72 +280,33 @@ class Main extends Phaser.Scene {
   placeEmojiDeco(emoji){ return this.addPlaced('emoji', emoji); }
   placeProp(name){ if(!this.textures.exists('prop_'+name)) return null; return this.addPlaced('prop', name); }
   placePrize(emoji,color){ return this.addPlaced('prize', {e:emoji,color}); }
-  /* ===== 自動接続コンベア: 隣接する belt/machine/outlet に自動で繋がる。mode(auto/h/v)で接続を選択(平行ラインの合流を切れる)。
-     機械同士は直結せず、間に最低1コンベアが要る(辺は belt を介したものだけ)。見た目は共有 beltGfx が接続に応じて描画。 ===== */
-  _beltDirs(){ return [[1,0],[-1,0],[0,1],[0,-1]]; }
+  /* ===== コンベア: 向き(rot)を手動管理、クリックで90°回転。設置時だけ隣接から向きを自動推定。
+     見た目は無地(矢印なし)の手続き描画。rot: 0=直線(縦) 1=直線(横) 2..5=コーナー4向き。 ===== */
   _nodeAt(c,r){ return this.placed.find(e=>e.cell.c===c&&e.cell.r===r&&(e.kind==='belt'||e.kind==='machine'||e.kind==='outlet')); }
-  _beltAllow(e,dc,dr){ if(!e||e.kind!=='belt') return true; const m=e.mode||'auto'; if(m==='h')return dc!==0; if(m==='v')return dr!==0; return true; }
-  _linkable(a,dc,dr,b){ if(!b) return false; if(!this._beltAllow(a,dc,dr)) return false;
-    if(b.kind==='belt') return this._beltAllow(b,-dc,-dr); return true; }   // machine/outlet は常に受ける(belt側mode条件のみ)
-  computeBelts(){
-    const belts=this.placed.filter(e=>e.kind==='belt');
-    for(const e of belts){ e.conn=[]; for(const [dc,dr] of this._beltDirs()){ const b=this._nodeAt(e.cell.c+dc,e.cell.r+dr); if(this._linkable(e,dc,dr,b)) e.conn.push([dc,dr]); } }
-    // 連結成分(belt/machine/outlet をノード、belt を介した接続を辺に)
-    const nodes=this.placed.filter(e=>e.kind==='belt'||e.kind==='machine'||e.kind==='outlet');
-    const idOf=new Map(); nodes.forEach(n=>idOf.set(n,-1));
-    const adj=(n)=>{ const out=[]; for(const [dc,dr] of this._beltDirs()){ const m=this._nodeAt(n.cell.c+dc,n.cell.r+dr); if(!m)continue;
-      let ok=false; if(n.kind==='belt') ok=this._linkable(n,dc,dr,m); else if(m.kind==='belt') ok=this._linkable(m,-dc,-dr,n);   // machine–machine は辺なし
-      if(ok) out.push(m); } return out; };
-    let comp=0;
-    for(const n of nodes){ if(idOf.get(n)>=0)continue; const q=[n]; idOf.set(n,comp);
-      while(q.length){ const x=q.pop(); for(const y of adj(x)) if(idOf.get(y)<0){ idOf.set(y,comp); q.push(y); } } comp++; }
-    this._beltComp=idOf;
-    this.renderBeltSprites();
-  }
-  // 接続マスク → ピース種別(straight/corner/tee/cross)＋反転。※iso向きの反転はテストで微調整
-  _beltPiece(conn){ let m=0; for(const [dc,dr] of (conn||[])){ if(dc===1)m|=1; else if(dc===-1)m|=2; else if(dr===1)m|=4; else if(dr===-1)m|=8; }
-    const E=1,W=2,S=4,N=8, has=b=>(m&b)===b, cnt=[E,W,S,N].filter(b=>m&b).length;
-    if(cnt>=4) return {piece:'cross',fx:false,fy:false};
-    if(cnt===3){ const miss=!(m&E)?'E':!(m&W)?'W':!(m&S)?'S':'N'; const map={E:{fx:false,fy:false},W:{fx:true,fy:false},S:{fx:false,fy:true},N:{fx:true,fy:true}}; return {piece:'tee',...map[miss]}; }
-    if(cnt===2){
-      if(has(S)&&has(N)) return {piece:'straight',fx:false,fy:false};   // r軸(縦)
-      if(has(E)&&has(W)) return {piece:'straight',fx:true,fy:false};    // c軸(横)
-      if(has(E)&&has(N)) return {piece:'corner',fx:false,fy:false};
-      if(has(W)&&has(N)) return {piece:'corner',fx:true,fy:false};
-      if(has(E)&&has(S)) return {piece:'corner',fx:false,fy:true};
-      if(has(W)&&has(S)) return {piece:'corner',fx:true,fy:true};
-    }
-    if(cnt===1) return (m&(S|N)) ? {piece:'straight',fx:false,fy:false} : {piece:'straight',fx:true,fy:false};
-    return {piece:'straight',fx:false,fy:false};
-  }
-  renderBeltSprites(){ const skin=this.beltSkin||'normal';
-    for(const e of this.placed){ if(e.kind!=='belt'||!e.vis) continue; const {piece,fx,fy}=this._beltPiece(e.conn);
-      const key='belt_'+skin+'_'+piece; if(this.textures.exists(key)) e.vis.setTexture(key);
-      e.vis.setFlipX(fx).setFlipY(fy).setScale((this._beltScale||1.55)*CELL/e.vis.width); }
-  }
-  _lineColor(i){ const P=[0x7fe6ff,0xffd27a,0x9fdcc6,0xf094bc,0xac86dc,0x7bc78d,0xf2d06a,0x7ba3df]; return P[((i%P.length)+P.length)%P.length]; }
-  drawBelts(time){
-    const g=this.beltGfx; if(!g)return; g.clear();
+  _rotDirs(rot){ const R=[[[0,-1],[0,1]],[[1,0],[-1,0]],[[0,-1],[1,0]],[[1,0],[0,1]],[[0,1],[-1,0]],[[-1,0],[0,-1]]]; return R[((rot||0)%6+6)%6]; }
+  _autoRot(cell){ const at=(dc,dr)=>!!this._nodeAt(cell.c+dc,cell.r+dr);
+    const N=at(0,-1),S=at(0,1),E=at(1,0),W=at(-1,0);
+    if(N&&S)return 0; if(E&&W)return 1;
+    if(N&&E)return 2; if(E&&S)return 3; if(S&&W)return 4; if(W&&N)return 5;
+    if(N||S)return 0; if(E||W)return 1; return 1; }
+  computeBelts(){ for(const e of this.placed) if(e.kind==='belt' && e.rot==null) e.rot=this._autoRot(e.cell); this.renderBelts(); }
+  renderBelts(){ const g=this.beltGfx; if(!g)return; g.clear();
     const belts=this.placed.filter(e=>e.kind==='belt'); if(!belts.length)return;
-    const W1=Math.max(7,CELL*0.30), W0=W1+7;
-    for(const e of belts){ const p=cellXY(e.cell.c,e.cell.r);
-      const comp=this._beltComp?this._beltComp.get(e):0; const col=this._lineColor(comp||0);
-      const dk=Phaser.Display.Color.IntegerToColor(col); const dark=Phaser.Display.Color.GetColor(dk.red*0.30|0,dk.green*0.30|0,dk.blue*0.30|0);
-      const conn=e.conn||[];
-      g.fillStyle(dark,1); g.fillCircle(p.x,p.y,W0/2);
-      if(!conn.length){ g.fillStyle(col,0.5); g.fillCircle(p.x,p.y,W1/2); }
-      else { g.fillStyle(col,0.22); g.fillCircle(p.x,p.y,W1/2); }
-      for(const [dc,dr] of conn){ const nb=cellXY(e.cell.c+dc,e.cell.r+dr); const mx=(p.x+nb.x)/2, my=(p.y+nb.y)/2;
-        g.lineStyle(W0,dark,1); g.beginPath(); g.moveTo(p.x,p.y); g.lineTo(mx,my); g.strokePath();
-        g.lineStyle(W1,col,0.30); g.beginPath(); g.moveTo(p.x,p.y); g.lineTo(mx,my); g.strokePath();
-        const len=Math.hypot(mx-p.x,my-p.y)||1, ux=(mx-p.x)/len, uy=(my-p.y)/len, nx=-uy, ny=ux, gap=11, off=(time*0.03)%gap;
-        g.lineStyle(2,col,0.75);
-        for(let t=off;t<len;t+=gap){ const cx=p.x+ux*t, cy=p.y+uy*t; g.beginPath(); g.moveTo(cx-nx*W1*0.42,cy-ny*W1*0.42); g.lineTo(cx+nx*W1*0.42,cy+ny*W1*0.42); g.strokePath(); }
+    const W1=Math.max(8,CELL*0.34), W0=W1+6, EDGE=0x14171b, BELT=0x2c3138, RAIL=0x5a626c, ROLL=0x828a94;
+    for(const e of belts){ const p=cellXY(e.cell.c,e.cell.r); const dirs=this._rotDirs(e.rot);
+      g.fillStyle(EDGE,1); g.fillCircle(p.x,p.y,W0/2); g.fillStyle(BELT,1); g.fillCircle(p.x,p.y,W1/2);
+      for(const [dc,dr] of dirs){ const nb=cellXY(e.cell.c+dc,e.cell.r+dr); const mx=(p.x+nb.x)/2,my=(p.y+nb.y)/2;
+        g.lineStyle(W0,EDGE,1); g.lineBetween(p.x,p.y,mx,my);
+        g.lineStyle(W1,BELT,1); g.lineBetween(p.x,p.y,mx,my);
+        const len=Math.hypot(mx-p.x,my-p.y)||1, ux=(mx-p.x)/len, uy=(my-p.y)/len, nx=-uy, ny=ux, off=W1*0.5;
+        g.lineStyle(2,RAIL,1); g.lineBetween(p.x+nx*off,p.y+ny*off,mx+nx*off,my+ny*off); g.lineBetween(p.x-nx*off,p.y-ny*off,mx-nx*off,my-ny*off);
+        g.lineStyle(2,ROLL,0.85); const gap=Math.max(9,CELL*0.15);
+        for(let t=gap*0.6;t<len-1;t+=gap){ const cx=p.x+ux*t,cy=p.y+uy*t; g.lineBetween(cx-nx*(W1*0.44),cy-ny*(W1*0.44),cx+nx*(W1*0.44),cy+ny*(W1*0.44)); }
       }
     }
   }
-  cycleBeltMode(e){ if(!e||e.kind!=='belt')return; const order=['auto','h','v']; e.mode=order[(order.indexOf(e.mode||'auto')+1)%order.length];
-    this.computeBelts(); if(window.__layoutChanged)window.__layoutChanged(); if(window.__toast)window.__toast('接続: '+({auto:'自動',h:'横のみ',v:'縦のみ'}[e.mode])); }
+  rotateBelt(e){ if(!e||e.kind!=='belt')return; e.rot=((e.rot||0)+1)%6; this.renderBelts();
+    if(window.__layoutChanged)window.__layoutChanged(); if(window.__toast)window.__toast('向き: '+(e.rot<2?['直線(縦)','直線(横)'][e.rot]:'コーナー')); }
   syncMachines(list){ for(const m of (list||[])) this.addPlaced('machine', m.type, {lvl:m.lvl||1}); }
   /* 設置時のポップ演出 */
   _spawnPop(x,y){ const g=this.add.circle(x,y-CELL*0.5,CELL*0.6,0xffe9a8,0.5).setDepth(9000).setBlendMode(Phaser.BlendModes.ADD);
@@ -373,10 +330,10 @@ class Main extends Phaser.Scene {
       if(!window.__editSel) return; const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       this._placedPtr=true; if(window.__editPlaceAt) window.__editPlaceAt(c,r); });
-    // コンベアをクリック(ドラッグでない)で接続モード切替: 自動→横のみ→縦のみ。隣の平行ラインの合流を切れる。
-    this.input.on('pointerup',(po,over)=>{ if(!this.editMode)return; if(this._placedPtr){ this._placedPtr=false; return; }   // 敷設直後は切替しない
+    // コンベアをクリック(ドラッグでない)で90°回転: 直線(縦)→直線(横)→コーナー4向き を巡回。
+    this.input.on('pointerup',(po,over)=>{ if(!this.editMode)return; if(this._placedPtr){ this._placedPtr=false; return; }   // 敷設直後は回転しない
       if(po.getDistance&&po.getDistance()>8)return; if(!over||!over.length)return;
-      const hit=over.find(o=>o._e&&o._e.kind==='belt'); if(hit) this.cycleBeltMode(hit._e); });
+      const hit=over.find(o=>o._e&&o._e.kind==='belt'); if(hit) this.rotateBelt(hit._e); });
     this.input.on('drag',(po,obj,dx,dy)=>{ if(this.editMode&&obj._e){ obj.x=dx; obj.y=dy; } });
     this.input.on('dragend',(po,obj)=>{ if(!this.editMode||!obj._e)return; const e=obj._e;
       if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){ this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); return; }
@@ -601,7 +558,7 @@ class Main extends Phaser.Scene {
   update(time){
     // 星のまたたき(夜)
     if(this.stars && this.lightOn>0){ for(const s of this.stars) s.setAlpha(this.lightOn*(0.35+0.65*Math.abs(Math.sin(time*0.002+s.ph)))); }
-    // コンベアは接続変化時に renderBeltSprites() がスプライトを差し替え(毎フレーム描画不要)
+    // コンベアは rot 変化時に renderBelts() が無地描画(毎フレーム不要)
     // コンベア: 連続ベルトを描画 + 製品を Path に沿って流す
     if(this.beltDirGfx) this.drawBeltDir(time);
     if(this.items && this.beltPath){ const v=this._pv;
