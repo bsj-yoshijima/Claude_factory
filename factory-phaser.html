@@ -150,8 +150,19 @@ const PROP={ vase:{e:'🏺',n:'装飾壺',price:220}, palm:{e:'🌴',n:'ヤシ�
   bee_throne:{e:'👑',n:'女王蜂の玉座',price:520,th:'beehive'},       bee_frames:{e:'🪟',n:'巣枠ラック',price:280,th:'beehive'},
   // ⚙️ スチームパンク
   stm_boiler:{e:'⚗️',n:'真鍮ボイラー',price:460,th:'steampunk'},     stm_cogs:{e:'⚙️',n:'歯車の山',price:220,th:'steampunk'},
-  stm_console:{e:'🎛️',n:'圧力計コンソール',price:400,th:'steampunk'},stm_chair:{e:'🛋️',n:'銅管のアームチェア',price:360,th:'steampunk'},
-  stm_orrery:{e:'🔭',n:'天球儀',price:480,th:'steampunk'},           stm_coal:{e:'🪣',n:'石炭バケツ',price:200,th:'steampunk'} };
+  stm_console:{e:'🎛️',n:'圧力計コンソール',price:400,th:'steampunk'},stm_armchair:{e:'🛋️',n:'銅管のアームチェア',price:360,th:'steampunk'},
+  stm_orrery:{e:'🔭',n:'天球儀',price:480,th:'steampunk'},           stm_coal:{e:'🪣',n:'石炭バケツ',price:200,th:'steampunk'},
+  // ===== 基本家具(fu:true) — 全テーマ共通スロット。価格はスロットで固定し、テーマ差は見た目だけ =====
+  // 🍣 回転寿司
+  sus_chair:{e:'🪑',n:'白木のスツール',price:200,th:'sushi',fu:1},    sus_table:{e:'🪵',n:'一枚板のテーブル',price:280,th:'sushi',fu:1},
+  sus_sofa:{e:'🛋️',n:'生成りのベンチソファ',price:420,th:'sushi',fu:1},sus_shelf:{e:'🗄️',n:'白木の食器棚',price:320,th:'sushi',fu:1},
+  sus_rug:{e:'🟦',n:'畳のラグ',price:240,th:'sushi',fu:1},            sus_lamp:{e:'🏮',n:'行灯スタンド',price:260,th:'sushi',fu:1},
+  sus_plant:{e:'🎋',n:'竹の鉢',price:220,th:'sushi',fu:1},            sus_noren:{e:'🎏',n:'暖簾立て',price:340,th:'sushi'},
+  // ⚙️ スチームパンク
+  stm_chair:{e:'🪑',n:'銅管の椅子',price:200,th:'steampunk',fu:1},    stm_table:{e:'🪵',n:'歯車のテーブル',price:280,th:'steampunk',fu:1},
+  stm_sofa:{e:'🛋️',n:'革張りのソファ',price:420,th:'steampunk',fu:1}, stm_shelf:{e:'🗄️',n:'鉄フレームの棚',price:320,th:'steampunk',fu:1},
+  stm_rug:{e:'🟥',n:'歯車柄のラグ',price:240,th:'steampunk',fu:1},    stm_lamp:{e:'💡',n:'真鍮のフロアランプ',price:260,th:'steampunk',fu:1},
+  stm_plant:{e:'🪴',n:'銅鉢のシダ',price:220,th:'steampunk',fu:1},    stm_helmet:{e:'🤿',n:'潜水ヘルメット台',price:380,th:'steampunk'} };
 // ショップでプロップをテーマ別に見出し分けする
 const PROP_GROUPS=[['','🧰 汎用'],['circus','🎪 サーカス'],['sushi','🍣 回転寿司'],['western','🤠 西部開拓'],['beehive','🐝 ミツバチの巣'],['steampunk','⚙️ スチームパンク']];
 const BG={ auto:{n:'標準（時刻連動）',price:0}, blue:{n:'快晴',price:1800}, sunset:{n:'夕焼け',price:2200}, night:{n:'星空',price:2600}, space:{n:'宇宙',price:4200}, aurora:{n:'オーロラ',price:5200} };
@@ -378,9 +389,11 @@ function openShop(tab){ if(tab)_shopTab=tab;
         <button data-belt="1" ${G.money>=BELT_PRICE?'':'disabled'}>購入</button></div>`;
       body += '<div class="cost" style="margin:12px 0 6px">装飾プロップ（Stitch製）</div>';
       for(const [th,label] of PROP_GROUPS){
-        const ks=Object.keys(PROP).filter(t=>(PROP[t].th||'')===th);
-        if(!ks.length) continue;
+        const all=Object.keys(PROP).filter(t=>(PROP[t].th||'')===th);
+        if(!all.length) continue;
         body += `<div class="cost" style="margin:10px 0 4px;color:#7fe6ff">${label}</div>`;
+        // 基本家具(全テーマ共通スロット)と名物(そのテーマだけの一点物)を分けて並べる
+        const ks=[...all.filter(t=>PROP[t].fu), ...all.filter(t=>!PROP[t].fu)];
         body += ks.map(t=>{ const sp=(window.PROP_SPAN||{})[t]||1;   // 占有コマ数(見た目の大きさ)
           return `<div class="rc"><div class="ic">${PROP[t].e}</div>
           <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('prop',t)}</span></div>

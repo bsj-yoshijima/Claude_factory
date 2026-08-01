@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Stitch生成の3x2アセットシート(JPEG)を1体ずつ切り出して透過PNGにする。
+"""Stitch生成のアセットシート(JPEG)を1体ずつ切り出して透過PNGにする。
 
-    使い方: python3 tools/cut_props.py assets/prop-sheets assets
-    (素のPythonで全ピクセルを走査するので 1体あたり1分前後・全30体で30〜45分かかる)
+    使い方: python3 tools/cut_props.py assets/prop-sheets assets/prop-src [シート名...]
+            (シート名を渡すとそれだけ処理する)
+    (素のPythonで全ピクセルを走査するので 1体あたり1分前後かかる)
+
+シートは 3列x2行=6体(名物) か 4列x2行=8体(家具テンプレート)。列数は SHEETS で指定する。
 
 背景の紺と接地影を落とし、スプライト本体(暗い輪郭・黒い鉄・石炭を含む)は残す。
 
@@ -18,14 +21,20 @@ import sys, os
 from collections import deque, Counter
 from PIL import Image
 
+# シート名 -> (列数, 左上から行優先で並ぶ名前). 名物シートは3列x2行=6体、家具シートは4列x2行=8体。
 SHEETS = {
-    'circus':    ['cir_popcorn', 'cir_ballstand', 'cir_trunks', 'cir_ringtoss', 'cir_cannon', 'cir_stool'],
-    'sushi':     ['sus_lane', 'sus_oke', 'sus_tea', 'sus_sake', 'sus_neko', 'sus_netacase'],
-    'western':   ['wes_barreltable', 'wes_horseshoe', 'wes_wheel', 'wes_campfire', 'wes_cactus', 'wes_assay'],
-    'beehive':   ['bee_combtable', 'bee_honeypots', 'bee_pollen', 'bee_candles', 'bee_throne', 'bee_frames'],
-    'steampunk': ['stm_boiler', 'stm_cogs', 'stm_console', 'stm_chair', 'stm_orrery', 'stm_coal'],
+    'circus':         (3, ['cir_popcorn', 'cir_ballstand', 'cir_trunks', 'cir_ringtoss', 'cir_cannon', 'cir_stool']),
+    'sushi':          (3, ['sus_lane', 'sus_oke', 'sus_tea', 'sus_sake', 'sus_neko', 'sus_netacase']),
+    'western':        (3, ['wes_barreltable', 'wes_horseshoe', 'wes_wheel', 'wes_campfire', 'wes_cactus', 'wes_assay']),
+    'beehive':        (3, ['bee_combtable', 'bee_honeypots', 'bee_pollen', 'bee_candles', 'bee_throne', 'bee_frames']),
+    'steampunk':      (3, ['stm_boiler', 'stm_cogs', 'stm_console', 'stm_armchair', 'stm_orrery', 'stm_coal']),
+    # 家具テンプレート(全テーマ共通スロット): chair/table/sofa/shelf/rug/lamp/plant + 名物1
+    'sushi-furn':     (4, ['sus_chair', 'sus_table', 'sus_sofa', 'sus_shelf',
+                           'sus_rug', 'sus_lamp', 'sus_plant', 'sus_noren']),
+    'steampunk-furn': (4, ['stm_chair', 'stm_table', 'stm_sofa', 'stm_shelf',
+                           'stm_rug', 'stm_lamp', 'stm_plant', 'stm_helmet']),
 }
-COLS, ROWS = 3, 2
+ROWS = 2
 PAD = 3          # 切り出し後に足す余白(px)
 ERODE = 2        # 影判定の収縮半径(px)
 BLOB_MIN = 150   # 収縮後にこれだけ残れば「塊」=影
@@ -227,6 +236,28 @@ class Cell:
                 dropped += 1
         return dropped
 
+    def drop_outside(self, x0, x1):
+        """重心が [x0,x1) の外にある塊を捨てる(のりしろで拾った隣の物を除く)。"""
+        seen, dropped = [[False] * self.w for _ in range(self.h)], 0
+        for sy in range(self.h):
+            for sx in range(self.w):
+                if self.bg[sy][sx] or seen[sy][sx]:
+                    continue
+                q, pts = deque([(sx, sy)]), []
+                seen[sy][sx] = True
+                while q:
+                    x, y = q.popleft(); pts.append((x, y))
+                    for dx, dy in NB:
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < self.w and 0 <= ny < self.h and not self.bg[ny][nx] and not seen[ny][nx]:
+                            seen[ny][nx] = True; q.append((nx, ny))
+                cx = sum(p[0] for p in pts) / len(pts)
+                if not (x0 <= cx < x1):
+                    for x, y in pts:
+                        self.bg[y][x] = True
+                    dropped += 1
+        return dropped
+
     def bbox(self):
         minx, miny, maxx, maxy = self.w, self.h, -1, -1
         for y in range(self.h):
@@ -256,6 +287,30 @@ def make_blend_test(c1, c2):
     return test
 
 
+def col_bounds(px, W, H, test, ncols):
+    """列の境界を「本体が無い縦帯」の中心から決める。
+
+    等分だと、セル幅より広い物(ラグ等)が隣のセルへはみ出して切れてしまうため、
+    理想位置(W*i/ncols)に一番近い空白帯の中心を境界に使う。
+    """
+    empty = [x for x in range(W) if all(test(px[x, y]) for y in range(H))]
+    runs = []
+    for x in empty:
+        if runs and x == runs[-1][1] + 1:
+            runs[-1][1] = x
+        else:
+            runs.append([x, x])
+    centers = [(a + b) // 2 for a, b in runs if 0 < (a + b) // 2 < W - 1]
+    bounds, cw = [0], W / ncols
+    for i in range(1, ncols):
+        ideal = W * i / ncols
+        # 理想位置の近傍にある空白帯だけを候補にする(遠くの帯を掴むとセルが潰れる)
+        cand = [c for c in centers if abs(c - ideal) <= cw * 0.3 and c > bounds[-1] + cw * 0.4]
+        bounds.append(min(cand, key=lambda c: abs(c - ideal)) if cand else round(ideal))
+    bounds.append(W)
+    return bounds
+
+
 def row_split(px, H, x0, x1, test):
     """列内で上下段の境界行を「本体が無い帯」の中心から決める(背の高い物体の切れ防止)。"""
     lo, hi = int(H * 0.33), int(H * 0.67)
@@ -274,19 +329,24 @@ def row_split(px, H, x0, x1, test):
 
 
 def main(src_dir, out_dir):
-    for sheet, names in SHEETS.items():
+    only = set(sys.argv[3:])
+    for sheet, (COLS, names) in SHEETS.items():
+        if only and sheet not in only:
+            continue
         im = Image.open(os.path.join(src_dir, f'{sheet}.jpg')).convert('RGB')
         W, H = im.size
         px = im.load()
         corners = [px[2, 2], px[W - 3, 2], px[2, H - 3], px[W - 3, H - 3]]
         bgc = tuple(sum(c[i] for c in corners) // 4 for i in range(3))
         test = make_bg_test(bgc)
-        cw = W // COLS
-        splits = [row_split(px, H, c * cw, (c + 1) * cw, test) for c in range(COLS)]
-        print(f'{sheet}: 背景 {bgc} / 段境界 {splits}')
+        xs = col_bounds(px, W, H, test, COLS)
+        splits = [row_split(px, H, xs[c], xs[c + 1], test) for c in range(COLS)]
+        print(f'{sheet}: 背景 {bgc} / 列境界 {xs} / 段境界 {splits}')
         for i, name in enumerate(names):
             cx, cy = i % COLS, i // COLS
-            x0, x1 = cx * cw, (cx + 1) * cw
+            # セル幅を超える物(ラグ等)が切れないよう、左右に のりしろ を取って読む
+            margin = round((xs[cx + 1] - xs[cx]) * 0.5)
+            x0, x1 = max(0, xs[cx] - margin), min(W, xs[cx + 1] + margin)
             y0, y1 = (0, splits[cx]) if cy == 0 else (splits[cx], H)
             cell = Cell(px, x0, y0, x1, y1)
             cell.fill_from_edges(test)
@@ -296,6 +356,7 @@ def main(src_dir, out_dir):
                 s_ = cell.strip_shadow()
                 if not s_: break
                 shadows.append(s_)
+            outside = cell.drop_outside(xs[cx] - x0, xs[cx + 1] - x0)  # のりしろで拾った隣の物を捨てる
             specks = cell.clean_specks()
             minx, miny, maxx, maxy = cell.bbox()
             if maxx < 0:
@@ -311,7 +372,7 @@ def main(src_dir, out_dir):
                     if not cell.bg[y][x]:
                         op[x - bx0, y - by0] = cell.p[y][x] + (255,)
             out.save(os.path.join(out_dir, f'prop_{name}.png'))
-            note = (('影 ' + ' + '.join(map(str, shadows))) if shadows else '影なし') + (f' / 内側{pockets}箇所' if pockets else '') + (f' / 破片{specks}除去' if specks else '')
+            note = (('影 ' + ' + '.join(map(str, shadows))) if shadows else '影なし') + (f' / 隣{outside}除去' if outside else '') + (f' / 内側{pockets}箇所' if pockets else '') + (f' / 破片{specks}除去' if specks else '')
             print(f'  {name:18s} {out.size[0]:>4}x{out.size[1]:<4} {note}'
                   + (f'  ⚠ セル端に接触: {",".join(clip)}' if clip else ''))
 

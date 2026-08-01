@@ -55,13 +55,17 @@ const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_j
   diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino',
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
   retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen' };
-// Stitch製 装飾プロップ。汎用12種 + テーマ別6種×5テーマ(部屋画像と同じアイソメ視点で生成)
+// Stitch製 装飾プロップ(部屋画像と同じアイソメ視点で生成)。
+//   汎用12種 + テーマ別の「名物」6種×5テーマ + テーマ別の「基本家具」7種×テーマ
+// 基本家具は全テーマ共通のスロット(chair/table/sofa/shelf/rug/lamp/plant)で、材質と色だけテーマで差し替える。
 const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen',
   'cir_popcorn','cir_ballstand','cir_trunks','cir_ringtoss','cir_cannon','cir_stool',                 // 🎪 サーカス
   'sus_lane','sus_oke','sus_tea','sus_sake','sus_neko','sus_netacase',                                // 🍣 回転寿司
   'wes_barreltable','wes_horseshoe','wes_wheel','wes_campfire','wes_cactus','wes_assay',              // 🤠 西部開拓
   'bee_combtable','bee_honeypots','bee_pollen','bee_candles','bee_throne','bee_frames',               // 🐝 ミツバチの巣
-  'stm_boiler','stm_cogs','stm_console','stm_chair','stm_orrery','stm_coal'];                         // ⚙️ スチームパンク
+  'stm_boiler','stm_cogs','stm_console','stm_armchair','stm_orrery','stm_coal',                       // ⚙️ スチームパンク
+  'sus_chair','sus_table','sus_sofa','sus_shelf','sus_rug','sus_lamp','sus_plant','sus_noren',        // 🍣 家具セット
+  'stm_chair','stm_table','stm_sofa','stm_shelf','stm_rug','stm_lamp','stm_plant','stm_helmet'];      // ⚙️ 家具セット
 // プロップが使う床のコマ数(=見た目の大きさ)。1コマだと潰れて読めない描き込みの多い物を 2/4 に上げる。
 // 表示高 = 1.35*CELL*√コマ数（4コマなら縦横2倍 = 2x2マス相当）。未指定は1コマ。
 // 素材PNGはこの表示サイズに合わせて縮小済み(tools/fit_props.py)。値を変えたら再実行が必要。
@@ -70,7 +74,10 @@ const PROP_SPAN = {
   sus_tea:2, sus_sake:2, sus_oke:2, sus_neko:2, cir_trunks:2, cir_ringtoss:2, cir_ballstand:2,
   wes_barreltable:2, wes_horseshoe:2, wes_wheel:2, wes_assay:2,
   bee_combtable:2, bee_honeypots:2, bee_pollen:2, bee_candles:2, bee_frames:2,
-  stm_chair:2, stm_cogs:2, stm_orrery:2,
+  stm_armchair:2, stm_cogs:2, stm_orrery:2,
+  // 基本家具はスロットごとに固定(テーマが変わっても椅子は椅子の大きさ)
+  sus_sofa:2, sus_rug:2, sus_lamp:2, sus_plant:2, sus_noren:2,
+  stm_sofa:2, stm_rug:2, stm_lamp:2, stm_plant:2,
 };
 const propSpan = (name)=> PROP_SPAN[name] || 1;
 window.PROP_SPAN = PROP_SPAN;   // ショップ表示(factory-phaser.html)から参照
