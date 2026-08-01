@@ -186,6 +186,14 @@
   .mchip small{font-size:9.5px;color:#cfeee0}
   .mchip:hover{border-color:#5f8a80}
   .mchip.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+  /* ジャンル選択チップ（原材料ピッカーの1段目） */
+  .mchip.gsel{background:#101a1c}
+  .mchip.gsel.on{border-color:var(--mint);box-shadow:0 0 0 1px var(--mint) inset}
+  .mchip.gsel.on small{color:var(--mint)}
+  /* 製造一覧の行に出す「いま何ジャンルの素材が入っているか」 */
+  .gtag{flex:none;font-size:9.5px;color:#9fdcc6;background:#16211d;border:1px solid #2b3a35;
+        border-radius:6px;padding:2px 6px;white-space:nowrap}
+  .gtag.cross{color:#ffd27a;background:#241f14;border-color:#6b5a2f}
   .wpline .kv{display:flex;justify-content:space-between;color:#9fb0c0;font-size:11px}
   .wpline .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
   .wpline .bar{height:9px;background:#0d1315;border:1px solid var(--edge);border-radius:5px;overflow:hidden;margin-top:5px}
@@ -582,18 +590,29 @@ function updateBadge(){ const m=document.getElementById('shopMoney');
   if(m) m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
 
 let _dexTab='prod';   // 'prod'=製造した製品(ゲームのゴール) / 'prize'=ガチャ景品
+let _dexG='food';     // 製品タブ配下のジャンル切り替え（GENRES + ✨シークレット）
+// 図鑑のジャンルタブ。GENRES に足せば自動で増える
+const dexGenres = ()=>[...GENRES, {id:SECRET_G,e:'✨',n:'シークレット'}];
+const prodsOfGenre = (g)=>PRODS.filter(p=>p.g===g);
 function dexTabs(){
   const c=craftState();
   const pOwned=PRODS.filter(p=>c.dex[p.id]).length;
   const zOwned=PRIZES.filter(p=>G.inv[p.id]).length;
-  return [{id:'prod',label:`🍮 製品 ${pOwned}/${PRODS.length}`},{id:'prize',label:`🎁 景品 ${zOwned}/${PRIZES.length}`}];
+  return [{id:'prod',label:`🏭 製品 ${pOwned}/${PRODS.length}`},{id:'prize',label:`🎁 景品 ${zOwned}/${PRIZES.length}`}];
 }
 function dexBody(){
   const c=craftState();
   let body;
   if(_dexTab==='prod'){
+    const gs=dexGenres();
+    if(!gs.some(g=>g.id===_dexG)) _dexG=gs[0].id;
+    // 製品タブ配下のジャンル切り替え。件数は「発見済み/全部」
+    const gtabs=`<div class="sttabs">${gs.map(g=>{ const list=prodsOfGenre(g.id);
+      const own=list.filter(p=>c.dex[p.id]).length;
+      return `<span class="sttab ${g.id===_dexG?'on':''}" data-dexg="${g.id}">${g.e} ${g.n} ${own}/${list.length}</span>`;
+      }).join('')}</div>`;
     // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
-    body=`<div class="pgrid">${PRODS.map(p=>{ const n=c.dex[p.id]||0;
+    body=gtabs+`<div class="pgrid">${prodsOfGenre(_dexG).map(p=>{ const n=c.dex[p.id]||0;
       // 発見済みには主な原材料をヒントとして出す（レシピを推測する手がかり）
       const hint=p.m.length?p.m.map(x=>MAT[x]?MAT[x].e:'').join(''):'';
       return n ? `<div class="pcard" style="border-color:${RAR[p.r].c}"><div class="e">${p.e}</div>
@@ -601,9 +620,11 @@ function dexBody(){
                     <div class="qn">×${n}</div><div class="qn" title="主な原材料">${hint}</div></div>`
                : `<div class="pcard miss"><div class="e">❓</div><div class="nm">？？？</div>
                     <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`; }).join('')}</div>
-      <div class="rowline" style="font-size:11px;color:#9fb0c0">
-        原材料の組み合わせを変えて未発見の製品を探そう。1製品 = マス数 × ${WP_PER_SLOT}WP。
-        レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。</div>`;
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">${_dexG===SECRET_G
+        ? `シークレットは<b style="color:#ffd27a">ジャンルを跨いだ原材料</b>の特定の組み合わせでのみ、ごく低確率で出る。
+           跨いだ組み合わせのほとんどは 🪨 謎のカタマリ。`
+        : `同じ ${GENRE[_dexG]?GENRE[_dexG].e+GENRE[_dexG].n:''} ジャンルの原材料の組み合わせを変えて未発見の製品を探そう。
+           1製品 = マス数 × ${WP_PER_SLOT}WP。レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。`}</div>`;
   } else {
     body=`<div class="grid">${PRIZES.map(p=>{ const have=G.inv[p.id]||0,col=RAR[p.r].c;
       return have? `<div class="cell own" data-id="${p.id}" style="border-color:${col}" title="クリックで部屋に飾る">${p.e}<small style="color:${col}">${RAR[p.r].n}</small><span class="cnt">×${have}</span></div>`
@@ -612,17 +633,21 @@ function dexBody(){
   }
   return body;
 }
-function openDex(tab){
+function openDex(tab,genre){
   if(tab)_dexTab=tab;
+  if(genre)_dexG=genre;
   return openDialog({ title:'📖 図鑑', tabs:dexTabs, tab:_dexTab,
     onTab:(id,d)=>{ _dexTab=id; d.refresh(); },
     body:dexBody,
-    onRender:(p)=>{ p.querySelectorAll('.cell.own').forEach(el=>el.onclick=()=>{
+    onRender:(p,d)=>{
+      p.querySelectorAll('[data-dexg]').forEach(el=>el.onclick=()=>{ _dexG=el.dataset.dexg; d.refresh(); });
+      p.querySelectorAll('.cell.own').forEach(el=>el.onclick=()=>{
         const z=PRIZES.find(x=>x.id===el.dataset.id);
         if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(z.e, RAR[z.r].c); snapLayout(); saveGame(); toast(`${z.e} ${z.n} を部屋に飾った！`); closeOverlay(); }
       }); } });
 }
-document.getElementById('dexBtn').addEventListener('click',openDex);
+// 引数なしで開く（そのまま渡すと click イベントが tab として入ってしまう）
+document.getElementById('dexBtn').addEventListener('click',()=>openDex());
 
 /* =========================================================================
    製造プロトタイプ — 抽出機に原材料をセット → 実WPを溜めて製品化
@@ -636,57 +661,146 @@ const needWp = (m)=> Math.max(1, (m && m.size) || 1) * WP_PER_SLOT;
 const PROD_PRICE = {1:60, 2:200, 3:700, 4:2600, 5:9000};
 // 原材料をセットできるマス数 = 製造機のマス数(2〜5)。台ごとに1レシピ。
 
-// 原材料（プロトタイプは食材のみ。将来は工場ジャンルで差し替える）
+/* == CRAFT-DATA-START ==（tools/test_craft.mjs がこの範囲を切り出して検証する）
+   ジャンル / 原材料 / 製品 / レシピの唯一の定義。拡張はこのブロックだけで完結させる。
+
+   ─ 拡張のしかた ─
+   1. ジャンルを増やす     … GENRES に1行。以降は `g:'<id>'` を付けるだけ
+   2. 原材料を増やす       … MATS に1行（g = 所属ジャンル）
+   3. 製品を増やす         … PRODS に1行（g = ジャンル / r = レア度1..5 / m = 相性のある原材料）
+   4. 組み合わせを増やす   … RECIPES にキー1行（キーは原材料idを重複除去してソートしカンマ結合）
+   5. ジャンル跨ぎの当たり … SECRETS に1行（p = シークレットが出る確率。外れは🪨カタマリ）
+
+   ─ 確率の書き方（RECIPES の値。3通りどれでもよい）─
+     ['bread','cake']          … レア度の既定重み（RAR[r].w）で抽選
+     {bread:70, cake:30}       … 相対確率を明示（合計は何でもよい。比率で見る）
+     [['bread',70],['cake',30]]… 同上。並び順を保ちたいときはこちら
+   ========================================================================= */
+const GENRES = [
+  {id:'food',e:'🍳',n:'食品'},
+  {id:'mech',e:'⚙️',n:'機械'},
+  {id:'life',e:'🧺',n:'生活品'},
+];
+const GENRE = Object.fromEntries(GENRES.map(g=>[g.id,g]));
+// シークレット枠。原材料を持たない「ジャンル跨ぎでだけ出る製品」のジャンルid
+const SECRET_G = 'secret';
+const genreOf = (matId)=> (MAT[matId]||{}).g || null;
+// 選んだ原材料が何ジャンルに跨っているか（1 = 同ジャンル / 2以上 = ジャンル跨ぎ）
+function genresOfMats(mats){ return [...new Set((mats||[]).map(genreOf).filter(Boolean))]; }
+
+// 原材料。g = ジャンル。ジャンルを跨いだセットも可能（ほぼ🪨カタマリ、一部シークレット）
 const MATS = [
-  {id:'milk',  e:'🥛',n:'牛乳'},   {id:'flour', e:'🌾',n:'小麦粉'}, {id:'egg',   e:'🥚',n:'卵'},
-  {id:'butter',e:'🧈',n:'バター'}, {id:'sugar', e:'🍬',n:'砂糖'},   {id:'choco', e:'🍫',n:'チョコ'},
-  {id:'rice',  e:'🍚',n:'米'},     {id:'noodle',e:'🍥',n:'麺'},     {id:'cheese',e:'🧀',n:'チーズ'},
-  {id:'tomato',e:'🍅',n:'トマト'}, {id:'meat',  e:'🥩',n:'肉'},     {id:'veg',   e:'🥬',n:'野菜'},
+  // 🍳 食品
+  {id:'milk',  g:'food',e:'🥛',n:'牛乳'},   {id:'flour', g:'food',e:'🌾',n:'小麦粉'}, {id:'egg',   g:'food',e:'🥚',n:'卵'},
+  {id:'butter',g:'food',e:'🧈',n:'バター'}, {id:'sugar', g:'food',e:'🍬',n:'砂糖'},   {id:'choco', g:'food',e:'🍫',n:'チョコ'},
+  {id:'rice',  g:'food',e:'🍚',n:'米'},     {id:'noodle',g:'food',e:'🍥',n:'麺'},     {id:'cheese',g:'food',e:'🧀',n:'チーズ'},
+  {id:'tomato',g:'food',e:'🍅',n:'トマト'}, {id:'meat',  g:'food',e:'🥩',n:'肉'},     {id:'veg',   g:'food',e:'🥬',n:'野菜'},
+  // ⚙️ 機械
+  {id:'iron',  g:'mech',e:'🔩',n:'鉄'},     {id:'alum',  g:'mech',e:'🥫',n:'アルミ'}, {id:'glass', g:'mech',e:'🪟',n:'ガラス'},
+  {id:'rubber',g:'mech',e:'🛞',n:'ゴム'},   {id:'semic', g:'mech',e:'💾',n:'半導体'}, {id:'wire',  g:'mech',e:'🔌',n:'銅線'},
+  {id:'batt',  g:'mech',e:'🔋',n:'電池'},   {id:'oil',   g:'mech',e:'🛢️',n:'石油'},   {id:'magnet',g:'mech',e:'🧲',n:'磁石'},
+  {id:'lens',  g:'mech',e:'🔍',n:'レンズ'},
+  // 🧺 生活品
+  {id:'wood',  g:'life',e:'🪵',n:'木材'},   {id:'cloth', g:'life',e:'🧵',n:'布'},     {id:'cotton',g:'life',e:'☁️',n:'綿'},
+  {id:'thread',g:'life',e:'🪢',n:'糸'},     {id:'leather',g:'life',e:'👝',n:'皮'},    {id:'plastic',g:'life',e:'🧴',n:'プラスチック'},
+  {id:'paper', g:'life',e:'📄',n:'紙'},     {id:'bamboo',g:'life',e:'🎍',n:'竹'},     {id:'dye',   g:'life',e:'🎨',n:'染料'},
+  {id:'feather',g:'life',e:'🪶',n:'羽毛'},
 ];
 const MAT = Object.fromEntries(MATS.map(m=>[m.id,m]));
 
-// 製品（r は RAR と共通のレア度 1..5 / m は相性のある原材料）
-// m は未定義の組み合わせから製品を選ぶときのスコアに使う。これが無いと
-// 「チョコ+卵+牛乳 → サラダ」のような噛み合わない結果が出る。
+// 製品（g は所属ジャンル / r は RAR と共通のレア度 1..5 / m は相性のある原材料）
+// m は図鑑のヒント表示に使う。レシピの抽選そのものには使わない。
 const PRODS = [
-  {id:'bread',   e:'🍞',n:'食パン',        r:1,m:['flour','butter','milk']},
-  {id:'onigiri', e:'🍙',n:'おにぎり',      r:1,m:['rice','veg']},
-  {id:'cookie',  e:'🍪',n:'クッキー',      r:1,m:['flour','butter','sugar']},
-  {id:'pancake', e:'🥞',n:'パンケーキ',    r:1,m:['flour','egg','milk','sugar']},
-  {id:'omelet',  e:'🍳',n:'オムレツ',      r:1,m:['egg','butter','cheese']},
-  {id:'salad',   e:'🥗',n:'サラダ',        r:1,m:['veg','tomato','cheese']},
-  {id:'fries',   e:'🍟',n:'フライドポテト',r:1,m:['veg','butter']},
-  {id:'soup',    e:'🍲',n:'スープ',        r:1,m:['veg','tomato','meat']},
-  {id:'pudding', e:'🍮',n:'プリン',        r:2,m:['egg','milk','sugar']},
-  {id:'sandwich',e:'🥪',n:'サンドイッチ',  r:2,m:['flour','veg','cheese','meat']},
-  {id:'cupnoodle',e:'🍜',n:'カップラーメン',r:2,m:['noodle','meat','veg']},
-  {id:'pizza',   e:'🍕',n:'ピザ',          r:2,m:['flour','cheese','tomato']},
-  {id:'donut',   e:'🍩',n:'ドーナツ',      r:2,m:['flour','sugar','butter']},
-  {id:'croissant',e:'🥐',n:'クロワッサン', r:2,m:['flour','butter']},
-  {id:'pasta',   e:'🍝',n:'パスタ',        r:2,m:['noodle','tomato','cheese']},
-  {id:'curry',   e:'🍛',n:'カレー',        r:2,m:['rice','meat','veg']},
-  {id:'burger',  e:'🍔',n:'ハンバーガー',  r:2,m:['flour','meat','cheese','veg']},
-  {id:'taco',    e:'🌮',n:'タコス',        r:2,m:['flour','meat','veg','tomato']},
-  {id:'cake',    e:'🍰',n:'ショートケーキ',r:3,m:['flour','egg','sugar','butter','milk']},
-  {id:'icecream',e:'🍨',n:'アイスクリーム',r:3,m:['milk','sugar','egg']},
-  {id:'cupcake', e:'🧁',n:'カップケーキ',  r:3,m:['flour','egg','sugar','choco']},
-  {id:'sushi',   e:'🍣',n:'寿司',          r:3,m:['rice','veg']},
-  {id:'ramen',   e:'🍥',n:'特製ラーメン',  r:3,m:['noodle','meat','egg']},
-  {id:'crepe',   e:'🫓',n:'クレープ',      r:3,m:['flour','milk','egg','sugar']},
-  {id:'gratin',  e:'🥘',n:'グラタン',      r:3,m:['cheese','milk','butter','veg']},
-  {id:'honeytoast',e:'🍯',n:'ハニートースト',r:3,m:['flour','butter','sugar','milk']},
-  {id:'deco',    e:'🎂',n:'デコレーションケーキ',r:4,m:['flour','egg','sugar','butter','choco','milk']},
-  {id:'parfait', e:'🍧',n:'豪華パフェ',    r:4,m:['milk','sugar','choco','egg']},
-  {id:'bento',   e:'🍱',n:'特上弁当',      r:4,m:['rice','meat','veg','egg']},
-  {id:'course',  e:'🏆',n:'伝説のフルコース',r:5,m:['meat','cheese','tomato','butter','rice','veg']},
+  // ── 🍳 食品 ──
+  {id:'bread',   g:'food',e:'🍞',n:'食パン',        r:1,m:['flour','butter','milk']},
+  {id:'onigiri', g:'food',e:'🍙',n:'おにぎり',      r:1,m:['rice','veg']},
+  {id:'cookie',  g:'food',e:'🍪',n:'クッキー',      r:1,m:['flour','butter','sugar']},
+  {id:'pancake', g:'food',e:'🥞',n:'パンケーキ',    r:1,m:['flour','egg','milk','sugar']},
+  {id:'omelet',  g:'food',e:'🍳',n:'オムレツ',      r:1,m:['egg','butter','cheese']},
+  {id:'salad',   g:'food',e:'🥗',n:'サラダ',        r:1,m:['veg','tomato','cheese']},
+  {id:'fries',   g:'food',e:'🍟',n:'フライドポテト',r:1,m:['veg','butter']},
+  {id:'soup',    g:'food',e:'🍲',n:'スープ',        r:1,m:['veg','tomato','meat']},
+  {id:'pudding', g:'food',e:'🍮',n:'プリン',        r:2,m:['egg','milk','sugar']},
+  {id:'sandwich',g:'food',e:'🥪',n:'サンドイッチ',  r:2,m:['flour','veg','cheese','meat']},
+  {id:'cupnoodle',g:'food',e:'🍜',n:'カップラーメン',r:2,m:['noodle','meat','veg']},
+  {id:'pizza',   g:'food',e:'🍕',n:'ピザ',          r:2,m:['flour','cheese','tomato']},
+  {id:'donut',   g:'food',e:'🍩',n:'ドーナツ',      r:2,m:['flour','sugar','butter']},
+  {id:'croissant',g:'food',e:'🥐',n:'クロワッサン', r:2,m:['flour','butter']},
+  {id:'pasta',   g:'food',e:'🍝',n:'パスタ',        r:2,m:['noodle','tomato','cheese']},
+  {id:'curry',   g:'food',e:'🍛',n:'カレー',        r:2,m:['rice','meat','veg']},
+  {id:'burger',  g:'food',e:'🍔',n:'ハンバーガー',  r:2,m:['flour','meat','cheese','veg']},
+  {id:'taco',    g:'food',e:'🌮',n:'タコス',        r:2,m:['flour','meat','veg','tomato']},
+  {id:'cake',    g:'food',e:'🍰',n:'ショートケーキ',r:3,m:['flour','egg','sugar','butter','milk']},
+  {id:'icecream',g:'food',e:'🍨',n:'アイスクリーム',r:3,m:['milk','sugar','egg']},
+  {id:'cupcake', g:'food',e:'🧁',n:'カップケーキ',  r:3,m:['flour','egg','sugar','choco']},
+  {id:'sushi',   g:'food',e:'🍣',n:'寿司',          r:3,m:['rice','veg']},
+  {id:'ramen',   g:'food',e:'🍥',n:'特製ラーメン',  r:3,m:['noodle','meat','egg']},
+  {id:'crepe',   g:'food',e:'🫓',n:'クレープ',      r:3,m:['flour','milk','egg','sugar']},
+  {id:'gratin',  g:'food',e:'🥘',n:'グラタン',      r:3,m:['cheese','milk','butter','veg']},
+  {id:'honeytoast',g:'food',e:'🍯',n:'ハニートースト',r:3,m:['flour','butter','sugar','milk']},
+  {id:'deco',    g:'food',e:'🎂',n:'デコレーションケーキ',r:4,m:['flour','egg','sugar','butter','choco','milk']},
+  {id:'parfait', g:'food',e:'🍧',n:'豪華パフェ',    r:4,m:['milk','sugar','choco','egg']},
+  {id:'bento',   g:'food',e:'🍱',n:'特上弁当',      r:4,m:['rice','meat','veg','egg']},
+  {id:'course',  g:'food',e:'🏆',n:'伝説のフルコース',r:5,m:['meat','cheese','tomato','butter','rice','veg']},
+  // ── ⚙️ 機械 ──
+  {id:'bulb',    g:'mech',e:'💡',n:'電球',          r:1,m:['glass','wire']},
+  {id:'clock',   g:'mech',e:'⏰',n:'置き時計',      r:1,m:['iron','batt','glass']},
+  {id:'fan',     g:'mech',e:'🌀',n:'扇風機',        r:1,m:['iron','wire','rubber']},
+  {id:'radio',   g:'mech',e:'📻',n:'ラジオ',        r:1,m:['semic','wire','magnet']},
+  {id:'light',   g:'mech',e:'🔦',n:'懐中電灯',      r:1,m:['batt','glass','alum']},
+  {id:'camera',  g:'mech',e:'📷',n:'カメラ',        r:2,m:['lens','glass','semic']},
+  {id:'headphone',g:'mech',e:'🎧',n:'ヘッドホン',   r:2,m:['magnet','wire','rubber']},
+  {id:'printer', g:'mech',e:'🖨️',n:'プリンター',    r:2,m:['iron','semic','wire']},
+  {id:'tv',      g:'mech',e:'📺',n:'テレビ',        r:2,m:['glass','semic','wire']},
+  {id:'watch',   g:'mech',e:'⌚',n:'スマートウォッチ',r:2,m:['semic','glass','rubber']},
+  {id:'pc',      g:'mech',e:'💻',n:'パソコン',      r:3,m:['semic','glass','iron','wire']},
+  {id:'phone',   g:'mech',e:'📱',n:'スマホ',        r:3,m:['semic','glass','batt']},
+  {id:'bike',    g:'mech',e:'🏍️',n:'バイク',        r:3,m:['iron','rubber','oil']},
+  {id:'car',     g:'mech',e:'🚗',n:'車',            r:4,m:['iron','rubber','glass','oil']},
+  {id:'train',   g:'mech',e:'🚃',n:'電車',          r:4,m:['iron','alum','magnet','wire']},
+  {id:'plane',   g:'mech',e:'✈️',n:'飛行機',        r:4,m:['alum','oil','glass','iron']},
+  {id:'heli',    g:'mech',e:'🚁',n:'ヘリコプター',  r:4,m:['alum','oil','iron','rubber']},
+  {id:'robot',   g:'mech',e:'🤖',n:'ロボット',      r:5,m:['semic','iron','magnet','batt','wire']},
+  {id:'rocket',  g:'mech',e:'🚀',n:'ロケット',      r:5,m:['alum','oil','semic','iron','glass']},
+  {id:'satellite',g:'mech',e:'🛰️',n:'人工衛星',     r:5,m:['alum','semic','lens','magnet']},
+  // ── 🧺 生活品 ──
+  {id:'tshirt',  g:'life',e:'👕',n:'Tシャツ',       r:1,m:['cloth','cotton','thread']},
+  {id:'pants',   g:'life',e:'👖',n:'ズボン',        r:1,m:['cloth','thread','leather']},
+  {id:'socks',   g:'life',e:'🧦',n:'靴下',          r:1,m:['cotton','thread']},
+  {id:'brush',   g:'life',e:'🪥',n:'歯ブラシ',      r:1,m:['plastic','thread']},
+  {id:'soap',    g:'life',e:'🧼',n:'せっけん',      r:1,m:['plastic','dye']},
+  {id:'note',    g:'life',e:'📓',n:'ノート',        r:1,m:['paper','thread']},
+  {id:'basket',  g:'life',e:'🧺',n:'洗濯かご',      r:1,m:['plastic','bamboo']},
+  {id:'cap',     g:'life',e:'🧢',n:'キャップ',      r:2,m:['cloth','cotton','dye']},
+  {id:'carpet',  g:'life',e:'🧶',n:'カーペット',    r:2,m:['cloth','cotton','dye','thread']},
+  {id:'umbrella',g:'life',e:'☂️',n:'傘',            r:2,m:['cloth','bamboo','plastic']},
+  {id:'chair',   g:'life',e:'🪑',n:'イス',          r:2,m:['wood','cloth','thread']},
+  {id:'shoes',   g:'life',e:'👟',n:'スニーカー',    r:2,m:['leather','cloth','thread']},
+  {id:'bag',     g:'life',e:'🎒',n:'リュック',      r:2,m:['cloth','leather','thread']},
+  {id:'futon',   g:'life',e:'🛌',n:'布団',          r:2,m:['cloth','cotton','feather']},
+  {id:'teddy',   g:'life',e:'🧸',n:'ぬいぐるみ',    r:3,m:['cloth','cotton','thread','feather']},
+  {id:'sofa',    g:'life',e:'🛋️',n:'ソファ',        r:3,m:['wood','leather','cotton','cloth']},
+  {id:'bed',     g:'life',e:'🛏️',n:'ベッド',        r:3,m:['wood','cloth','cotton']},
+  {id:'frame',   g:'life',e:'🖼️',n:'額縁',          r:3,m:['wood','paper','dye']},
+  {id:'suit',    g:'life',e:'👔',n:'スーツ',        r:4,m:['cloth','thread','leather','dye']},
+  {id:'kimono',  g:'life',e:'👘',n:'着物',          r:4,m:['cloth','thread','dye','cotton']},
+  {id:'chest',   g:'life',e:'🗄️',n:'たんす',        r:4,m:['wood','bamboo','paper','dye']},
+  {id:'magic',   g:'life',e:'🪄',n:'魔法の絨毯',    r:5,m:['cloth','thread','dye','feather','cotton']},
+  // ── ✨ シークレット（ジャンルを跨いだ特定の組み合わせでのみ出る）──
+  {id:'ghost',   g:SECRET_G,e:'👻',n:'おばけ',      r:3,m:[]},
+  {id:'cat',     g:SECRET_G,e:'🐈',n:'ふしぎな猫',  r:4,m:[]},
+  {id:'alien',   g:SECRET_G,e:'👽',n:'エイリアン',  r:5,m:[]},
+  {id:'dragon',  g:SECRET_G,e:'🐉',n:'ドラゴン',    r:5,m:[]},
   // レシピに無い組み合わせのときだけ出る。組み合わせを探す動機になる「ハズレ枠」
-  {id:'blob',    e:'🪨',n:'謎のカタマリ',   r:1,m:[]},
+  {id:'blob',    g:SECRET_G,e:'🪨',n:'謎のカタマリ',r:1,m:[]},
 ];
 const BLOB='blob';
 const PROD = Object.fromEntries(PRODS.map(p=>[p.id,p]));
 
-// 組み合わせ（重複を除いた原材料のソート済みキー）→ 出うる製品5種
+// 組み合わせ（重複を除いた原材料のソート済みキー）→ 出うる製品と確率
+// 値の書き方はブロック冒頭のコメント参照（配列 / 比率オブジェクト / [id,重み]の配列）
 const RECIPES = {
+  // 🍳 食品
   'egg,milk,sugar'      : ['pudding','icecream','parfait','crepe','honeytoast'],
   'butter,egg,flour'    : ['cookie','cake','donut','croissant','deco'],
   'egg,flour,milk'      : ['pancake','crepe','bread','cake','cupcake'],
@@ -704,23 +818,84 @@ const RECIPES = {
   'noodle,veg'          : ['cupnoodle','ramen','pasta','salad','soup'],
   'butter,veg'          : ['fries','salad','soup','gratin','omelet'],
   'cheese,meat,tomato'  : ['course','burger','pizza','pasta','gratin'],
+  // ⚙️ 機械
+  'glass,wire'          : ['bulb','light','tv','camera','clock'],
+  'batt,glass,semic'    : ['phone','watch','tv','camera','pc'],
+  'glass,semic,wire'    : ['tv','pc','printer','phone','robot'],
+  'glass,iron,semic,wire': {pc:55, printer:25, tv:12, robot:6, satellite:2},
+  'iron,rubber'         : ['fan','bike','car','heli','clock'],
+  'iron,oil,rubber'     : ['bike','car','heli','fan','rocket'],
+  'glass,iron,oil,rubber': {car:60, bike:22, heli:12, plane:5, rocket:1},
+  'alum,iron,magnet,wire': [['train',52],['printer',20],['robot',14],['satellite',9],['rocket',5]],
+  'alum,glass,iron,oil' : ['plane','heli','car','rocket','satellite'],
+  'batt,iron,magnet,semic,wire': {robot:40, printer:25, train:20, satellite:10, rocket:5},
+  'alum,lens,magnet,semic': {satellite:35, camera:30, robot:20, rocket:10, phone:5},
+  'magnet,rubber,wire'  : ['headphone','fan','radio','clock','bulb'],
+  'lens,semic'          : ['camera','watch','phone','tv','satellite'],
+  'alum,batt,glass'     : ['light','clock','watch','phone','plane'],
+  // 🧺 生活品
+  'cloth,cotton,thread' : ['tshirt','socks','cap','carpet','teddy'],
+  'cloth,leather,thread': ['pants','bag','shoes','suit','sofa'],
+  'cotton,thread'       : ['socks','tshirt','futon','teddy','carpet'],
+  'plastic,thread'      : ['brush','basket','umbrella','soap','shoes'],
+  'dye,plastic'         : ['soap','brush','basket','frame','umbrella'],
+  'paper,thread'        : ['note','frame','chest','carpet','bag'],
+  'cloth,cotton,dye,thread': {carpet:45, cap:22, kimono:16, suit:12, magic:5},
+  'cloth,thread,wood'   : ['chair','bed','sofa','frame','chest'],
+  'cotton,leather,wood' : ['sofa','chair','bed','chest','futon'],
+  'cloth,cotton,feather': ['futon','teddy','bed','magic','cap'],
+  'cloth,dye,leather,thread': [['suit',50],['bag',20],['kimono',18],['shoes',9],['magic',3]],
+  'bamboo,paper,wood'   : ['chest','frame','note','basket','umbrella'],
+  'cloth,cotton,dye,feather,thread': {magic:30, kimono:30, carpet:20, teddy:15, suit:5},
 };
 
-// 未定義の組み合わせは、組み合わせ文字列から「決定的に」5種を選ぶ。
-// Math.random にすると開き直すたび候補が変わってしまうため、必ずハッシュ由来にする。
-// レシピに定義された組み合わせだけが製品になる。
-// それ以外は「🪨 謎のカタマリ」。組み合わせを当てにいく動機がこれで生まれる。
+/* ジャンルを跨いだ組み合わせのときだけ引かれる隠しレシピ。
+   ここに書いた組み合わせだけ p の確率でシークレット製品、外れは 🪨 謎のカタマリ。
+   ここに無いジャンル跨ぎは必ず 🪨（＝跨ぎは基本ハズレ、という体験を保つ）。 */
+const SECRETS = {
+  'cotton,milk,thread'  : {pid:'cat',    p:0.12},   // 🥛牛乳 + ☁️綿 + 🪢糸
+  'cloth,noodle'        : {pid:'ghost',  p:0.10},   // 🍥麺 + 🧵布
+  'egg,glass,semic'     : {pid:'alien',  p:0.06},   // 🥚卵 + 🪟ガラス + 💾半導体
+  'iron,leather,meat'   : {pid:'dragon', p:0.04},   // 🥩肉 + 🔩鉄 + 👝皮
+};
+
+/* レシピ値の3通りの書き方を [{p:製品, w:重み}] に正規化する。
+   重み未指定はレア度の既定重み（RAR[r].w）を使う。 */
+function normPool(spec){
+  let list=[];
+  if(Array.isArray(spec)) list=spec.map(x=>Array.isArray(x)?{id:x[0],w:+x[1]}:{id:x,w:null});
+  else if(spec&&typeof spec==='object') list=Object.keys(spec).map(id=>({id,w:+spec[id]}));
+  return list.filter(x=>PROD[x.id]).map(x=>({ p:PROD[x.id],
+    w:(x.w!=null&&isFinite(x.w)&&x.w>0)?x.w:RAR[PROD[x.id].r].w }));
+}
+function pickWeighted(pool){
+  if(!pool.length) return null;
+  const ws=pool.reduce((s,x)=>s+x.w,0); let x=Math.random()*ws;
+  for(const it of pool){ x-=it.w; if(x<=0) return it.p; }
+  return pool[pool.length-1].p;
+}
+// デバッグ・テスト用: その組み合わせで出うる製品と確率（%）
 function poolFor(key){
-  const r=RECIPES[key];
-  return (r && r.length) ? r.filter(id=>PROD[id]) : [BLOB];
+  if(!key) return [];
+  const s=SECRETS[key];
+  if(s&&PROD[s.pid]) return [{p:PROD[s.pid],w:s.p},{p:PROD[BLOB],w:1-s.p}];
+  if(genresOfMats(key.split(',')).length>1) return [{p:PROD[BLOB],w:1}];
+  const pool=normPool(RECIPES[key]);
+  return pool.length?pool:[{p:PROD[BLOB],w:1}];
 }
-// 5種の中からレア度で重み付けして1つ引く（同じ組み合わせでも出るものが変わる）
+/* 組み合わせから1つ引く。判定の順番がゲーム性なのでここが唯一の分岐点。
+   1. 隠しレシピ（ジャンル跨ぎ）→ p の確率でシークレット / 外れは🪨
+   2. ジャンル跨ぎでレシピ無し  → 🪨
+   3. 同ジャンルのレシピ         → 重み付き抽選
+   4. 同ジャンルでレシピ無し     → 🪨 */
 function rollProduct(key){
-  const pool=poolFor(key).map(id=>PROD[id]).filter(Boolean); if(!pool.length) return null;
-  const ws=pool.reduce((s,p)=>s+RAR[p.r].w,0); let x=Math.random()*ws;
-  for(const p of pool){ x-=RAR[p.r].w; if(x<=0) return p; }
-  return pool[pool.length-1];
+  if(!key) return PROD[BLOB];
+  const s=SECRETS[key];
+  if(s&&PROD[s.pid]) return (Math.random()<(s.p||0)) ? PROD[s.pid] : PROD[BLOB];
+  if(genresOfMats(key.split(',')).length>1) return PROD[BLOB];
+  return pickWeighted(normPool(RECIPES[key])) || PROD[BLOB];
 }
+/* == CRAFT-DATA-END == */
 
 // 旧セーブ移行: 原材料は「機械ID→素材1つ」だった。いまは機械のマスに入るので1マス目へ移す。
 let _matsMigrated=false;
@@ -880,6 +1055,11 @@ function toggleMachine(id){
    開いている間は1秒ごとに再描画してWPに追従する。
    ========================================================================= */
 let _craftPick=null;                       // {mid, idx} = いま原材料を選んでいるマス
+let _pickG=GENRES[0].id;                   // 原材料ピッカーで開いているジャンル（全ピッカー共通）
+const matsOfGenre=(g)=>MATS.filter(m=>m.g===g);
+// ジャンル選択チップ（原材料ピッカーの1行目）。data-pg で切り替える
+const genreChips=()=>GENRES.map(g=>`<span class="mchip gsel ${_pickG===g.id?'on':''}" data-pg="${g.id}"
+  title="${g.n}の原材料">${g.e}<small>${g.n}</small></span>`).join('');
 const machTitle=(m)=>`${(MACH['s'+m.size]||{}).e||'🏭'} ${m.no}号機`;
 function openCraft(){
   _craftPick=null;
@@ -897,18 +1077,24 @@ function openCraft(){
             title="${i+1}マス目${mt?`: ${mt.n}`:''} — クリックで原材料を選ぶ">
             <span class="e">${mt?mt.e:'＋'}</span>
             ${mt?`<span class="x" data-cclear="${i}" data-cmid="${m.id}" title="外す">✕</span>`:''}</div>`; }).join('');
-        // ピッカーも1行ぶんに収まるよう小さいチップで出す（開いても行が伸びすぎない）
+        // ピッカーは「ジャンル行 → そのジャンルの原材料行」の2段。ジャンルを跨いだセットもできる
         const picker = (_craftPick&&_craftPick.mid===m.id) ? `
-          <div class="mpick"><span class="lbl">${_craftPick.idx+1}マス目 ▸</span>
-          ${MATS.map(x=>`<span class="mchip ${m.slots[_craftPick.idx]===x.id?'on':''}"
+          <div class="mpick"><span class="lbl">${_craftPick.idx+1}マス目 ▸</span>${genreChips()}</div>
+          <div class="mpick">
+          ${matsOfGenre(_pickG).map(x=>`<span class="mchip ${m.slots[_craftPick.idx]===x.id?'on':''}"
              data-cmat="${x.id}" data-cmid="${m.id}" title="${x.n}">${x.e}<small>${x.n}</small></span>`).join('')}</div>` : '';
         const nSet=m.slots.filter(Boolean).length;
+        // いまのマスが何ジャンルか。跨いでいると基本ハズレなので、そこだけは明示する
+        const gs=genresOfMats(m.slots);
+        const gtag = !gs.length ? '<span class="gtag">素材なし</span>'
+          : gs.length>1 ? `<span class="gtag cross" title="ジャンル跨ぎ: ほとんど🪨謎のカタマリ。特定の組み合わせだけシークレット">✨ 跨ぎ ${gs.map(g=>GENRE[g].e).join('')}</span>`
+          : `<span class="gtag">${GENRE[gs[0]].e} ${GENRE[gs[0]].n}</span>`;
         return `<div class="mrow ${st.running?'run':''}" title="${machTitle(m)}（${m.size}マス / 必要 ${need}WP）">
           <div class="mslots">${slots}
             <button class="dbtn ${st.running?'ghost':''}" data-crun="${m.id}"${(!st.running&&!nSet)?' disabled':''}
               title="${(!st.running&&!nSet)?'原材料を1つ以上セットしてください':''}">${st.running?'■ 停止':'▶ 製造開始'}</button>
           </div>${picker}
-          <div class="wpline"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+          <div class="wpline">${gtag}<div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
             <b${WPST.ok?'':' style="color:#ff9f7a"'}>${Math.floor(st.wp)} / ${need} WP</b></div>
         </div>`;
       }).join('');
@@ -918,7 +1104,11 @@ function openCraft(){
       p.querySelectorAll('[data-cslot]').forEach(el=>el.onclick=(ev)=>{
         if(ev.target.dataset && ev.target.dataset.cclear!=null) return;   // ✕(外す)は別扱い
         const mid=el.dataset.cmid, i=+el.dataset.cslot;
-        _craftPick=(_craftPick&&_craftPick.mid===mid&&_craftPick.idx===i)?null:{mid,idx:i}; d.refresh(); });
+        _craftPick=(_craftPick&&_craftPick.mid===mid&&_craftPick.idx===i)?null:{mid,idx:i};
+        if(_craftPick){ const mm=machines().find(x=>x.id===mid);       // 入っている素材のジャンルを開く
+          const g=mm&&genreOf(mm.slots[i]); if(g) _pickG=g; }
+        d.refresh(); });
+      p.querySelectorAll('[data-pg]').forEach(el=>el.onclick=()=>{ _pickG=el.dataset.pg; d.refresh(); });
       p.querySelectorAll('[data-cclear]').forEach(el=>el.onclick=(ev)=>{
         ev.stopPropagation(); setMat(el.dataset.cmid, +el.dataset.cclear, null); _craftPick=null; d.refresh(); });
       p.querySelectorAll('[data-cmat]').forEach(el=>el.onclick=()=>{
@@ -933,11 +1123,13 @@ function openMatPicker(machineId, slotIdx){
   const F=window.__factory, mm=F&&F.getMachine(machineId);
   const cur=mm?mm.slots[slotIdx]:null;
   craftState().activeId = machineId;
-  openDialog({ title:`🥫 原材料をセット（${(slotIdx|0)+1}マス目）`,
-    body:`<div class="rowline" style="font-size:11px;color:#9fb0c0">
-        選んだ組み合わせで作られる製品が変わります。同じ組み合わせでも5種類の中からランダムです。<br>
-        <b style="color:#ff9f7a">変更・解除すると製造が停止し、WPは0に戻ります。</b></div>
-      <div class="pgrid">${MATS.map(m=>`
+  if(genreOf(cur)) _pickG=genreOf(cur);
+  openDialog({ title:`🥫 原材料をセット（${(slotIdx|0)+1}マス目）`, tabs:()=>GENRES.map(g=>({id:g.id,label:`${g.e} ${g.n}`})), tab:_pickG,
+    onTab:(id,d)=>{ _pickG=id; d.tab=id; d.refresh(); },
+    body:()=>`<div class="rowline" style="font-size:11px;color:#9fb0c0">
+        選んだ組み合わせで作られる製品が変わります。同じ組み合わせでも複数の候補からランダムです。<br>
+        ジャンルを跨いでセットすると、ほとんどは 🪨 謎のカタマリ。特定の組み合わせだけ ✨シークレット が出ます。</div>
+      <div class="pgrid">${matsOfGenre(_pickG).map(m=>`
         <div class="pcard" data-mat="${m.id}" style="cursor:pointer;${cur===m.id?'border-color:var(--gold)':''}">
           <div class="e">${m.e}</div><div class="nm">${m.n}</div></div>`).join('')}</div>`,
     actions: cur ? [{label:'原材料を外す',kind:'ghost',on:()=>{ setMat(machineId, slotIdx, null); closeOverlay(); }}] : null,
@@ -1321,9 +1513,10 @@ window.__openMachine=(id)=>{
         <div class="cost">${d?d.n:'素材を選ぶ'}</div></div>
         ${d?`<button data-clear="${i}">外す</button>`:''}</div>`; }).join('');
     const picker = _matPick==null ? '' :
-      `<div class="cost" style="margin:10px 0 6px;color:#7fe6ff">${_matPick+1}マス目に入れる素材</div>`
+      `<div class="cost" style="margin:10px 0 6px;color:#7fe6ff">${_matPick+1}マス目に入れる素材（ジャンルで切り替え）</div>`
+      + `<div class="mpick">${genreChips()}</div>`
       + `<div class="pitems" style="display:flex;flex-wrap:wrap;gap:6px;width:auto;max-height:none">`
-      + MATS.map(m2=>`<div class="pitem" data-mat="${m2.id}" style="cursor:pointer">${m2.e}<small>${m2.n}</small></div>`).join('')
+      + matsOfGenre(_pickG).map(m2=>`<div class="pitem" data-mat="${m2.id}" style="cursor:pointer">${m2.e}<small>${m2.n}</small></div>`).join('')
       + `</div>`;
     const st=machState(id), need=needWp(m), pct=Math.min(100, st.wp/need*100);
     const nSet=m.slots.filter(Boolean).length;
@@ -1343,7 +1536,11 @@ window.__openMachine=(id)=>{
     actions:[{label:'🏭 製造タブへ',kind:'ghost',on:()=>openCraft()}],
     onRender:(p,d)=>{
     p.querySelectorAll('[data-slot]').forEach(el=>el.onclick=(ev)=>{
-      if(ev.target.dataset && ev.target.dataset.clear!=null) return; _matPick=+el.dataset.slot; d.refresh(); });
+      if(ev.target.dataset && ev.target.dataset.clear!=null) return;
+      _matPick=+el.dataset.slot;
+      const mm=F.getMachine(id), g=mm&&genreOf(mm.slots[_matPick]); if(g) _pickG=g;   // 入っている素材のジャンルを開く
+      d.refresh(); });
+    p.querySelectorAll('[data-pg]').forEach(el=>el.onclick=()=>{ _pickG=el.dataset.pg; d.refresh(); });
     p.querySelectorAll('[data-clear]').forEach(el=>el.onclick=(ev)=>{
       ev.stopPropagation(); setMat(id, +el.dataset.clear, null); _matPick=null; d.refresh(); });
     p.querySelectorAll('[data-mat]').forEach(el=>el.onclick=()=>{

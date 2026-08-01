@@ -52,14 +52,27 @@ const MACH_ART = ['normal','arabia'];   // スプライトを用意したテー�
 const machSize = (sub)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(sub||'').replace(/\D/g,''))||MACH_MIN));
 
 /* ===== 素材の見た目 =====
-   素材マスタ・レシピ・製品・図鑑は factory-phaser.html の製造エンジンが正。
-   main.js が持つのは「スロットに何色で何の絵文字を描くか」だけ（idは上流と一致させる）。 */
+   素材マスタ・レシピ・製品・図鑑は factory-phaser.html の製造エンジンが正（window.__craft.mat）。
+   main.js が持つのは「スロットに何色で何の絵文字を描くか」だけ。
+   ジャンル・素材を増やすときに触るのは上流(HTML)だけでよいように、ここは
+   ①個別の色（MAT_ART） → ②ジャンルの色（MAT_G_C） → ③既定色 の順にフォールバックする。 */
 const MAT_ART = {
   milk:  {e:'🥛', c:0xf2f0e6}, flour: {e:'🌾', c:0xe0c98a}, egg:   {e:'🥚', c:0xf5e6c8},
   butter:{e:'🧈', c:0xf2d27a}, sugar: {e:'🍬', c:0xf6dce8}, choco: {e:'🍫', c:0x7a4a2a},
   rice:  {e:'🍚', c:0xf0efe8}, noodle:{e:'🍥', c:0xe8d9b0}, cheese:{e:'🧀', c:0xe8c04a},
   tomato:{e:'🍅', c:0xd9483f}, meat:  {e:'🥩', c:0xc05a5a}, veg:   {e:'🥬', c:0x6aa84f},
 };
+const MAT_G_C = { food:0xe8d9b0, mech:0x9fb6c8, life:0xd9c39a };   // ジャンル既定色
+/* 素材id → {e,c}。上流が知っている素材なら MAT_ART に無くても描ける（= HTML だけで追加できる）。
+   どちらも知らない素材は null（setSlot が弾く）。 */
+function matArt(id){
+  if(id==null) return null;
+  const art=MAT_ART[id];
+  const up=(window.__craft&&window.__craft.mat)?window.__craft.mat(id):null;
+  if(!art&&!up) return null;
+  return { e:(art&&art.e)||(up&&up.e)||'❓',
+           c:(art&&art.c)||MAT_G_C[up&&up.g]||0xa8b6bd };
+}
 /* スロットの素材配列 → 筐体の上に出す表示。何が作れるかは伏せ、稼働状態と進捗を返す。
    判定は上流エンジンに委譲する(window.__craft.preview) */
 function recipeFor(slots, id){
@@ -277,7 +290,7 @@ class Main extends Phaser.Scene {
       skinList:SKINS,
       setPartsTheme:(t)=>this.setPartsTheme(t),   // 製造機のスキン(テーマ)切替
       // 製造機の素材スロット。UI(パレット/設定パネル)はここ越しにシーンを触る
-      materials:MAT_ART, machSizes:MACH_SIZES,
+      matArt:(id)=>matArt(id), machSizes:MACH_SIZES,
       getMachine:(id)=>this.getMachine(id),
       setSlot:(id,i,mat)=>this.setSlot(id,i,mat),
       rotateMachine:(id)=>this.rotateMachine(id),
@@ -393,7 +406,7 @@ class Main extends Phaser.Scene {
     e._slotObjs=[];
     const SL=MACH_GEO.slot;
     this.cellsOf(e).forEach((q,idx)=>{
-      const mat=e.slots[idx], m=mat&&MAT_ART[mat];
+      const mat=e.slots[idx], m=matArt(mat);
       const ctr = (slotPts && slotPts[idx]) || up(cellXY(q.c,q.r));   // 絵の実測位置 > 計算位置
       if(slotPts){ if(m){ g.fillStyle(m.c,0.5); g.fillEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24);
                           g.lineStyle(1.5,sk.glow,0.85); g.strokeEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24); } }
@@ -524,7 +537,7 @@ class Main extends Phaser.Scene {
   /* スロット i に素材をセット(null でクリア)。作れる物が即座に変わる */
   setSlot(id,i,mat){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return false;
     if(i<0||i>=machSize(e.sub)) return false;
-    if(mat!=null && !MAT_ART[mat]) return false;
+    if(mat!=null && !matArt(mat)) return false;   // 上流(HTML)が知らない素材は受け付けない
     e.slots[i]=mat||null; this._remake(e);
     const p=cellXY(e.cell.c,e.cell.r); this._spawnPop(p.x,p.y); return true; }
   getMachine(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return null;
