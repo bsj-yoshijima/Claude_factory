@@ -24,9 +24,11 @@
   #menu .mi:hover{background:#1d262c;color:var(--gold)}
   /* ===== 今日の労働量（このゲームの主役の数字。製造設定とは分ける） ===== */
   /* 実績ボードと製造設定は横並び。幅が足りなければ上下に折り返す */
-  #topwrap{position:absolute;top:10px;left:0;right:0;margin:0 auto;z-index:7;display:flex;gap:10px;
+  /* 左のエージェント凡例(#legend)と右の☰に被らないよう、左右の余白を非対称に確保して
+     その内側で中央寄せする。vw から一律に引くと狭い画面で必要以上に縮む。 */
+  #topwrap{position:absolute;top:10px;left:190px;right:70px;margin:0 auto;z-index:7;display:flex;gap:10px;
            flex-wrap:wrap;justify-content:center;align-items:stretch;
-           width:fit-content;max-width:min(1040px,calc(100vw - 190px))}
+           width:fit-content;max-width:min(1040px,100%)}
   #board{display:flex;gap:0;flex:none;align-items:center;
          background:var(--panel);border:1px solid var(--edge);border-radius:12px;overflow:hidden;backdrop-filter:blur(4px)}
   #board .m{padding:8px 22px;text-align:center;min-width:126px}
@@ -49,6 +51,17 @@
   #hud b{font-size:15px;color:var(--gold);font-variant-numeric:tabular-nums;line-height:1.6}
   #hud b.idle{color:#9fdcc6}
   #note{position:absolute;top:10px;left:12px;font-size:10px;color:#9fdcc6;background:var(--panel);padding:4px 9px;border-radius:6px;z-index:6}
+  /* 左の凡例(エージェントの見た目＋名前) */
+  #legend{position:absolute;left:12px;top:40px;z-index:6;display:none;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:8px 9px;max-width:196px;max-height:72vh;overflow-y:auto;backdrop-filter:blur(3px)}
+  #legend.show{display:flex}
+  #legend .lgH{font-size:9px;letter-spacing:.14em;color:#9fdcc6;text-transform:uppercase;margin-bottom:1px}
+  .lgRow{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink)}
+  .lgAv{position:relative;width:22px;height:22px;border-radius:6px;flex:none;border:1px solid #0006;overflow:hidden}
+  .lgAv .eye{position:absolute;top:8px;width:3px;height:3px;background:#241713;border-radius:1px}
+  .lgAv .eye.l{left:5px} .lgAv .eye.r{right:5px}
+  .lgAv img{position:absolute;left:50%;top:-3px;transform:translateX(-50%);width:24px;height:auto;image-rendering:pixelated}
+  .lgNm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lgSt{width:7px;height:7px;border-radius:50%;flex:none;box-shadow:0 0 4px currentColor}
   /* overlay */
   #overlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(6,10,12,.72);backdrop-filter:blur(4px)}
   #overlay.show{display:flex}
@@ -150,11 +163,13 @@
 <div id="wrap">
   <div id="game"></div>
   <div id="note">🏭 Claude Factory</div>
+  <div id="legend"></div>
   <div id="menuBtn" title="メニュー">☰</div>
   <div id="menu">
     <div class="mi" id="dexBtn">📖 図鑑</div>
     <div class="mi" id="lbBtn">🏆 リーダーボード</div>
     <div class="mi" id="shopBtn">🏪 ショップ</div>
+    <div class="mi" id="skinBtn">🎨 スキン</div>
     <a class="mi" href="/metrics">📊 メトリクス</a>
   </div>
   <div id="topwrap">
@@ -188,10 +203,32 @@ const MACH={ red:{e:'🟥',n:'抽出機',price:0}, green:{e:'🟩',n:'成形機'
 const lvCost=(lvl)=> Math.round(120*lvl*lvl);        // レベルアップ費用
 const BELT_PRICE=450;
 const DECO={ crate:{e:'📦',n:'木箱',price:150}, drum:{e:'🛢️',n:'ドラム缶',price:200}, plant:{e:'🪴',n:'観葉植物',price:180}, pallet:{e:'🧱',n:'パレット',price:160}, sign:{e:'🚧',n:'標識',price:220} };
-// Stitch製 装飾プロップ(床に置くオブジェクト)
+// Stitch製 装飾プロップ(床に置くオブジェクト)。th = 対応テーマ(未指定は汎用)
 const PROP={ vase:{e:'🏺',n:'装飾壺',price:220}, palm:{e:'🌴',n:'ヤシの木',price:240}, rug:{e:'🧶',n:'絨毯',price:200}, flantern:{e:'🪔',n:'燭台ランプ',price:260},
   fountain:{e:'⛲',n:'噴水',price:450}, chest:{e:'🧰',n:'宝箱',price:400}, cushion:{e:'🛋️',n:'クッション',price:180}, bonsai:{e:'🎍',n:'盆栽',price:280},
-  lantern:{e:'🏮',n:'吊り提灯',price:220}, pedestal:{e:'🗿',n:'石台座',price:320}, flower:{e:'🌸',n:'花鉢',price:170}, screen:{e:'🖼️',n:'屏風',price:340} };
+  lantern:{e:'🏮',n:'吊り提灯',price:220}, pedestal:{e:'🗿',n:'石台座',price:320}, flower:{e:'🌸',n:'花鉢',price:170}, screen:{e:'🖼️',n:'屏風',price:340},
+  // 🎪 サーカス
+  cir_popcorn:{e:'🍿',n:'ポップコーンワゴン',price:380,th:'circus'}, cir_ballstand:{e:'⭐',n:'玉乗り台',price:300,th:'circus'},
+  cir_trunks:{e:'🧳',n:'縞トランク3段',price:280,th:'circus'},      cir_ringtoss:{e:'🎯',n:'輪投げスタンド',price:260,th:'circus'},
+  cir_cannon:{e:'💥',n:'人間大砲',price:480,th:'circus'},           cir_stool:{e:'🪑',n:'ベルベットスツール',price:200,th:'circus'},
+  // 🍣 回転寿司
+  sus_lane:{e:'🍣',n:'回転レーン',price:460,th:'sushi'},            sus_oke:{e:'🪵',n:'寿司桶5段',price:240,th:'sushi'},
+  sus_tea:{e:'🍵',n:'給茶台',price:280,th:'sushi'},                 sus_sake:{e:'🍶',n:'藁巻き酒樽',price:320,th:'sushi'},
+  sus_neko:{e:'🐱',n:'招き猫の台座',price:300,th:'sushi'},           sus_netacase:{e:'🐟',n:'ネタケース',price:500,th:'sushi'},
+  // 🤠 西部開拓
+  wes_barreltable:{e:'🍺',n:'樽テーブル',price:300,th:'western'},    wes_horseshoe:{e:'🐴',n:'蹄鉄投げ',price:240,th:'western'},
+  wes_wheel:{e:'🛞',n:'荷馬車の車輪',price:260,th:'western'},        wes_campfire:{e:'🔥',n:'焚き火とコーヒー',price:340,th:'western'},
+  wes_cactus:{e:'🌵',n:'サボテンの鉢',price:220,th:'western'},       wes_assay:{e:'⚖️',n:'金の秤台',price:420,th:'western'},
+  // 🐝 ミツバチの巣
+  bee_combtable:{e:'🍯',n:'蜜のハニカム台',price:300,th:'beehive'},  bee_honeypots:{e:'🫙',n:'蜜壺ピラミッド',price:320,th:'beehive'},
+  bee_pollen:{e:'🧺',n:'花粉のカゴ',price:240,th:'beehive'},         bee_candles:{e:'🕯️',n:'蜜蝋の燭台',price:260,th:'beehive'},
+  bee_throne:{e:'👑',n:'女王蜂の玉座',price:520,th:'beehive'},       bee_frames:{e:'🪟',n:'巣枠ラック',price:280,th:'beehive'},
+  // ⚙️ スチームパンク
+  stm_boiler:{e:'⚗️',n:'真鍮ボイラー',price:460,th:'steampunk'},     stm_cogs:{e:'⚙️',n:'歯車の山',price:220,th:'steampunk'},
+  stm_console:{e:'🎛️',n:'圧力計コンソール',price:400,th:'steampunk'},stm_chair:{e:'🛋️',n:'銅管のアームチェア',price:360,th:'steampunk'},
+  stm_orrery:{e:'🔭',n:'天球儀',price:480,th:'steampunk'},           stm_coal:{e:'🪣',n:'石炭バケツ',price:200,th:'steampunk'} };
+// ショップでプロップをテーマ別に見出し分けする
+const PROP_GROUPS=[['','🧰 汎用'],['circus','🎪 サーカス'],['sushi','🍣 回転寿司'],['western','🤠 西部開拓'],['beehive','🐝 ミツバチの巣'],['steampunk','⚙️ スチームパンク']];
 const BG={ auto:{n:'標準（時刻連動）',price:0}, blue:{n:'快晴',price:1800}, sunset:{n:'夕焼け',price:2200}, night:{n:'星空',price:2600}, space:{n:'宇宙',price:4200}, aurora:{n:'オーロラ',price:5200} };
 const FLOOR={ wood:{n:'木材（標準）',price:0}, cool:{n:'クールグレー',price:1000}, crimson:{n:'レッドタイル',price:1200}, forest:{n:'フォレスト',price:1200}, gold:{n:'ゴールド',price:3200} };
 // テーマシリーズ: 空テーマ(sky)＋床材(floor)＋絵文字装飾セット(decos) をまとめて購入/適用
@@ -267,6 +304,7 @@ function closeOverlay(){ overlay.classList.remove('show'); if(document.getElemen
 function openOverlay(h){ panel._refresh=null; panel.innerHTML='<span class="close">✕</span><div class="pbody">'+h+'</div>'; panel.querySelector('.close').onclick=closeOverlay; overlay.classList.add('show'); }
 overlay.addEventListener('click',e=>{ if(e.target===overlay) closeOverlay(); });
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',1600); }
+window.__toast=toast;   // scene(main.js)から通知を出す用
 // 💰はショップを開いたときだけ見えればよいので、常設バッジは持たない。
 // 購入/売却の各所から呼ばれるため、関数名は残してショップ内の残高表示だけ更新する。
 function updateBadge(){ const m=document.getElementById('shopMoney');
@@ -619,6 +657,66 @@ menuBtn.addEventListener('click',e=>{ e.stopPropagation(); menuEl.classList.togg
 for(const mi of menuEl.querySelectorAll('.mi')) mi.addEventListener('click',closeMenu);
 document.addEventListener('click',e=>{ if(!menuEl.contains(e.target)&&e.target!==menuBtn) closeMenu(); });
 
+/* ===== 🎨 スキン: エージェントを選んでテーマ別スキンを丸ごと適用 ===== */
+let _skinSel=null;
+function openSkin(){
+  const render=()=>{
+    const list=(window.__factory&&window.__factory.getAgents())||[];
+    // プロジェクト単位に集約(同名エージェントは稼働数をまとめる)
+    const byProj={};
+    for(const a of list){ const p=byProj[a.proj]||(byProj[a.proj]={proj:a.proj,skinId:'none',n:0,busy:0});
+      p.n++; if(a.working)p.busy++; if(a.skinId&&a.skinId!=='none')p.skinId=a.skinId; }
+    const projs=Object.values(byProj);
+    if(_skinSel && !byProj[_skinSel]) _skinSel=null;
+    if(!_skinSel && projs.length) _skinSel=projs[0].proj;
+    const cur=_skinSel?byProj[_skinSel]:null;
+    const agentRow = projs.length ? projs.map(p=>{ const on=p.proj===_skinSel; const st=p.busy>0?'🟢 稼働':'💤 休憩';
+      return `<div class="pitem ${on?'on':''}" data-proj="${encodeURIComponent(p.proj)}" style="width:auto;min-width:70px;height:auto;padding:6px 10px;font-size:12px">${p.proj||'(無名)'}<span style="font-size:9px;color:#9fdcc6;margin-top:2px">${st}${p.n>1?' ×'+p.n:''}</span></div>`;
+    }).join('') : '<div class="phint" style="padding:8px">稼働中のエージェントがいません。</div>';
+    const skins=(window.__factory&&window.__factory.skinList)||[];
+    const grid = skins.map(s=>{ const applied=cur&&cur.skinId===s.id;
+      const emoji = s.id==='none' ? '🧑‍🏭' : ((BG_META[s.id]&&BG_META[s.id].e)||'🎨');
+      const thumb = s.id==='none'
+        ? `<span style="font-size:28px">${emoji}</span>`
+        : `<img src="assets/hat-${s.id}.png" alt="" style="width:46px;height:46px;object-fit:contain" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${emoji}',style:'font-size:28px'}))">`;
+      return `<div class="cell own" data-skin="${s.id}" style="${applied?'border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset':''}">${thumb}<small style="color:#cfeee0">${s.n}</small>${applied?'<span class="cnt">✓</span>':''}</div>`;
+    }).join('');
+    openOverlay(`<h2>🎨 スキン</h2>
+      <div class="cost" style="margin:2px 0 4px">① エージェントを選ぶ</div>
+      <div class="cardwrap" style="justify-content:flex-start;min-height:0;gap:6px">${agentRow}</div>
+      <div class="cost" style="margin:12px 0 4px">② スキンを選んで適用${cur?`（対象: <b style="color:#eafff4">${cur.proj||'(無名)'}</b>）`:''}</div>
+      <div class="grid">${grid}</div>
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">スキン画像が未生成のものは仮アイコン表示。適用してもアセット到着まではデフォルト見た目のままです。</div>`);
+    panel.querySelectorAll('[data-proj]').forEach(el=>el.onclick=()=>{ _skinSel=decodeURIComponent(el.dataset.proj); render(); });
+    panel.querySelectorAll('[data-skin]').forEach(el=>el.onclick=()=>{
+      if(!cur){ toast('先にエージェントを選んでください'); return; }
+      const s=skins.find(x=>x.id===el.dataset.skin);
+      window.__factory.applySkin(cur.proj, el.dataset.skin);   // scene側で this.skins更新＋window.__skinChangedで永続化
+      toast(`${cur.proj||'(無名)'} → ${s?s.n:el.dataset.skin}`); render();
+    });
+  };
+  render();
+}
+document.getElementById('skinBtn').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openSkin(); });
+
+/* 画面左の凡例: エージェントの見た目(体色＋被り物)と名前。頭上ラベルの代わり。 */
+function renderLegend(){
+  const el=document.getElementById('legend'); if(!el) return;
+  const list=(window.__factory&&window.__factory.getAgents())||[];
+  const seen={}, rows=[];
+  for(const a of list){ if(seen[a.proj]) continue; seen[a.proj]=1; rows.push(a); }   // プロジェクト単位で1行
+  if(!rows.length){ el.classList.remove('show'); el.innerHTML=''; return; }
+  el.classList.add('show');
+  el.innerHTML='<div class="lgH">エージェント</div>'+rows.map(a=>{
+    const hat = (a.skinId&&a.skinId!=='none') ? `<img src="assets/hat-${a.skinId}.png" onerror="this.remove()">` : '';
+    const st = a.working ? '#7fe6ff' : '#5f7a72';
+    const nm = (a.proj||'(no name)').replace(/[<>&]/g,'');
+    return `<div class="lgRow" title="${nm}">`
+      +`<span class="lgAv" style="background:${a.color||'#4f7fc4'}"><span class="eye l"></span><span class="eye r"></span>${hat}</span>`
+      +`<span class="lgNm">${nm}</span><span class="lgSt" style="color:${st};background:${st}"></span></div>`;
+  }).join('');
+}
+
 /* ===== ショップ（景品の売却＋購入/強化） ===== */
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
   G.inv[id]=have-qty; const gain=SELL[p.r]*qty; G.money+=gain; saveGame(); updateBadge(); toast(`${p.e} ${p.n}×${qty} を売却 (+💰${gain})`); }
@@ -663,9 +761,16 @@ function openShop(tab){ if(tab)_shopTab=tab;
       body += `<div class="rc"><div class="ic">🛗</div><div class="mid"><div class="nm">コンベア <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('belt')}</span></div><div class="cost">💰${BELT_PRICE}</div></div>
         <button data-belt="1" ${G.money>=BELT_PRICE?'':'disabled'}>購入</button></div>`;
       body += '<div class="cost" style="margin:12px 0 6px">装飾プロップ（Stitch製）</div>';
-      body += Object.keys(PROP).map(t=>`<div class="rc"><div class="ic">${PROP[t].e}</div>
-        <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('prop',t)}</span></div><div class="cost">💰${PROP[t].price}</div></div>
-        <button data-prop="${t}" ${G.money>=PROP[t].price?'':'disabled'}>購入</button></div>`).join('');
+      for(const [th,label] of PROP_GROUPS){
+        const ks=Object.keys(PROP).filter(t=>(PROP[t].th||'')===th);
+        if(!ks.length) continue;
+        body += `<div class="cost" style="margin:10px 0 4px;color:#7fe6ff">${label}</div>`;
+        body += ks.map(t=>{ const sp=(window.PROP_SPAN||{})[t]||1;   // 占有コマ数(見た目の大きさ)
+          return `<div class="rc"><div class="ic">${PROP[t].e}</div>
+          <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('prop',t)}</span></div>
+          <div class="cost">💰${PROP[t].price}${sp>1?` ・ ${sp}コマ`:''}</div></div>
+          <button data-prop="${t}" ${G.money>=PROP[t].price?'':'disabled'}>購入</button></div>`; }).join('');
+      }
       body += '<div class="cost" style="margin:12px 0 6px">その他</div>';
       body += Object.keys(DECO).map(t=>`<div class="rc"><div class="ic">${DECO[t].e}</div>
         <div class="mid"><div class="nm">${DECO[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('deco',t)}</span></div><div class="cost">💰${DECO[t].price}</div></div>
@@ -739,7 +844,7 @@ function renderPalette(){
   } else if(editCat==='machine'){ hint=(editSel?'床をクリックで設置（生産＆作業先が増える）':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
     const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.sub===t));
     items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
-  } else { hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
+  } else { hint=(editSel?'床をクリックで敷設(向きは隣接から自動)':'在庫から選んで床をクリックで敷設')+' ・ 敷設後クリックで90°回転(直線縦→横→コーナー) / ドラッグ移動 / 🗑撤去';
     const a=availN('belt'); items = a>0? cell(`data-place="belt:"`,'🛗','コンベア',0,a,editSel&&editSel.kind==='belt') : '<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
   }
   paletteEl.innerHTML=`<div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
@@ -761,6 +866,7 @@ loadGame().then(async ()=>{
   G.lastT=Date.now();
   await waitScene(); applyOwned(); updateBadge();
   setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
+  setInterval(renderLegend, 1000); renderLegend();
   // 製造: 原材料バッジを反映してからWPの取得を開始（3秒ごと = OTelのログ送信間隔に合わせる）
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
   updateDoneBtn(); renderCraft(); pollWp(); setInterval(pollWp, 3000);

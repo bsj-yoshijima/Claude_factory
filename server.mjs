@@ -186,8 +186,10 @@ const server = http.createServer((req, res) => {
     return;
   }
   // 画像などの静的アセット(/assets/* と *.jpg/png)を配信
+  // .json が無いと assets/hat-fit.json などが HTML として返り、Phaser の読み込みが失敗する
   const MIME = { '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.png':'image/png', '.gif':'image/gif',
-                 '.svg':'image/svg+xml', '.css':'text/css', '.js':'text/javascript' };
+                 '.svg':'image/svg+xml', '.css':'text/css', '.js':'text/javascript',
+                 '.json':'application/json' };
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
   const ext = path.extname(urlPath).toLowerCase();
   if (ext && MIME[ext]) {

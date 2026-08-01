@@ -195,12 +195,26 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 | `factory-phaser.html` / `game/main.js` | **現行のゲーム画面**（Phaser版。`/` と `/next`） |
 | `metrics.html` / `otel.mjs` | 📊 メトリクス（`/metrics`）。OTel 受信 + WP / スコアカード集計 |
 | `assets/room-*.png` | Stitch 生成のテーマ別背景（`docs/stitch-prompts.md` にプロンプト） |
+| `assets/prop_*.png` | 装飾プロップ（汎用12種 + テーマ別6種×5テーマ）。**表示サイズに合わせて縮小済み** |
+| `assets/prop-src/prop_*.png` | 上記の原寸版（切り出したまま・200〜400px）。サイズを変えるときの元データ |
+| `assets/prop-sheets/*.jpg` | Stitch が生成したアセットシート（1枚に3×2で6体） |
+| `tools/cut_props.py` | シートから1体ずつ切り出し、背景と接地影を抜いて `assets/prop-src/` を作る |
+| `tools/fit_props.py` | 原寸版をゲーム内の表示サイズへ縮小して `assets/prop_*.png` を作る |
 | `claude-factory.html` | 旧・Canvas版（`/legacy`） |
 | `assets/factory-*.jpg` | 旧Canvas版の空部屋背景（morning / evening / night） |
 | `pixel-factory.html` | 旧・全手描きドット絵版（`/classic`） |
 | `index.html` | 初期のシンプル版（カードUI） |
 | `machine-concepts.html` | 工場に足す機械のコンセプトボード |
 | `proposal.html` / `slides.html` / `slides-en.html` / `Claude-Factory.pdf` | 企画書・発表スライド |
+
+### プロップの大きさ（コマ数）
+
+`pixelArt:true`（NEAREST）なので、原寸のまま1コマ（約42px）に縮めると描き込みが間引かれて潰れる。
+そのため **① 描き込みの多い物は使う床のコマ数を増やす ② 素材をその表示サイズまで縮小しておく** の2段で対応している。
+
+- コマ数は `game/main.js` の `PROP_SPAN`（1 / 2 / 4）が唯一の定義。表示高 = `1.35 * CELL * √コマ数`
+- 例: 回転レーン・ネタケース・人間大砲・真鍮ボイラー等は 4コマ（2×2相当）、給茶台などは 2コマ
+- `PROP_SPAN` を変えたら `python3 tools/fit_props.py` を実行して素材を焼き直す
 
 ## 必要環境
 
