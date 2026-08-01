@@ -498,7 +498,7 @@ function openMatPicker(machineId){
   openOverlay(`<h2>🥫 原材料をセット</h2>
     <div class="rowline" style="font-size:11px;color:#9fb0c0">
       選んだ組み合わせで作られる製品が変わります。同じ組み合わせでも5種類の中からランダムです。<br>
-      <b style="color:#ff9f7a">変更すると現セッションのWPは0にリセットされます。</b></div>
+      <b style="color:#ff9f7a">変更・解除すると製造が停止し、WPは0に戻ります。</b></div>
     <div class="pgrid">${MATS.map(m=>`
       <div class="pcard" data-mat="${m.id}" style="cursor:pointer;${cur===m.id?'border-color:var(--gold)':''}">
         <div class="e">${m.e}</div><div class="nm">${m.n}</div></div>`).join('')}</div>
@@ -509,12 +509,14 @@ function openMatPicker(machineId){
 function setMat(machineId, matId){
   const c=craftState();
   if(matId) c.mats[machineId]=matId; else delete c.mats[machineId];
-  // 原材料を変えたらセッション途中でもWPはリセット（仕様）
-  if(c.session) c.session.startWp = WPST.total;
+  // 原材料を変更・解除したら製造は停止する（仕様）。WPは開始時からの差分なので自然に0に戻る
+  const wasRunning = !!c.session;
+  c.session = null;
   saveGame();
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
   renderCraft();
-  toast(matId?`${MAT[matId].e} ${MAT[matId].n} をセット（WPリセット）`:'原材料を外しました（WPリセット）');
+  const what = matId ? `${MAT[matId].e} ${MAT[matId].n} をセット` : '原材料を外しました';
+  toast(wasRunning ? `${what} — 製造を停止しました（▶製造開始で再開）` : what);
 }
 // main.js から呼ばれる: 機械の上に出す原材料バッジ / 機械クリック
 window.__matBadge = (machineId)=>{ const m=MAT[(G.craft&&G.craft.mats&&G.craft.mats[machineId])]; return m?m.e:''; };
