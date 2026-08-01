@@ -247,6 +247,7 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 - 例: 回転レーン・ネタケース・人間大砲・真鍮ボイラー等は 4コマ（2×2相当）、給茶台などは 2コマ
 - `PROP_SPAN` を変えたら `python3 tools/fit_props.py` を実行して素材を焼き直す
 
+| `tools/mach_prompt_template.md` | 製造機スプライトを Stitch に依頼するテンプレ（向きをピクセル送りで数値指定する。文章だと横一列で返ってくる） |
 | `tools/cut_machines.py` | 製造機シートを1台ずつ切り出し、表示サイズへ縮小＋スロット位置を実測（`python3 tools/cut_machines.py`） |
 | `tools/test_ui_browser.mjs` | 実ブラウザ(headless Chrome)でUIを操作して確認（`node tools/test_ui_browser.mjs`。サーバ起動が前提）。グローバル名の衝突など「構文は通るが実行時に壊れる」類はこれでしか出ない |
 | `tools/test_machines.mjs` | 製造機／設置ロジックの検証（`node tools/test_machines.mjs`。Phaser をスタブして描画なしで走る） |
