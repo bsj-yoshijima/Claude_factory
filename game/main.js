@@ -29,6 +29,12 @@ const MTOP = [3,2,1,1,0,0,1,2,3,3,2,1,0,0,1,1,2,3];
 // 被り物テクスチャ hat_<id> を頭頂に載せる較正: 底辺中央を(HAT_CX, HAT_BASE_Y)ドットへ、幅をHAT_W_DOTに正規化。
 const DOTP = 3, HAT_CX = 12.5, HAT_BASE_Y = 10.8, HAT_W_DOT = 19;
 function makeMascot(scene, key, pal, pose){
+  const cv=mascotCanvas(pal,pose);
+  if(scene.textures.exists(key)) scene.textures.remove(key);
+  scene.textures.addCanvas(key, cv);
+}
+// マスコットを描いた canvas を返す。Phaserテクスチャにも HUD用の <img> にも使う
+function mascotCanvas(pal, pose){
   const P=3, w=26, h=28;
   const cv=document.createElement('canvas'); cv.width=w*P; cv.height=h*P;
   const g=cv.getContext('2d');
@@ -45,8 +51,16 @@ function makeMascot(scene, key, pal, pose){
     let c=pal.b; if(i>=bw-5||r>=rows-2) c=pal.s; else if(r===MTOP[i]+1) c=pal.l; px(X,Y,c);
   }
   const ey=topBase+4; px(x0+5,ey,EYE); px(x0+6,ey,EYE); px(x0+11,ey,EYE); px(x0+12,ey,EYE);
-  if(scene.textures.exists(key)) scene.textures.remove(key);
-  scene.textures.addCanvas(key, cv);
+  return cv;
+}
+// HUD用アイコン(稼働=作業ポーズ / 休憩=座りポーズ)。初回だけ描いて data URL を使い回す
+let _mascotIcons=null;
+function mascotIcons(){
+  if(!_mascotIcons) _mascotIcons={
+    work: mascotCanvas(PRESETS[0],'work').toDataURL(),
+    sit:  mascotCanvas(PRESETS[1],'sit').toDataURL(),
+  };
+  return _mascotIcons;
 }
 
 const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
@@ -215,7 +229,13 @@ class Main extends Phaser.Scene {
       const img=this.add.image(p.x,p.y,tex).setOrigin(0.5,1).setDepth(p.y); img.setScale(2.0*CELL/img.height).setTint(tint);
       const sh=this.add.image(p.x+CELL*0.24,p.y+CELL*0.12,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.15,img.displayWidth*0.52).setAlpha(0.5);
       const lbl=this.add.text(p.x,p.y-2.0*CELL-4,(MACHS_JP[e.sub]||'')+(e.lvl>1?` Lv${e.lvl}`:''),{fontFamily:'monospace',fontSize:'10px',color:'#eafff6'}).setOrigin(0.5,1).setDepth(p.y+1); lbl.setShadow(0,1,'#000',3,true,true);
-      objs.push(sh,img,lbl); main=img; e._lit=img; this.lit.push({sp:img,u,v}); this.machineCells.push({c,r});
+      // セット中の原材料を機械の上に出す（移動で作り直されるので毎回外部から引く）
+      const badge=this.add.text(p.x,p.y-2.0*CELL-15,(window.__matBadge&&window.__matBadge(e.id))||'',
+        {fontFamily:'monospace',fontSize:'15px'}).setOrigin(0.5,1).setDepth(p.y+2);
+      // 編集モード外のクリックで原材料の選択を開く（編集中はドラッグを邪魔しない）
+      img.setInteractive({useHandCursor:true});
+      img.on('pointerup',()=>{ if(this.editMode) return; if(window.__machineClick) window.__machineClick(e.id,e.sub); });
+      objs.push(sh,img,lbl,badge); main=img; e._badge=badge; e._lit=img; this.lit.push({sp:img,u,v}); this.machineCells.push({c,r});
     } else if(e.kind==='belt'){
       // 見た目は共有 beltGfx が rot に応じて無地描画。ここは掴む/クリック(回転)用の透明ヒット矩形のみ。
       const hit=this.add.rectangle(p.x,p.y,CELL*0.82,CELL*0.5,0xffffff,0.002).setDepth(p.y);
@@ -274,6 +294,17 @@ class Main extends Phaser.Scene {
     for(const it of (list||[])) this.addPlaced(it.kind, it.sub, {cell:{c:it.c,r:it.r}, lvl:it.lvl, id:it.id, rot:it.rot, silent:true});
     this._oid=Math.max(0,...this.placed.map(e=>parseInt(String(e.id).replace(/\D/g,''))||0)); this.computeBelts(); }
   setMachineLevel(id,lvl){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e)return; e.lvl=lvl; this.moveItem(id,e.cell.c,e.cell.r); }
+  // 原材料バッジの再描画（セット/解除のたびに呼ぶ）
+  refreshMachineBadges(){ for(const e of this.placed){ if(e.kind!=='machine'||!e._badge) continue;
+    e._badge.setText((window.__matBadge&&window.__matBadge(e.id))||''); } }
+  // 抽出機(red)の一覧を配置順で返す。原材料スロットの割り当てに使う
+  extractors(){ return this.placed.filter(e=>e.kind==='machine'&&e.sub==='red').map(e=>e.id); }
+  // 製造完了の演出（機械の上でポップ＋絵文字が浮き上がる）
+  celebrate(emoji){ const ms=this.placed.filter(e=>e.kind==='machine'&&e.sub==='red');
+    const t=ms.length?ms[0]:this.placed[0]; if(!t) return;
+    const p=cellXY(t.cell.c,t.cell.r); this._spawnPop(p.x,p.y);
+    const tx=this.add.text(p.x,p.y-CELL*1.2,emoji,{fontSize:Math.round(CELL*1.1)+'px'}).setOrigin(0.5,1).setDepth(9001);
+    this.tweens.add({targets:tx,y:p.y-CELL*3.2,alpha:0,duration:1500,ease:'Cubic.easeOut',onComplete:()=>tx.destroy()}); }
   // 旧API互換（ショップ購入から呼ばれる）
   placeMachine(type){ return this.addPlaced('machine', type); }
   placeBelt(){ return this.addPlaced('belt', null); }
@@ -611,7 +642,10 @@ class Main extends Phaser.Scene {
     });
     for(const k of Object.keys(this.agents)){ if(!present.has(k)){ const a=this.agents[k]; this.clearDeco(a); a.sp.destroy(); if(a.hat)a.hat.destroy(); a.lbl.destroy(); a.shadow.destroy(); delete this.agents[k]; } }
     this.busyCount=busyN;
-    if(this.hud) this.hud.innerHTML=`稼働 <b>${busyN}</b> ・ 休憩 ${idleN} ・ Phaser基盤`;
+    if(this.hud){ const ic=mascotIcons();
+      this.hud.innerHTML=
+        `<span class="st" title="稼働中"><img src="${ic.work}" alt=""><i class="fx">✨</i><b>${busyN}</b></span>`+
+        `<span class="st" title="休憩中"><img src="${ic.sit}" alt=""><i class="fx">☕</i><b class="idle">${idleN}</b></span>`; }
   }
   update(time){
     // 星のまたたき(夜)
