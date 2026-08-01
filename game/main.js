@@ -8,8 +8,8 @@ const ISO = { Bx:0.4858, By:0.3685, ux:0.3398, uy:0.3138, vx:-0.3121, vy:0.2852 
 const CELL = ( Math.hypot(ISO.ux*W/GU, ISO.uy*H/GU) + Math.hypot(ISO.vx*W/GV, ISO.vy*H/GV) ) / 2;
 function isoToScreen(u,v){ return { x:(ISO.Bx+u*ISO.ux+v*ISO.vx)*W, y:(ISO.By+u*ISO.uy+v*ISO.vy)*H }; }
 const OFF_U = 0, OFF_V = 0;
-// オブジェクトは格子点(c/GU, r/GV)=旧グリッドの交差点に置く(床タイルに一致)。編集グリッド線は(c+0.5)/GUに引き、その格子点が四角の中心になる。
-function cellXY(c,r){ return isoToScreen((c+OFF_U)/GU,(r+OFF_V)/GV); }   // c,r は連続値でも可
+// オブジェクトは各マスの中心(c+0.5)/GU に置く。編集グリッド線はマス境界(c/GU)に引く→各オブジェクトが四角の中央に入る。コンベアは中心どうしを結ぶ。
+function cellXY(c,r){ return isoToScreen((c+0.5+OFF_U)/GU,(r+0.5+OFF_V)/GV); }   // c,r は連続値でも可
 const ISO_DET = ISO.ux*ISO.vy - ISO.vx*ISO.uy;
 function screenToIso(sx,sy){ const nx=sx/W-ISO.Bx, ny=sy/H-ISO.By;
   return { u:(nx*ISO.vy - ISO.vx*ny)/ISO_DET, v:(ISO.ux*ny - nx*ISO.uy)/ISO_DET }; }
@@ -362,10 +362,9 @@ class Main extends Phaser.Scene {
     this.beltGfx=this.add.graphics().setDepth(-2);   // 設置コンベアの共有描画層(床の上・オブジェクトの下)
     this.editGrid=this.add.graphics().setDepth(-998).setVisible(false); this.editGrid.lineStyle(1,0x7fe6ff,0.42);
     const gl=(u0,v0,u1,v1)=>{ const a=uvXY(u0,v0),b=uvXY(u1,v1); this.editGrid.beginPath(); this.editGrid.moveTo(a.x,a.y); this.editGrid.lineTo(b.x,b.y); this.editGrid.strokePath(); };
-    // 目地は (c+0.5)/GU に引く → 格子点(c/GU)=設置点が各四角の中心になる
-    for(let c=0;c<GU;c++) gl((c+0.5)/GU,0,(c+0.5)/GU,1);
-    for(let r=0;r<GV;r++) gl(0,(r+0.5)/GV,1,(r+0.5)/GV);
-    gl(0,0,1,0); gl(1,0,1,1); gl(1,1,0,1); gl(0,1,0,0);   // 床の外周
+    // 目地はマス境界(c/GU)に引く(13本) → 各マスの中心=設置点が四角のど真ん中になる
+    for(let c=0;c<=GU;c++) gl(c/GU,0,c/GU,1);
+    for(let r=0;r<=GV;r++) gl(0,r/GV,1,r/GV);
     // マスハイライト(設置先=緑/赤・設置済み=占有マス)。床の上・オブジェクトの下。オブジェクトが四角の中に入るのが見える。
     this.hoverGfx=this.add.graphics().setDepth(-1).setVisible(false);
     this.input.on('pointermove',(po)=>this._drawHover(po));
@@ -374,7 +373,7 @@ class Main extends Phaser.Scene {
     // 空き床クリックで、パレットで選択中のアイテムを設置
     this.input.on('pointerdown',(po,over)=>{ if(!this.editMode) return; if(over&&over.length) return;
       if(!window.__editSel) return; const uv=screenToIso(po.x,po.y);
-      const c=Phaser.Math.Clamp(Math.round(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.round(uv.v*GV-OFF_V),0,GV-1);
+      const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       this._placedPtr=true; if(window.__editPlaceAt) window.__editPlaceAt(c,r); });
     // コンベアをクリック(ドラッグでない)で90°回転: 直線(縦)→直線(横)→コーナー4向き を巡回。
     this.input.on('pointerup',(po,over)=>{ if(!this.editMode)return; if(this._placedPtr){ this._placedPtr=false; return; }   // 敷設直後は回転しない
@@ -383,13 +382,13 @@ class Main extends Phaser.Scene {
     this.input.on('drag',(po,obj,dx,dy)=>{ if(this.editMode&&obj._e){ obj.x=dx; obj.y=dy; } });
     this.input.on('dragend',(po,obj)=>{ if(!this.editMode||!obj._e)return; const e=obj._e;
       if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){ this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); return; }
-      const uv=screenToIso(obj.x,obj.y); let c=Phaser.Math.Clamp(Math.round(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.round(uv.v*GV-OFF_V),0,GV-1);
+      const uv=screenToIso(obj.x,obj.y); let c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       if(!this.moveItem(e.id,c,r)) this.moveItem(e.id,e.cell.c,e.cell.r);
       if(window.__layoutChanged)window.__layoutChanged(); });
   }
   _enableDrag(e){ if(e.fixed)return; const m=e.main; if(!m)return; m._e=e; m.setInteractive({useHandCursor:true}); this.input.setDraggable(m,true); }
   _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; }
-  _diamond(g,c,r){ const p0=uvXY((c-0.5)/GU,(r-0.5)/GV),p1=uvXY((c+0.5)/GU,(r-0.5)/GV),p2=uvXY((c+0.5)/GU,(r+0.5)/GV),p3=uvXY((c-0.5)/GU,(r+0.5)/GV);
+  _diamond(g,c,r){ const p0=uvXY(c/GU,r/GV),p1=uvXY((c+1)/GU,r/GV),p2=uvXY((c+1)/GU,(r+1)/GV),p3=uvXY(c/GU,(r+1)/GV);
     g.beginPath(); g.moveTo(p0.x,p0.y); g.lineTo(p1.x,p1.y); g.lineTo(p2.x,p2.y); g.lineTo(p3.x,p3.y); g.closePath(); }
   _drawHover(po){ const g=this.hoverGfx; if(!g)return;
     if(!this.editMode){ g.clear(); g.setVisible(false); return; }
@@ -397,7 +396,7 @@ class Main extends Phaser.Scene {
     g.fillStyle(0x7fe6ff,0.10);   // 設置済みマスをうっすら塗る(=各オブジェクトが入っている四角)
     for(const e of this.placed){ if(e.kind==='outlet')continue; this._diamond(g,e.cell.c,e.cell.r); g.fillPath(); }
     if(window.__editSel && po){ const uv=screenToIso(po.x,po.y);
-      const c=Phaser.Math.Clamp(Math.round(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.round(uv.v*GV),0,GV-1);
+      const c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1);
       const free=this.isFree(c,r); const col=free?0x33ffcc:0xe0674e;
       g.fillStyle(col,0.30); this._diamond(g,c,r); g.fillPath();
       g.lineStyle(2,col,0.95); this._diamond(g,c,r); g.strokePath(); }
