@@ -11,13 +11,31 @@
   #wrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
   #game{width:min(1300px,96vw);aspect-ratio:1024/572}
   #game canvas{image-rendering:pixelated;border-radius:8px;box-shadow:0 24px 80px rgba(0,0,0,.6)}
-  /* タブが増えたので狭い画面では折り返す */
-  #topbar{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:6;font-size:12px;
-          flex-wrap:wrap;justify-content:center;max-width:min(760px,calc(100vw - 24px))}
   .tab{background:var(--panel);color:var(--mint);border:1px solid var(--edge);border-radius:8px;padding:5px 12px;cursor:pointer;backdrop-filter:blur(3px)}
-  .tab:hover{border-color:var(--mint)} .tab.gacha{color:var(--gold)}
-  #badge{position:absolute;top:10px;right:12px;font-size:12px;color:var(--ink);background:var(--panel);padding:6px 12px;border-radius:8px;z-index:6}
-  #badge b{color:#7fe6ff}
+  .tab:hover{border-color:var(--mint)}
+  /* ===== ハンバーガーメニュー（主要機能以外はここに畳む） ===== */
+  #menuBtn{position:absolute;top:10px;right:12px;z-index:11;cursor:pointer;font-size:16px;line-height:1;
+           background:var(--panel);border:1px solid var(--edge);border-radius:8px;padding:7px 11px;color:var(--mint);backdrop-filter:blur(3px)}
+  #menuBtn:hover{border-color:var(--mint)}
+  #menu{position:absolute;top:46px;right:12px;z-index:11;display:none;flex-direction:column;gap:2px;min-width:172px;
+        background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:6px;backdrop-filter:blur(5px)}
+  #menu.show{display:flex}
+  #menu .mi{padding:8px 11px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--ink);text-decoration:none;display:block}
+  #menu .mi:hover{background:#1d262c;color:var(--gold)}
+  /* ===== 今日の労働量（このゲームの主役の数字。製造設定とは分ける） ===== */
+  #board{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:0;
+         background:var(--panel);border:1px solid var(--edge);border-radius:12px;overflow:hidden;backdrop-filter:blur(4px)}
+  #board .m{padding:8px 22px;text-align:center;min-width:126px}
+  #board .m+.m{border-left:1px solid var(--edge)}
+  #board .v{font-size:27px;line-height:1.1;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums}
+  #board .v small{font-size:12px;color:#9fdcc6;font-weight:400;margin-left:2px}
+  #board .l{font-size:9.5px;color:#9fb0c0;letter-spacing:.06em;margin-top:1px}
+  #board .m.prod .v{color:#7fe6ff}
+  /* 工場レイアウト編集は常時アクセスできるよう右下に固定 */
+  #editFab{position:absolute;right:12px;bottom:12px;z-index:9;cursor:pointer;font-size:12px;
+           background:var(--panel);border:1px solid var(--edge);border-radius:9px;padding:8px 13px;color:var(--mint);backdrop-filter:blur(3px)}
+  #editFab:hover{border-color:var(--mint)}
+  #editFab.on{background:#78d0a6;border-color:#78d0a6;color:#17251f;font-weight:700}
   #hud{position:absolute;left:12px;bottom:12px;font-size:12px;color:var(--ink);background:var(--panel);padding:5px 10px;border-radius:6px;z-index:6}
   #hud b{color:var(--gold)}
   #note{position:absolute;top:10px;left:12px;font-size:10px;color:#9fdcc6;background:var(--panel);padding:4px 9px;border-radius:6px;z-index:6}
@@ -78,27 +96,31 @@
   .pitem .qn{position:absolute;top:1px;right:4px;font-size:9px;color:#7fe6ff;font-weight:700}
   .pitem.dim{opacity:.4;cursor:default}
   .phint{font-size:10px;color:#9fb0c0}
-  /* ===== 製造（抽出機に原材料をセット → WPを溜めて製品化） ===== */
-  #craft{position:absolute;left:12px;bottom:46px;z-index:7;width:224px;background:var(--panel);
-         border:1px solid var(--edge);border-radius:10px;padding:9px 11px;font-size:11px;backdrop-filter:blur(4px)}
-  #craft h3{margin:0 0 6px;font-size:11px;color:var(--gold);letter-spacing:.04em}
-  #craft .slots{display:flex;gap:5px;margin-bottom:7px}
-  #craft .slot{flex:1;height:44px;border:2px dashed #33443f;border-radius:8px;display:flex;flex-direction:column;
+  /* ===== 製造（抽出機に原材料をセット → WPを溜めて製品化）。コア機能なので上中央 ===== */
+  #craft{position:absolute;top:76px;left:50%;transform:translateX(-50%);z-index:7;background:var(--panel);
+         border:1px solid var(--edge);border-radius:11px;padding:8px 11px;font-size:11px;backdrop-filter:blur(4px);
+         display:flex;align-items:center;gap:11px;max-width:min(760px,calc(100vw - 24px))}
+  #craft .slots{display:flex;gap:5px}
+  #craft .slot{width:52px;height:46px;border:2px dashed #33443f;border-radius:8px;display:flex;flex-direction:column;
                align-items:center;justify-content:center;cursor:pointer;background:#0e1417}
+  #craft .slot:hover{border-color:#5f8a80}
   #craft .slot.set{border-style:solid;border-color:var(--mint)}
-  #craft .slot.none{opacity:.35;cursor:default;border-color:#26332f}
-  #craft .slot .e{font-size:17px;line-height:1}
+  #craft .slot.none{opacity:.4;cursor:default;border-color:#26332f}
+  #craft .slot .e{font-size:18px;line-height:1}
   #craft .slot small{font-size:8px;color:#cfeee0;margin-top:1px}
-  #craft .bar{height:7px;background:#0d1315;border:1px solid var(--edge);border-radius:4px;overflow:hidden;margin:4px 0 5px}
+  #craft .prog{min-width:150px}
+  #craft .prog .kv{display:flex;justify-content:space-between;color:#9fb0c0;font-size:10px}
+  #craft .prog .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
+  #craft .bar{height:8px;background:#0d1315;border:1px solid var(--edge);border-radius:4px;overflow:hidden;margin-top:4px}
   #craft .bar>i{display:block;height:100%;background:linear-gradient(90deg,#78d0a6,var(--gold));width:0}
-  #craft .kv{display:flex;justify-content:space-between;color:#9fb0c0}
-  #craft .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
-  #craft button{width:100%;margin-top:7px;background:var(--gold);color:#243b34;font-weight:700;border:none;
-                border-radius:7px;padding:8px;cursor:pointer;font-family:inherit;font-size:12px}
+  #craft button{background:var(--gold);color:#243b34;font-weight:700;border:none;white-space:nowrap;
+                border-radius:8px;padding:10px 15px;cursor:pointer;font-family:inherit;font-size:12px}
   #craft button.stop{background:#3a4a45;color:#cfeee0}
-  #craft .warn{color:#ff9f7a;margin-top:5px;font-size:10px}
-  #doneBtn{position:absolute;top:44px;right:12px;z-index:8;display:none;cursor:pointer;font-size:12px;
-           background:var(--gold);color:#243b34;font-weight:700;padding:7px 13px;border-radius:8px}
+  #craft .warn{color:#ff9f7a;font-size:10px;max-width:200px}
+  /* メニューのドロップダウンと重ならないよう右の中央に置く */
+  #doneBtn{position:absolute;top:50%;right:12px;transform:translateY(-50%);z-index:8;display:none;cursor:pointer;
+           font-size:12px;background:var(--gold);color:#243b34;font-weight:700;padding:9px 14px;border-radius:9px;
+           box-shadow:0 6px 20px rgba(0,0,0,.45)}
   #doneBtn.show{display:block}
   #doneN{background:#243b34;color:var(--gold);border-radius:99px;padding:0 6px;margin-left:3px;font-size:10px}
   /* 完成品 / 製品図鑑 のグリッド */
@@ -117,17 +139,17 @@
 <div id="wrap">
   <div id="game"></div>
   <div id="note">🏭 Claude Factory</div>
-  <div id="topbar">
-    <div class="tab gacha" id="gachaBtn">🎁 ガチャ</div>
-    <div class="tab" id="shopBtn">🏪 ショップ</div>
-    <div class="tab" id="editBtn">🔧 編集</div>
-    <div class="tab" id="dexBtn">📖 図鑑</div>
-    <div class="tab" id="lbBtn">🏆 リーダーボード</div>
-    <a class="tab" id="metricsBtn" href="/metrics" style="text-decoration:none">📊 メトリクス</a>
+  <div id="menuBtn" title="メニュー">☰</div>
+  <div id="menu">
+    <div class="mi" id="dexBtn">📖 図鑑</div>
+    <div class="mi" id="lbBtn">🏆 リーダーボード</div>
+    <div class="mi" id="shopBtn">🏪 ショップ</div>
+    <a class="mi" href="/metrics">📊 メトリクス</a>
   </div>
+  <div id="board"></div>
   <div id="doneBtn">🎁 完成品 <span id="doneN"></span></div>
   <div id="craft"></div>
-  <div id="badge"><span id="prodN">⚙️ 0</span><span id="rateN" style="color:#7fe6ff;font-size:10px;margin-left:4px"></span> ・ <span id="moneyN" style="color:#ffd27a">💰 0</span></div>
+  <div id="editFab">🔧 レイアウト編集</div>
   <div id="hud"></div>
   <div id="palette"></div>
   <div id="toast"></div>
@@ -147,7 +169,6 @@ const PRIZES=[
   {id:'p_crown',e:'👑',n:'王冠',r:5},{id:'p_dragon',e:'🐉',n:'ドラゴン像',r:5},
 ];
 // ===== 価格・レート（すべて調整可） =====
-const PULL_COST=30;                                  // ガチャ1回 = 製造量(⚙️生産P)
 const SELL={1:60,2:180,3:600,4:2400,5:9000};         // 景品売却額(レア度別)
 const MACH={ red:{e:'🟥',n:'抽出機',price:0}, green:{e:'🟩',n:'成形機',price:2200},
              blue:{e:'🟦',n:'演算機',price:6500}, yellow:{e:'🟨',n:'選別機',price:15000} };
@@ -195,9 +216,9 @@ const SERIES={
   onsen:{n:'♨️ 和風温泉', price:6000, sky:'onsen',floor:'wood', decos:[]},
 };
 
-let G={ pity:0, inv:{}, prodP:90, money:0, machines:[{type:'red',lvl:1}], belts:0, decos:{},
+let G={ pity:0, inv:{}, money:0, machines:[{type:'red',lvl:1}], belts:0, decos:{},
         bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[],
-        stock:{machine:{},prop:{},deco:{},belt:0}, lastT:null, produced:0 };
+        stock:{machine:{},prop:{},deco:{},belt:0}, lastT:null };
 let saveT=null;
 function saveGame(){ if(saveT)clearTimeout(saveT); saveT=setTimeout(()=>{ const b=JSON.stringify(G);
   try{fetch('/api/save',{method:'POST',body:b});}catch(_){} try{localStorage.setItem('cf-save',b);}catch(_){}} ,400); }
@@ -207,7 +228,7 @@ async function loadGame(){ let s=null; try{ s=await (await fetch('/api/save',{ca
   if(!G.inv)G.inv={}; if(!Array.isArray(G.machines)||!G.machines.length)G.machines=[{type:'red',lvl:1}]; if(!G.decos)G.decos={};
   if(!Array.isArray(G.bgOwned))G.bgOwned=['auto']; if(!Array.isArray(G.floorOwned))G.floorOwned=['wood']; if(!G.bg)G.bg='auto'; if(!G.floor)G.floor='wood';
   if(!G.skins||typeof G.skins!=='object')G.skins={}; if(!Array.isArray(G.seriesOwned))G.seriesOwned=[]; if(!Array.isArray(G.emojiDecos))G.emojiDecos=[]; if(!Array.isArray(G.layout))G.layout=[];
-  ['prodP','money','belts','produced'].forEach(k=>{ if(typeof G[k]!=='number')G[k]=0; });
+  ['money','belts'].forEach(k=>{ if(typeof G[k]!=='number')G[k]=0; });
   // 在庫(owned)。無ければ現在の配置から復元(既存の設置物は所持扱い)
   if(!G.stock||typeof G.stock!=='object'){ G.stock={machine:{},prop:{},deco:{},belt:0};
     for(const e of G.layout){ if(e.kind==='belt') G.stock.belt++; else if(G.stock[e.kind]) G.stock[e.kind][e.sub]=(G.stock[e.kind][e.sub]||0)+1; } }
@@ -228,40 +249,16 @@ window.__layoutChanged=()=>{ snapLayout(); saveGame(); };
 const cnt=(kind,sub)=> (G.layout||[]).filter(e=>e.kind===kind&&(sub==null||e.sub===sub)).length;
 // エージェント頭アクセ(スキン)の永続化: main.js からクリック巡回時に呼ばれる
 window.__skinChanged=(proj,skinId)=>{ if(!proj)return; if(skinId==='none') delete G.skins[proj]; else G.skins[proj]=skinId; saveGame(); };
-// 生産レート(⚙️/秒) = Σ(機械レベル) × (1 + 0.25×稼働エージェント)。レイアウト確定後はG.layoutを、未確定時はG.machinesを参照
-function prodRate(){ let b=0; const L=(G.layout&&G.layout.length)?G.layout.filter(e=>e.kind==='machine'):null;
-  if(L){ for(const e of L) b+=(e.lvl||1); } else { for(const m of G.machines) b+=m.lvl; }
-  const busy=(window.__scene&&window.__scene.busyCount)||0; return b*(1+0.25*busy); }
-function rollRarity(){ if(G.pity>=9){ const x=Math.random(); return x<0.78?3:(x<0.95?4:5); }
-  let x=Math.random()*100,acc=0; for(const k of [1,2,3,4,5]){ acc+=RAR[k].w; if(x<acc)return k; } return 1; }
-function pullOne(){ const rr=rollRarity(); G.pity=rr>=3?0:G.pity+1; const pool=PRIZES.filter(p=>p.r===rr);
-  const pz=pool[Math.floor(Math.random()*pool.length)]; G.inv[pz.id]=(G.inv[pz.id]||0)+1; return pz; }
-function doPull(n){ const cost=n*PULL_COST; if(G.prodP<cost) return null; G.prodP-=cost; const got=[]; for(let i=0;i<n;i++) got.push(pullOne()); saveGame(); return got; }
-
 const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
 function closeOverlay(){ overlay.classList.remove('show'); if(document.getElementById('palette').classList.contains('show')&&window.renderPalette) renderPalette(); }
 function openOverlay(h){ panel._refresh=null; panel.innerHTML='<span class="close">✕</span><div class="pbody">'+h+'</div>'; panel.querySelector('.close').onclick=closeOverlay; overlay.classList.add('show'); }
 overlay.addEventListener('click',e=>{ if(e.target===overlay) closeOverlay(); });
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',1600); }
-function updateBadge(){ const p=document.getElementById('prodN'); if(p)p.textContent='⚙️ '+Math.floor(G.prodP).toLocaleString();
-  const r=document.getElementById('rateN'); if(r)r.textContent='+'+prodRate().toFixed(1)+'/s';
-  const m=document.getElementById('moneyN'); if(m)m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
+// 💰はショップを開いたときだけ見えればよいので、常設バッジは持たない。
+// 購入/売却の各所から呼ばれるため、関数名は残してショップ内の残高表示だけ更新する。
+function updateBadge(){ const m=document.getElementById('shopMoney');
+  if(m) m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
 
-function openGacha(){
-  openOverlay(`<h2>🎁 ガチャ <span style="font-size:12px;color:#7fe6ff">⚙️ ${Math.floor(G.prodP).toLocaleString()}</span></h2>
-    <div class="rowline"><span style="color:#9fb0c0">製造量(⚙️)を溜めてガチャ→景品を🏪ショップで💰売却→強化・購入の育成ループ</span></div>
-    <div class="rowline"><button class="btn" id="p1">1回 (⚙️${PULL_COST})</button><button class="btn" id="p10">10連 (⚙️${PULL_COST*10})</button>
-      <span style="color:#9fb0c0">生産 +${prodRate().toFixed(1)}/s ・ 天井 あと${Math.max(0,10-G.pity)}回でSR以上</span></div>
-    <div class="cardwrap" id="rv"><span style="color:#9fb0c0">回してみよう！</span></div>
-    <div class="rowline" style="font-size:10px;color:#9fb0c0">排出率 ${[2,3,4,5].map(k=>RAR[k].n+' '+RAR[k].w+'%').join(' / ')}</div>`);
-  const rv=panel.querySelector('#rv');
-  const run=n=>{ const got=doPull(n); if(!got){ rv.innerHTML='<span style="color:#e05a4e">⚙️製造量が足りません（機械を強化して生産を上げよう）</span>'; return; }
-    rv.innerHTML=''; got.sort((a,b)=>b.r-a.r).forEach((p,i)=>{ const col=RAR[p.r].c,el=document.createElement('div');
-      el.className='card'; el.style.borderColor=col; el.style.boxShadow=`0 0 14px ${col}`; el.style.background=`linear-gradient(160deg,#0e1417,${col}44)`;
-      el.style.animationDelay=(i*0.05)+'s'; el.innerHTML=`${p.e}<small style="color:${col}">${RAR[p.r].n}</small><small style="color:#cfeee0">${p.n}</small>`; rv.appendChild(el); });
-    const h=panel.querySelector('h2 span'); if(h)h.textContent='⚙️ '+Math.floor(G.prodP).toLocaleString(); updateBadge(); };
-  panel.querySelector('#p1').onclick=()=>run(1); panel.querySelector('#p10').onclick=()=>run(10);
-}
 let _dexTab='prod';   // 'prod'=製造した製品(ゲームのゴール) / 'prize'=ガチャ景品
 function openDex(tab){
   if(tab)_dexTab=tab;
@@ -298,7 +295,6 @@ function openDex(tab){
     if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(p.e, RAR[p.r].c); snapLayout(); saveGame(); toast(`${p.e} ${p.n} を部屋に飾った！`); closeOverlay(); }
   });
 }
-document.getElementById('gachaBtn').addEventListener('click',openGacha);
 document.getElementById('dexBtn').addEventListener('click',openDex);
 
 /* =========================================================================
@@ -439,26 +435,42 @@ function tickCraft(){
   }
 }
 
-/* --- 製造パネル（工場ビュー左下） --- */
+/* --- 今日の労働量ボード（画面上中央・このゲームの主役の数字） ---
+   「今日どれだけ働いたか」を示す数字なので、製造の設定とは切り離して大きく出す。 */
+const jstDayOf = t => new Date(t + 9*3600*1000).toISOString().slice(0,10);
+function madeToday(){ const d=jstDayOf(Date.now()); return craftState().made.filter(m=>jstDayOf(m.at)===d).length; }
+function renderBoard(){
+  const el=document.getElementById('board'); if(!el) return;
+  const c=craftState();
+  el.innerHTML=`
+    <div class="m"><div class="v">${WPST.ok?Math.floor(WPST.today).toLocaleString():'—'}<small>WP</small></div>
+      <div class="l">今日の労働量</div></div>
+    <div class="m prod"><div class="v">${madeToday()}<small>個</small></div>
+      <div class="l">今日の製造</div></div>
+    <div class="m"><div class="v" style="color:#cfeee0;font-size:19px;padding-top:5px">${c.made.length}<small>個</small></div>
+      <div class="l">累計の製造</div></div>`;
+}
+
+/* --- 製造パネル（画面上中央・コア機能） --- */
 function renderCraft(){
   const el=document.getElementById('craft'); if(!el) return;
   const c=craftState(), ids=slotIds(), mats=comboMats(), on=!!c.session;
   const wp=sessionWp(), pct=Math.min(100, wp/CRAFT_WP*100);
-  const slots = ids.length ? ids.map((id,i)=>{ const m=MAT[c.mats[id]];
+  const slots = ids.length ? ids.map(id=>{ const m=MAT[c.mats[id]];
       return `<div class="slot ${m?'set':''}" data-mid="${id}" title="クリックで原材料を選ぶ">
         <span class="e">${m?m.e:'＋'}</span><small>${m?m.n:'原材料'}</small></div>`; }).join('')
-    : `<div class="slot none"><span class="e">🟥</span><small>抽出機なし</small></div>`;
-  el.innerHTML = `<h3>🏭 製造</h3>
-    <div class="slots">${slots}</div>
-    <div class="kv"><span>現セッションWP</span><b>${Math.floor(wp)} / ${CRAFT_WP}</b></div>
-    <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
-    <div class="kv"><span>今日の累計WP</span><b>${Math.floor(WPST.today).toLocaleString()}</b></div>
-    <div class="kv"><span>製造した数</span><b>${c.made.length}</b></div>
+    : `<div class="slot none" title="🔧レイアウト編集で抽出機を設置してください"><span class="e">🟥</span><small>抽出機なし</small></div>`;
+  el.innerHTML = `<div class="slots">${slots}</div>
+    <div class="prog">
+      <div class="kv"><span>${on?'次の製品まで':'待機中'}</span><b>${Math.floor(wp)} / ${CRAFT_WP} WP</b></div>
+      <div class="bar"><i style="width:${on?pct.toFixed(1):0}%"></i></div>
+    </div>
     ${mats.length ? `<button class="${on?'stop':''}" id="craftGo">${on?'■ 製造を停止':'▶ 製造開始'}</button>`
                   : `<div class="warn">抽出機をクリックして原材料をセットすると製造を開始できます</div>`}
-    ${!WPST.ok ? '<div class="warn">WP未取得（サーバ未接続）</div>' : ''}`;
+    ${!WPST.ok ? '<div class="warn">WP未取得<br>（サーバ未接続）</div>' : ''}`;
   for(const s of el.querySelectorAll('.slot[data-mid]')) s.onclick=()=>openMatPicker(s.dataset.mid);
   const go=el.querySelector('#craftGo'); if(go) go.onclick=toggleSession;
+  renderBoard();
 }
 function toggleSession(){
   const c=craftState();
@@ -570,13 +582,20 @@ async function openLb(){
 }
 document.getElementById('lbBtn').addEventListener('click',openLb);
 
+/* --- ハンバーガーメニュー（主要機能以外を畳む） --- */
+const menuEl=document.getElementById('menu'), menuBtn=document.getElementById('menuBtn');
+const closeMenu=()=>menuEl.classList.remove('show');
+menuBtn.addEventListener('click',e=>{ e.stopPropagation(); menuEl.classList.toggle('show'); });
+for(const mi of menuEl.querySelectorAll('.mi')) mi.addEventListener('click',closeMenu);
+document.addEventListener('click',e=>{ if(!menuEl.contains(e.target)&&e.target!==menuBtn) closeMenu(); });
+
 /* ===== ショップ（景品の売却＋購入/強化） ===== */
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
   G.inv[id]=have-qty; const gain=SELL[p.r]*qty; G.money+=gain; saveGame(); updateBadge(); toast(`${p.e} ${p.n}×${qty} を売却 (+💰${gain})`); }
 // 購入=在庫(owned)に追加。設置は編集パレットから床クリックで行う
 function buyMachine(type){ const pr=MACH[type].price; if(G.money<pr)return; G.money-=pr; addStock('machine',type); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
 function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; const c=lvCost(e.lvl); if(G.money<c)return; G.money-=c; e.lvl++;
-  if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${MACH[e.sub].e} ${MACH[e.sub].n} を Lv${e.lvl} に強化！(生産↑)`); }
+  if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${MACH[e.sub].e} ${MACH[e.sub].n} を Lv${e.lvl} に強化！`); }
 function buyBelt(){ if(G.money<BELT_PRICE)return; G.money-=BELT_PRICE; addStock('belt'); saveGame(); updateBadge(); toast('🛗 コンベアを購入（🔧編集で設置）'); }
 function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return; G.money-=pr; addStock('deco',t); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
 function buyProp(t){ const pr=PROP[t].price; if(G.money<pr)return; G.money-=pr; addStock('prop',t); saveGame(); updateBadge(); toast(`${PROP[t].n} を購入（🔧編集で設置）`); }
@@ -638,7 +657,7 @@ function openShop(tab){ if(tab)_shopTab=tab;
           <div class="cost">${S.decos.join(' ')} ・ ${own?'所持':'💰'+S.price.toLocaleString()}</div></div>
           <button data-series="${k}" ${((own||G.money>=S.price)&&!cur)?'':'disabled'}>${own?(cur?'---':'適用'):'購入'}</button></div>`; }).join('');
     }
-    openOverlay(`<h2>🏪 ショップ <span style="font-size:12px;color:#ffd27a">💰 ${Math.floor(G.money).toLocaleString()}</span></h2>
+    openOverlay(`<h2>🏪 ショップ <span id="shopMoney" style="font-size:13px;color:#ffd27a">💰 ${Math.floor(G.money).toLocaleString()}</span></h2>
       <div class="sttabs">${TABS.map(t=>`<span class="sttab ${t[0]===_shopTab?'on':''}" data-tab="${t[0]}">${t[1]}</span>`).join('')}</div>
       <div>${body}</div>`);
     panel.querySelectorAll('.sttab[data-tab]').forEach(el=>el.onclick=()=>{ _shopTab=el.dataset.tab; render(); });
@@ -704,15 +723,13 @@ window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
   if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
   const s=window.__scene; const id = s.addPlaced(sel.kind, sel.kind==='belt'?null:sel.sub, {cell:{c,r}});
   if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
-document.getElementById('editBtn').addEventListener('click',()=>{ if(!window.__scene)return;
-  const on=window.__scene.toggleEdit(); document.getElementById('editBtn').classList.toggle('gacha',on);
+document.getElementById('editFab').addEventListener('click',()=>{ if(!window.__scene)return;
+  const on=window.__scene.toggleEdit(); document.getElementById('editFab').classList.toggle('on',on);
   paletteEl.classList.toggle('show',on); if(on) renderPalette(); else { editSel=null; window.__editSel=null; }
   toast(on?'🔧 編集: 上のパレットで選ぶ→床クリックで設置 / ドラッグで移動 / 左下🗑で撤去':'編集モードを終了'); });
 loadGame().then(async ()=>{
-  if(G.lastT){ const dt=Math.min((Date.now()-G.lastT)/1000, 8*3600); const g=prodRate()*dt*0.5; if(g>0){ G.prodP+=g; G.produced+=g; } } // オフライン分(50%/最大8h)
-  G.lastT=Date.now(); updateBadge();
+  G.lastT=Date.now();
   await waitScene(); applyOwned(); updateBadge();
-  setInterval(()=>{ const r=prodRate(); G.prodP+=r; G.produced+=r; updateBadge(); }, 1000);
   setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
   // 製造: 原材料バッジを反映してからWPの取得を開始（3秒ごと = OTelのログ送信間隔に合わせる）
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
@@ -729,8 +746,8 @@ loadGame().then(async ()=>{
     G.stock.belt=Math.max(5,G.stock.belt||0);
     saveGame(); updateBadge(); toast('✅ 全背景・全アイテムを解放しました（在庫）');
   }
-  if(q.get('edit')){ paletteEl.classList.add('show'); document.getElementById('editBtn').classList.add('gacha'); renderPalette(); }
-  if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop')); else if(q.get('gacha'))openGacha();
+  if(q.get('edit')){ paletteEl.classList.add('show'); document.getElementById('editFab').classList.add('on'); renderPalette(); }
+  if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop'));
 });
 </script>
 </body>
