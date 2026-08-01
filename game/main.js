@@ -21,6 +21,7 @@ const AU={x:ISO.ux*W/GU, y:ISO.uy*H/GU};   // 1セル u方向 の画面ベクト
 const AV={x:ISO.vx*W/GV, y:ISO.vy*H/GV};   // 1セル v方向 の画面ベクトル
 const K = (c,r)=> c+','+r;
 const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
+const DRAG_SLOP = 8;   // これ以下の移動は「ドラッグではなくクリック」とみなす(px)
 
 /* ===== 製造機のスキン =====
    スキンは「テクスチャの命名規約 + パレット」の2段。
@@ -227,7 +228,7 @@ class Main extends Phaser.Scene {
       setSlot:(id,i,mat)=>this.setSlot(id,i,mat),
       rotateMachine:(id)=>this.rotateMachine(id),
       moveMachine:(id,c,r)=>this.moveItem(id,c,r),
-      // 製造機はドラッグできないので「掴んで床をクリックで置き直す」移動モードを提供する
+      // 製造機はドラッグ&ドロップでも動かせるが、設定パネルからの「掴んで床をクリック」移動も残す
       beginMoveMachine:(id)=>this.beginMoveMachine(id),
       cancelMove:()=>this.cancelMove(),
       isMoving:()=>!!this.moveId,
@@ -324,6 +325,7 @@ class Main extends Phaser.Scene {
       for(const q of [B,C,D]) g.lineBetween(q.x,q.y,q.x,q.y-HG);                              // 縦のエッジ
     }
     const up=(q)=>({x:q.x, y:q.y-HG});
+    e._hgt=HG;   // 筐体の高さ(px)。ドラッグの当たり判定(_machHit)で使う
 
     // スロット(1マス1つ)。素材が入っていれば素材色で光らせ、絵文字を天面に載せる
     e.slots = Array.isArray(e.slots) ? e.slots.slice(0, machSize(e.sub)) : [];
@@ -407,13 +409,15 @@ class Main extends Phaser.Scene {
     if(!extra.silent){ const p=cellXY(cell.c,cell.r); this._spawnPop(p.x,p.y); }
     return e.id;
   }
-  _detach(e){ for(const o of e.objs) o.destroy();
+  _detach(e){ for(const o of e.objs) o.destroy(); e._dbase=null;
     if(e._lit){ const i=this.lit.findIndex(x=>x.sp===e._lit); if(i>=0)this.lit.splice(i,1); }
     if(e.kind==='machine'){ for(const q of this.cellsOf(e)){
       const i=this.machineCells.findIndex(m=>m.c===q.c&&m.r===q.r); if(i>=0)this.machineCells.splice(i,1); } } }
   removeItem(id){ const i=this.placed.findIndex(x=>x.id===id); if(i<0) return false;
     this._detach(this.placed[i]); this.placed.splice(i,1); this.lastRemoved=1; this._syncOcc();
     if(this.moveId===id) this.cancelMove();   // 掴んでいた物が消えたら移動モードも抜ける
+    if(this._mdrag && this._mdrag.id===id) this._mdrag=null;   // ドラッグ中の物が消えた場合も同様
+    if(this._tap && this._tap.id===id) this._tap=null;         // 消えた物の設定パネルは開かない
     return true; }
   moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
     if(!this.canPlace(e.kind,c,r,{sub:e.sub,dir:e.dir,ignoreId:id})) return false;
@@ -452,7 +456,10 @@ class Main extends Phaser.Scene {
   getMachine(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return null;
     return { id:e.id, size:machSize(e.sub), dir:e.dir, lvl:e.lvl, slots:e.slots.slice(),
       product:e.product?{e:e.product.e,n:e.product.n,unknown:!!e.product.unknown}:null }; }
-  _snapBack(e){ const p=cellXY(e.cell.c,e.cell.r); if(e.main){ e.main.x=p.x; e.main.y=p.y; } }
+  /* ドラッグをやめたときに見た目を元へ戻す。製造機は絵が複数あるので掴んだ時点の座標(_dbase)を書き戻す */
+  _snapBack(e){
+    if(e.kind==='machine'){ for(const b of (e._dbase||[])){ b.o.x=b.x; b.o.y=b.y; } e._dbase=null; return; }
+    const p=cellXY(e.cell.c,e.cell.r); if(e.main){ e.main.x=p.x; e.main.y=p.y; } }
   /* ===== 製造UI(factory-phaser.html)との橋渡し ===== */
   machineList(){ return this.placed.filter(e=>e.kind==='machine').map(e=>this.getMachine(e.id)); }
   // 素材のセット/解除のあとに見た目を作り直す(上流UIから呼ばれる)
@@ -506,13 +513,19 @@ class Main extends Phaser.Scene {
       this.add.text(0,0,'↔ 移動先の床をクリック ・ R:回転 ・ Esc:やめる',{fontSize:'13px',color:'#c8fff0'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     // 床クリック: 製造機の上なら設定パネル、空きマスならパレットで選択中のアイテムを設置
     this.input.on('pointerdown',(po,over)=>{
+      this._tap=null;
       const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       // 移動モード中は設定パネルも新規設置も抑止。床クリック=移動先の確定
       if(this.moveId){ this._placedPtr=true; this._moveDrop(c,r); return; }
-      const m=this.machineAtCell(c,r);
+      // 床マスの外(筐体の高さぶん)を掴んだときも拾えるよう、当たり判定に出ている製造機も見る
+      const hit=(over&&over.length&&over[0]&&over[0]._e)||null;
+      const m=this.machineAtCell(c,r) || ((hit&&hit.kind==='machine')?hit:null);
       // 製造機は編集中/通常どちらのクリックでも素材パネルを開く(素材設定がコア機能なので)
-      if(m){ this._placedPtr=true; if(window.__openMachine) window.__openMachine(m.id); return; }
+      if(m){ this._placedPtr=true;
+        // 編集中はドラッグと取り違えないよう、指を離した時点(ほぼ動いていなければ)に開く
+        if(this.editMode){ this._tap={id:m.id, x:po.x, y:po.y}; return; }
+        if(window.__openMachine) window.__openMachine(m.id); return; }
       if(!this.editMode) return; if(over&&over.length) return;
       const sel=window.__editSel; if(!sel) return;
       const opt=(sel.kind==='machine')?{sub:sel.sub,dir:this.placeDir||'u'}:null;
@@ -530,17 +543,53 @@ class Main extends Phaser.Scene {
     // 移動のキャンセル(Escキー)
     this.input.keyboard.on('keydown-ESC',()=>{ if(!this.moveId) return;
       this.cancelMove(); if(window.__toast) window.__toast('移動をやめました'); });
-    this.input.on('drag',(po,obj,dx,dy)=>{ if(this.editMode&&obj._e){ obj.x=dx; obj.y=dy; } });
+    // クリック(ほぼ動いていない)なら設定パネル。ドラッグしたときは開かない
+    this.input.on('pointerup',(po)=>{ const t=this._tap; this._tap=null;
+      if(!t||this.moveId) return;
+      if(Math.hypot(po.x-t.x, po.y-t.y)>DRAG_SLOP) return;
+      if(window.__openMachine) window.__openMachine(t.id); });
+    // 製造機のドラッグ開始。絵が複数(筐体graphics＋素材の文字など)あるので掴んだ時点の座標を控える
+    this.input.on('dragstart',(po,obj)=>{ if(!this.editMode||!obj||!obj._e) return; const e=obj._e;
+      if(e.kind!=='machine'||this.moveId) return;   // 移動モード中はドラッグしない
+      const p=cellXY(e.cell.c,e.cell.r);
+      // 起点は「押した位置」。dragstart は最初に動かした時点で飛ぶので po.x を使うとその分ずれる
+      const x0=(po.downX!=null)?po.downX:po.x, y0=(po.downY!=null)?po.downY:po.y;
+      this._mdrag={ id:e.id, x0, y0, px:p.x, py:p.y, c:e.cell.c, r:e.cell.r, moved:false };
+      e._dbase=(e.objs||[]).map(o=>({o, x:o.x, y:o.y})); });
+    this.input.on('drag',(po,obj,dx,dy)=>{ if(!this.editMode||!obj._e) return; const e=obj._e;
+      if(e.kind==='machine'){ const d=this._mdrag; if(!d||d.id!==e.id) return;
+        const ddx=po.x-d.x0, ddy=po.y-d.y0;
+        if(Math.hypot(ddx,ddy)>DRAG_SLOP) d.moved=true;
+        for(const b of (e._dbase||[])){ b.o.x=b.x+ddx; b.o.y=b.y+ddy; }
+        // 落とし先のマスは「掴んだ製造機の基準マス」を運んだ位置から求める(プレビューと一致させる)
+        const uv=screenToIso(d.px+ddx, d.py+ddy);
+        d.c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1); d.r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
+        this._drawHover(po); return; }
+      obj.x=dx; obj.y=dy; });
     this.input.on('dragend',(po,obj)=>{ if(!this.editMode||!obj._e)return; const e=obj._e;
+      if(e.kind==='machine'){ const d=this._mdrag; this._mdrag=null;
+        if(!d||d.id!==e.id){ this._snapBack(e); return; }
+        if(!d.moved){ this._snapBack(e); this._drawHover(po); return; }   // ほぼ動いていない=クリック扱い(ゴミ箱の上でも消さない)
+        if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){
+          this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); this._drawHover(po); return; }
+        if(!this.moveItem(e.id,d.c,d.r)){ this._snapBack(e);
+          if(window.__toast) window.__toast('そこには置けません…'); }
+        if(window.__layoutChanged)window.__layoutChanged(); this._drawHover(po); return; }
       if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){
         this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); return; }
       const uv=screenToIso(obj.x,obj.y); let c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       if(!this.moveItem(e.id,c,r)) this._snapBack(e);
       if(window.__layoutChanged)window.__layoutChanged(); });
   }
-  _enableDrag(e){ if(e.kind==='machine') return;   // 複数マス。移動/撤去はクリックで開く設定パネルから
-    const m=e.main; if(!m)return; m._e=e; m.setInteractive({useHandCursor:true}); this.input.setDraggable(m,true); }
-  _disableDrag(e){ const m=e.main; if(!m||e.kind==='machine')return; this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; }
+  /* 製造機の掴み手。main は Graphics で当たり判定を持たないので、占有マスの外周＋筐体の高さぶんの
+     多角形(見た目のシルエット)を渡す。A(最奥) B C(最手前) D の上辺と手前2面を結んだ6角形。 */
+  _machHit(e){ const [A,B,C,D]=this._machFootprint(e), h=e._hgt||0;
+    return new Phaser.Geom.Polygon([A.x,A.y-h, B.x,B.y-h, B.x,B.y, C.x,C.y, D.x,D.y, D.x,D.y-h]); }
+  _enableDrag(e){ const m=e.main; if(!m)return; m._e=e;
+    if(e.kind==='machine') m.setInteractive({ hitArea:this._machHit(e), hitAreaCallback:Phaser.Geom.Polygon.Contains, useHandCursor:true });
+    else m.setInteractive({useHandCursor:true});
+    this.input.setDraggable(m,true); }
+  _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; }
   _diamond(g,c,r){ const p0=uvXY(c/GU,r/GV),p1=uvXY((c+1)/GU,r/GV),p2=uvXY((c+1)/GU,(r+1)/GV),p3=uvXY(c/GU,(r+1)/GV);
     g.beginPath(); g.moveTo(p0.x,p0.y); g.lineTo(p1.x,p1.y); g.lineTo(p2.x,p2.y); g.lineTo(p3.x,p3.y); g.closePath(); }
   _drawHover(po){ const g=this.hoverGfx; if(!g)return;
@@ -548,10 +597,13 @@ class Main extends Phaser.Scene {
     g.clear(); g.setVisible(true);
     g.fillStyle(0x7fe6ff,0.10);   // 設置済みマスをうっすら塗る(=各オブジェクトが入っている四角)
     for(const e of this.placed) for(const q of this.cellsOf(e)){ this._diamond(g,q.c,q.r); g.fillPath(); }
-    // 移動モード中は掴んでいる製造機のサイズ・向きぶんをプレビュー(自分の占有は無視して判定)
-    const mv=this.moveId && this.placed.find(x=>x.id===this.moveId);
-    if(mv){ if(!po) return; const uv=screenToIso(po.x,po.y);
-      const c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1);
+    // 移動モード中/ドラッグ中は掴んでいる製造機のサイズ・向きぶんをプレビュー(自分の占有は無視して判定)
+    const d=this.moveId?null:this._mdrag, mvId=this.moveId||(d&&d.id);
+    const mv=mvId && this.placed.find(x=>x.id===mvId);
+    if(mv){ let c,r;
+      if(d){ c=d.c; r=d.r; }
+      else { if(!po) return; const uv=screenToIso(po.x,po.y);
+        c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1); r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1); }
       const ok=this.canPlace('machine',c,r,{sub:mv.sub,dir:mv.dir,ignoreId:mv.id});
       this._paintCells(this.cellsOf({kind:'machine',sub:mv.sub,dir:mv.dir,cell:{c,r}}), ok?0x33ffcc:0xe0674e);
       return; }
@@ -570,7 +622,9 @@ class Main extends Phaser.Scene {
       g.fillStyle(col,0.30); this._diamond(g,q.c,q.r); g.fillPath();
       g.lineStyle(2,col,0.95); this._diamond(g,q.c,q.r); g.strokePath(); } }
   toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode); this.trash.setVisible(this.editMode);
-    if(!this.editMode) this.cancelMove();   // 編集を抜けたら移動モードも解除(元の位置のまま)
+    if(!this.editMode){ this.cancelMove();   // 編集を抜けたら移動モードも解除(元の位置のまま)
+      this._tap=null;
+      if(this._mdrag){ const dg=this.placed.find(x=>x.id===this._mdrag.id); this._mdrag=null; if(dg) this._snapBack(dg); } }
     if(this.hoverGfx){ this.hoverGfx.clear(); this.hoverGfx.setVisible(false); }
     for(const e of this.placed){ this.editMode?this._enableDrag(e):this._disableDrag(e); } return this.editMode; }
   /* 窓オブジェクトを座標で定義(左壁 u=0)。床エッジ uvXY(0,v) を基準に壁の高さ方向へ立ち上げる。

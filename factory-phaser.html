@@ -95,7 +95,8 @@
   .card{width:72px;height:94px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:32px;border:2px solid #fff;animation:pop .45s ease both}
   .card small{font-size:9px;font-weight:700;margin-top:2px}
   @keyframes pop{0%{transform:scale(.2) rotate(-8deg);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1)}}
-  #toast{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--ink);padding:8px 16px;border-radius:8px;z-index:7;display:none;font-size:12px}
+  /* トーストは盤面の上に一瞬出るだけ。ドラッグ中に出てもポインタを奪わない */
+  #toast{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--ink);padding:8px 16px;border-radius:8px;z-index:7;display:none;font-size:12px;pointer-events:none}
   /* craft */
   .invbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center;background:#0e1417;border:1px solid var(--edge);border-radius:8px;padding:7px 9px;margin:6px 0;font-size:12px}
   .chip{display:inline-flex;align-items:center;gap:3px;background:#1a2228;border-radius:6px;padding:2px 7px}
@@ -119,14 +120,16 @@
   .node{display:inline-flex;flex-direction:column;align-items:center;background:#131b20;border:1px solid var(--edge);border-radius:8px;padding:6px 9px;min-width:60px}
   .node.mach{border-color:#c98b52} .node.mat{border-color:#4a6b7a} .node .e{font-size:22px} .node small{font-size:9px;color:#cfeee0;margin-top:1px}
   .arrow{color:#5f7a72;font-size:16px}
-  /* 編集パレット */
-  #palette{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);z-index:8;display:none;flex-direction:column;gap:7px;background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:9px 11px;backdrop-filter:blur(4px)}
+  /* 編集パレット
+     盤面の下1/4に重なるので、枠や余白でキャンバスのドラッグを塞がないよう
+     コンテナは pointer-events:none。実際に押せる要素(カテゴリ・アイテム)だけ auto に戻す。 */
+  #palette{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);z-index:8;display:none;flex-direction:column;gap:7px;background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:9px 11px;backdrop-filter:blur(4px);pointer-events:none}
   #palette.show{display:flex}
-  .pcat{display:flex;gap:5px;flex-wrap:wrap}
-  .pcat .c{background:#141b20;border:1px solid var(--edge);border-radius:7px;padding:4px 11px;cursor:pointer;font-size:12px;color:#9fdcc6}
+  .pcat{display:flex;gap:5px;flex-wrap:wrap;pointer-events:none}
+  .pcat .c{background:#141b20;border:1px solid var(--edge);border-radius:7px;padding:4px 11px;cursor:pointer;font-size:12px;color:#9fdcc6;pointer-events:auto}
   .pcat .c.on{border-color:var(--gold);color:var(--gold);background:#1d262c}
-  .pitems{display:flex;gap:6px;flex-wrap:wrap;width:min(860px,90vw);max-height:132px;overflow-y:auto}
-  .pitem{width:62px;height:64px;border:2px solid #2c3a38;border-radius:8px;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative}
+  .pitems{display:flex;gap:6px;flex-wrap:wrap;width:min(860px,90vw);max-height:132px;overflow-y:auto;pointer-events:none}
+  .pitem{width:62px;height:64px;border:2px solid #2c3a38;border-radius:8px;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative;pointer-events:auto}
   .pitem:hover{border-color:#5f8a80}
   .pitem.on{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
   .pitem.cur{border-color:#7fe6ff}
@@ -134,28 +137,36 @@
   .pitem .qn{position:absolute;top:1px;right:4px;font-size:9px;color:#7fe6ff;font-weight:700}
   .pitem.dim{opacity:.4;cursor:default}
   .phint{font-size:10px;color:#9fb0c0}
-  /* ===== 製造（抽出機に原材料をセット → WPを溜めて製品化）。コア機能なので上中央 ===== */
-  #craft{background:var(--panel);border:1px solid var(--edge);border-radius:11px;padding:8px 11px;font-size:11px;
-         backdrop-filter:blur(4px);display:flex;align-items:center;gap:11px;flex-wrap:wrap;
-         /* 内容に合わせた幅。max-width で頭を押さえておくと、長い注意文だけが下段に折り返る
-            （折り返し可の flex は max-content = 全要素の合計幅になるため上限が必要） */
-         width:fit-content;max-width:min(486px,100%)}
-  #craft .slots{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;max-width:280px}
-  #craft .slot{width:52px;height:46px;border:2px dashed #33443f;border-radius:8px;display:flex;flex-direction:column;
-               align-items:center;justify-content:center;cursor:pointer;background:#0e1417}
-  #craft .slot:hover{border-color:#5f8a80}
-  #craft .slot.set{border-style:solid;border-color:var(--mint)}
-  #craft .slot.none{opacity:.4;cursor:default;border-color:#26332f}
-  #craft .slot .e{font-size:18px;line-height:1}
-  #craft .slot small{font-size:8px;color:#cfeee0;margin-top:1px}
-  #craft .prog{min-width:150px}
-  #craft .prog .kv{display:flex;justify-content:space-between;color:#9fb0c0;font-size:10px}
-  #craft .prog .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
-  #craft .bar{height:8px;background:#0d1315;border:1px solid var(--edge);border-radius:4px;overflow:hidden;margin-top:4px}
+  /* ===== 製造のコンパクト表示（いま作っている物とWPだけ）。クリックで🏭製造ダイアログ ===== */
+  #craft{background:var(--panel);border:1px solid var(--edge);border-radius:11px;padding:7px 12px;font-size:11px;
+         backdrop-filter:blur(4px);display:flex;align-items:center;gap:9px;cursor:pointer;
+         width:fit-content;max-width:min(340px,100%)}
+  #craft:hover{border-color:var(--mint)}
+  #craft .pe{font-size:25px;line-height:1;flex:none}
+  #craft .mid{min-width:132px}
+  #craft .nm{font-size:11px;color:#eafff4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
+  #craft .kv{display:flex;justify-content:space-between;gap:9px;color:#9fb0c0;font-size:10px;margin-top:2px}
+  #craft .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
+  #craft .kv .run{color:#7fe6ff}
+  #craft .bar{height:7px;background:#0d1315;border:1px solid var(--edge);border-radius:4px;overflow:hidden;margin-top:3px}
   #craft .bar>i{display:block;height:100%;background:linear-gradient(90deg,#78d0a6,var(--gold));width:0}
-  #craft button{background:var(--gold);color:#243b34;font-weight:700;border:none;white-space:nowrap;
-                border-radius:8px;padding:10px 15px;cursor:pointer;font-family:inherit;font-size:12px}
-  #craft button.stop{background:#3a4a45;color:#cfeee0}
+  #craft .go{font-size:10px;color:#9fdcc6;flex:none}
+  /* ===== 🏭製造ダイアログ: 原材料のマスとWPの進捗 ===== */
+  .mslots{display:flex;gap:7px;flex-wrap:wrap}
+  .mslot{position:relative;width:76px;height:66px;border:2px dashed #33443f;border-radius:9px;background:#0e1417;
+         display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer}
+  .mslot:hover{border-color:#5f8a80}
+  .mslot.set{border-style:solid;border-color:var(--mint)}
+  .mslot.pick{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
+  .mslot .e{font-size:24px;line-height:1}
+  .mslot small{font-size:9px;color:#cfeee0;margin-top:2px}
+  .mslot .x{position:absolute;top:0;right:5px;font-size:11px;color:#9fb0c0}
+  .mslot .x:hover{color:#ff9f7a}
+  .wpline{margin-top:14px;border-top:1px solid var(--edge);padding-top:9px}
+  .wpline .kv{display:flex;justify-content:space-between;color:#9fb0c0;font-size:11px}
+  .wpline .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
+  .wpline .bar{height:9px;background:#0d1315;border:1px solid var(--edge);border-radius:5px;overflow:hidden;margin-top:5px}
+  .wpline .bar>i{display:block;height:100%;background:linear-gradient(90deg,#78d0a6,var(--gold));width:0}
   /* メニューのドロップダウンと重ならないよう右の中央に置く */
   #doneBtn{position:absolute;top:50%;right:12px;transform:translateY(-50%);z-index:8;display:none;cursor:pointer;
            font-size:12px;background:var(--gold);color:#243b34;font-weight:700;padding:9px 14px;border-radius:9px;
@@ -181,6 +192,7 @@
   <div id="menuBtn" title="メニュー">☰</div>
   <div id="menu">
     <div class="mh">工場</div>
+    <div class="mi" id="craftBtn">🏭 製造（原材料セット）</div>
     <div class="mi" id="shopBtn">🏪 ショップ</div>
     <div class="mi" id="editMenuBtn">🔧 レイアウト編集</div>
     <div class="msep"></div>
@@ -603,25 +615,20 @@ function renderBoard(){
       <div class="l">今日の製造</div></div>`;
 }
 
-/* --- 製造パネル（画面上中央・コア機能） --- */
+/* --- 製造のコンパクト表示（画面上中央）。詳しい操作は🏭製造ダイアログに寄せ、
+       ここは「いま何を作っているか + WP」だけを出す導線にする --- */
 function renderCraft(){
   const el=document.getElementById('craft'); if(!el) return;
-  const c=craftState(), am=activeMachine(), mats=comboMats(), on=!!c.session;
+  const c=craftState(), am=activeMachine(), on=!!c.session;
   const wp=sessionWp(), pct=Math.min(100, wp/CRAFT_WP*100);
-  const slots = am ? am.slots.map((mid,i)=>{ const m=MAT[mid];
-      return `<div class="slot ${m?'set':''}" data-mid="${am.id}" data-si="${i}" title="クリックで原材料を選ぶ">
-        <span class="e">${m?m.e:'＋'}</span><small>${m?m.n:'原材料'}</small></div>`; }).join('')
-    : `<div class="slot none" title="🔧レイアウト編集で製造機を設置してください"><span class="e">🏭</span><small>製造機なし</small></div>`;
-  el.innerHTML = `<div class="slots">${slots}</div>
-    <div class="prog">
-      <div class="kv"><span${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得（サーバ未接続）':(on?'次の製品まで':'待機中')}</span><b>${Math.floor(wp)} / ${CRAFT_WP} WP</b></div>
-      <div class="bar"><i style="width:${on?pct.toFixed(1):0}%"></i></div>
-    </div>
-    ${mats.length ? `<button class="${on?'stop':''}" id="craftGo">${on?'■ 製造を停止':'▶ 製造開始'}</button>` : ''}`;
-  // 案内文はボックスを歪ませるので出さず、ツールチップに逃がす
-  el.title = mats.length ? '' : '🏭製造機のマスに原材料をセットすると製造を開始できます';
-  for(const s of el.querySelectorAll('.slot[data-mid]')) s.onclick=()=>openMatPicker(s.dataset.mid, +s.dataset.si);
-  const go=el.querySelector('#craftGo'); if(go) go.onclick=toggleSession;
+  const pv=am?window.__craft.preview(am.slots):null;
+  const face = !am ? {e:'🏭',n:'製造機なし'} : (pv?{e:pv.e,n:pv.n}:{e:'➕',n:'原材料をセット'});
+  el.innerHTML = `<span class="pe">${face.e}</span>
+    <div class="mid"><div class="nm">${face.n}</div>
+      <div class="kv"><span class="${on?'run':''}"${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得':(on?'製造中':'待機中')}</span><b>${Math.floor(wp)} / ${CRAFT_WP} WP</b></div>
+      <div class="bar"><i style="width:${on?pct.toFixed(1):0}%"></i></div></div>
+    <span class="go">🏭▸</span>`;
+  el.title='クリックで🏭製造（原材料のセット・製造開始）';
   renderBoard();
 }
 function toggleSession(){
@@ -631,6 +638,76 @@ function toggleSession(){
     toast(`製造開始！ここからのWPをカウントします（${CRAFT_WP}WPで1個）`); }
   saveGame(); renderCraft();
 }
+
+/* =========================================================================
+   🏭 製造ダイアログ — 素材のセットをここで完結させる
+     タブ = 製造機の選択（2台目以降があるときだけ出す。選択は craftState().activeId）
+     本文 = 各マスの原材料 → 原材料ピッカー → 作れる物 → WPの進捗
+     操作 = ▶製造開始 / ■停止
+   開いている間は 1秒ごとに再描画してWPに追従する。
+   ========================================================================= */
+let _craftPick=null;                       // 原材料を選んでいる最中のマス番号(null=閉じている)
+const machTitle=(m,i)=>`${(MACH['s'+m.size]||{}).e||'🏭'} ${i+1}号機`;
+function openCraft(){
+  _craftPick=null;
+  return openDialog({ title:'🏭 製造',
+    sub:()=>{ const am=activeMachine(); return am?`${am.size}マス${am.lvl>1?` Lv${am.lvl}`:''}`:'製造機がありません'; },
+    tabs:(d)=>{ const ms=machines(), am=activeMachine(); if(am) d.tab=am.id;   // タブの選択は常に実体に合わせる
+      return ms.length>1 ? ms.map((m,i)=>({id:m.id,label:machTitle(m,i)})) : []; },
+    onTab:(id,d)=>{ craftState().activeId=id; _craftPick=null; saveGame(); renderCraft(); d.refresh(); },
+    live:1000,
+    body:()=>{
+      const c=craftState(), am=activeMachine();
+      if(!am) return '<div class="cost" style="padding:12px">製造機がありません。🏪ショップで購入 → 🔧レイアウト編集で床に設置してください。</div>';
+      const slots=am.slots.map((mid,i)=>{ const m=MAT[mid];
+        return `<div class="mslot ${m?'set':''} ${_craftPick===i?'pick':''}" data-cslot="${i}" title="クリックで原材料を選ぶ">
+          <span class="e">${m?m.e:'＋'}</span><small>${m?m.n:`${i+1}マス目`}</small>
+          ${m?`<span class="x" data-cclear="${i}" title="外す">✕</span>`:''}</div>`; }).join('');
+      const picker = _craftPick==null ? '' :
+        `<div class="cost" style="margin:11px 0 5px;color:#7fe6ff">${_craftPick+1}マス目に入れる原材料</div>
+         <div class="pgrid">${MATS.map(m=>`<div class="pcard" data-cmat="${m.id}"
+            style="cursor:pointer;${am.slots[_craftPick]===m.id?'border-color:var(--gold)':''}">
+            <div class="e">${m.e}</div><div class="nm">${m.n}</div></div>`).join('')}</div>`;
+      // 作れる物: レシピに載っている組み合わせなら5種の候補、外れていれば🪨
+      const key=comboKey(); let prod;
+      if(!key) prod='<div class="cost" style="padding:6px 2px">原材料を入れると、ここに作れる物が出ます。</div>';
+      else { const pool=poolFor(key);
+        prod = (pool[0]===BLOB)
+          ? `<div class="rc"><div class="ic">${PROD[BLOB].e}</div><div class="mid"><div class="nm">${PROD[BLOB].n}</div>
+               <div class="cost">レシピに無い組み合わせです。原材料を入れ替えて探そう。</div></div></div>`
+          : `<div class="pgrid">${pool.map(id=>{ const p=PROD[id], n=c.dex[p.id]||0;
+              return `<div class="pcard" style="border-color:${RAR[p.r].c}"><div class="e">${p.e}</div>
+                <div class="nm">${p.n}</div><div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
+                ${n?`<div class="qn">×${n}</div>`:''}</div>`; }).join('')}</div>
+             <div class="cost" style="margin-top:6px">この${pool.length}種からランダムで1つできます。</div>`; }
+      const on=!!c.session, wp=sessionWp(), pct=Math.min(100, wp/CRAFT_WP*100);
+      return `<div class="cost" style="margin:2px 0 8px">1マスにつき原材料1つ。入っている原材料の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。1個 = ${CRAFT_WP}WP。</div>`
+        + `<div class="mslots">${slots}</div>` + picker
+        + `<div class="cost" style="margin:13px 0 6px">作れる物</div>` + prod
+        + `<div class="wpline"><div class="kv">
+             <span${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得（サーバ未接続）':(on?'次の製品まで':'待機中 — ▶製造開始でカウント開始')}</span>
+             <b>${Math.floor(wp)} / ${CRAFT_WP} WP</b></div>
+           <div class="bar"><i style="width:${on?pct.toFixed(1):0}%"></i></div></div>`;
+    },
+    actions:()=>{
+      if(!activeMachine()) return [{label:'🏪 ショップへ',kind:'ghost',on:()=>openShop('mach')}];
+      const on=!!craftState().session, has=comboMats().length>0;
+      return [{label:on?'■ 製造を停止':'▶ 製造開始', disabled:!on&&!has,
+               on:(d)=>{ toggleSession(); d.refresh(); }}];
+    },
+    onRender:(p,d)=>{
+      const am=activeMachine(); if(!am) return; const id=am.id;
+      p.querySelectorAll('[data-cslot]').forEach(el=>el.onclick=(ev)=>{
+        if(ev.target.dataset && ev.target.dataset.cclear!=null) return;   // ✕(外す)は別扱い
+        const i=+el.dataset.cslot; _craftPick=(_craftPick===i)?null:i; d.refresh(); });
+      p.querySelectorAll('[data-cclear]').forEach(el=>el.onclick=(ev)=>{
+        ev.stopPropagation(); setMat(id, +el.dataset.cclear, null); _craftPick=null; d.refresh(); });
+      p.querySelectorAll('[data-cmat]').forEach(el=>el.onclick=()=>{
+        setMat(id, _craftPick, el.dataset.cmat); _craftPick=null; d.refresh(); });
+    } });
+}
+document.getElementById('craftBtn').addEventListener('click',()=>openCraft());
+document.getElementById('craft').addEventListener('click',()=>openCraft());
 
 /* --- 原材料の選択 --- */
 function openMatPicker(machineId, slotIdx){
@@ -848,7 +925,7 @@ function shopBody(){
           <button data-sell="${p.id}" data-q="1">1個</button><button data-sell="${p.id}" data-q="all" style="margin-left:5px">全部</button></div>`;
       }).join('') : '<div class="cost" style="padding:12px">売れる景品がありません。🎁ガチャで景品を集めよう。</div>';
     } else if(_shopTab==='mach'){
-      body = '<div class="cost" style="margin:2px 0 6px">設置済みの製造機（Lv↑で生産量が増える。素材は🔧編集で機械をクリック）</div>';
+      body = '<div class="cost" style="margin:2px 0 6px">設置済みの製造機（Lv↑で生産量が増える。素材は🏭製造タブでセット）</div>';
       const machs=(G.layout||[]).filter(e=>e.kind==='machine');
       body += (machs.length?machs:[]).map(e=>{ const c=lvCost(e.lvl), M=MACH[machSub(e.sub)];
         return `<div class="rc"><div class="ic">${M.e}</div>
@@ -944,12 +1021,13 @@ function renderPalette(){
   const cell=(dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
   if(editCat==='bg'){ hint='背景を選ぶと即適用（部屋ごと切替）';
     items=ownedBgs().map(k=>`<div class="pitem ${G.bg===k?'cur':''}" data-bg="${k}">${BG_META[k].e}<small>${BG_META[k].n}</small></div>`).join('');
-  } else if(editCat==='prop'){ hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
+  } else if(editCat==='prop'){ hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')
+      +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去';
     const P=Object.keys(PROP).filter(t=>availN('prop',t)>0).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
     const D=Object.keys(DECO).filter(t=>availN('deco',t)>0).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
     items=(P.concat(D).join(''))||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
   } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です')
-      +'<br>設置済みの製造機はクリックで設定パネル → 素材のセット / ↻回転 / ✥移動（床クリックで置き直し）/ 🗑撤去';
+      +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去 ・ クリックで設定パネル（↻回転・✥移動／素材は🏭製造タブ）';
     const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.sub===t));
     items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
   }
@@ -986,14 +1064,14 @@ window.__openMachine=(id)=>{
     const prod = p ? `<div class="rc"><div class="ic">${p.e}</div><div class="mid">
         <div class="nm">${p.n}</div><div class="cost">${p.unknown?'レシピに無い組み合わせ（🪨 謎のカタマリになります）':'この組み合わせで作れます'}</div></div></div>`
       : '<div class="cost" style="padding:6px 2px">原材料を入れるとここに作れる物が出ます</div>';
-    return `<div class="cost" style="margin:2px 0 8px">1マスにつき素材1つ。入っている素材の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。</div>`
+    return `<div class="cost" style="margin:2px 0 8px">1マスにつき素材1つ。入っている素材の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。素材は🏭製造タブでもまとめてセットできます。</div>`
       + slots + picker
       + `<div class="cost" style="margin:12px 0 6px">作れる物</div>` + prod
       + `<div class="rc" style="margin-top:12px"><div class="mid"><div class="nm">配置</div>`
-      + `<div class="cost">向きを変える / 別の場所へ移す / この製造機を撤去する</div></div>`
-      + `<button data-rot="1">↻ 回転</button><button data-move="1" style="margin-left:5px">✥ 移動</button>`
-      + `<button data-del="1" style="margin-left:5px">🗑 撤去</button></div>`;
+      + `<div class="cost">向きを変える / 別の場所へ移す（撤去は🗑ゴミ箱へドラッグ）</div></div>`
+      + `<button data-rot="1">↻ 回転</button><button data-move="1" style="margin-left:5px">✥ 移動</button></div>`;
   },
+    actions:[{label:'🏭 製造タブへ',kind:'ghost',on:()=>openCraft()}],
     onRender:(p,d)=>{
     p.querySelectorAll('[data-slot]').forEach(el=>el.onclick=(ev)=>{
       if(ev.target.dataset && ev.target.dataset.clear!=null) return; _matPick=+el.dataset.slot; d.refresh(); });
@@ -1008,8 +1086,7 @@ window.__openMachine=(id)=>{
     p.querySelectorAll('[data-move]').forEach(el=>el.onclick=()=>{
       if(!F.beginMoveMachine(id)){ toast('移動できません'); return; }
       closeOverlay(); syncEditFab(); });   // 移動は必要なら編集モードをONにするので表示を合わせる
-    p.querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{
-      F.removeMachine(id); window.__layoutChanged(); updateBadge(); renderCraft(); closeOverlay(); toast('製造機を撤去しました'); });
+    // 撤去はドラッグ&ドロップ(🗑ゴミ箱)に一本化したのでボタンは持たない
   } });
   return dlg;
 };
@@ -1020,7 +1097,7 @@ function syncEditFab(){ const on=!!(window.__scene&&window.__scene.editMode), fa
   if(on) renderPalette(); else { editSel=null; window.__editSel=null; } }
 function toggleEditMode(){ if(!window.__scene){ toast('準備中…'); return; }
   const on=window.__scene.toggleEdit(); syncEditFab();
-  toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 製造機をクリックで素材設定・移動':'編集モードを終了'); }
+  toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 設置済みはドラッグで移動・🗑へドラッグで撤去':'編集モードを終了'); }
 document.getElementById('editFab').addEventListener('click',toggleEditMode);
 document.getElementById('editMenuBtn').addEventListener('click',toggleEditMode);
 loadGame().then(async ()=>{

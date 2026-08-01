@@ -2,17 +2,20 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const chain = () => new Proxy(function(){}, {
-  get(t,k){
-    if(k==='texture') return {key:'stub', getSourceImage:()=>({width:64,height:64})};
-    if(k==='displayWidth'||k==='displayHeight'||k==='x'||k==='y'||k==='width'||k==='height') return 32;
-    if(k==='visible') return true;
-    if(k==='destroy') return ()=>{};
-    return chain();
-  },
-  apply(){ return chain(); },
-  set(){ return true; },
-});
+// 代入した値は控えて読み戻せる(ドラッグは obj._e / obj.x,y を読み書きするので素通しでは検証できない)
+const chain = () => { const store={};
+  return new Proxy(function(){}, {
+    get(t,k){
+      if(Object.prototype.hasOwnProperty.call(store,k)) return store[k];
+      if(k==='texture') return {key:'stub', getSourceImage:()=>({width:64,height:64})};
+      if(k==='displayWidth'||k==='displayHeight'||k==='x'||k==='y'||k==='width'||k==='height') return 32;
+      if(k==='visible') return true;
+      if(k==='destroy') return ()=>{};
+      return chain();
+    },
+    apply(){ return chain(); },
+    set(t,k,v){ store[k]=v; return true; },
+  }); };
 const obj = () => { const o = chain(); return o; };
 
 const textures = { exists:(k)=>['dec_crate','dec_plant','m_red','m_blue','m_green','m_yellow','item_box','shadow','spark'].includes(k),
@@ -23,7 +26,17 @@ const Phaser = {
   Scale:{FIT:0,CENTER_BOTH:0},
   Math:{ Clamp:(v,a,b)=>Math.max(a,Math.min(b,v)) },
   Utils:{ Array:{ Shuffle:(a)=>a } },
-  Geom:{ Rectangle: class { constructor(){} static Contains(){ return false; } } },
+  // ゴミ箱の矩形・製造機の掴み手(多角形)は実際に内外判定するのでちゃんと実装する
+  Geom:{
+    Rectangle: class { constructor(x,y,w,h){ this.x=x; this.y=y; this.width=w; this.height=h; }
+      static Contains(rc,x,y){ return x>=rc.x && x<=rc.x+rc.width && y>=rc.y && y<=rc.y+rc.height; } },
+    Polygon: class { constructor(flat){ this.points=[];
+        for(let i=0;i+1<flat.length;i+=2) this.points.push({x:flat[i],y:flat[i+1]}); }
+      static Contains(poly,x,y){ const p=poly.points; let inside=false;
+        for(let i=0,j=p.length-1;i<p.length;j=i++)
+          if((p[i].y>y)!==(p[j].y>y) && x < (p[j].x-p[i].x)*(y-p[i].y)/(p[j].y-p[i].y)+p[i].x) inside=!inside;
+        return inside; } },
+  },
   Curves:{ Path: class { constructor(){} lineTo(){} quadraticBezierTo(){} getPoint(){} } },
   Display:{ Color:{ IntegerToColor:()=>({r:1,g:1,b:1,color:0}), HexStringToColor:()=>({color:0}),
     Interpolate:{ ColorWithColor:()=>({r:1,g:1,b:1}) }, GetColor:()=>0xffffff } },
@@ -192,7 +205,10 @@ console.log('\n[12] 製造機の移動（掴んで置き直す）');
   window.__layoutChanged=()=>{ layoutN++; };
   window.__openMachine=(id)=>{ opened=id; };
   const pt=(c,r)=>sandbox.cellXY(c,r);                                     // マス中心の画面座標
-  const click=(c,r)=>{ for(const fn of (s.input._h['pointerdown']||[])) fn(pt(c,r),[]); };
+  // クリック=押して離す。編集中の製造機はドラッグと区別するため「離した時点」で設定パネルが開く
+  const click=(c,r)=>{ const p=pt(c,r);
+    for(const fn of (s.input._h['pointerdown']||[])) fn(p,[]);
+    for(const fn of (s.input._h['pointerup']||[])) fn(p); };
   const key=(n)=>{ for(const fn of (s.input.keyboard._h[n]||[])) fn(); };
   const cellOf=(id)=>{ const e=s.placed.find(x=>x.id===id); return e? e.cell.c+','+e.cell.r : '-'; };
   const dirOf=(id)=>{ const e=s.placed.find(x=>x.id===id); return e&&e.dir; };
@@ -252,7 +268,135 @@ console.log('\n[12] 製造機の移動（掴んで置き直す）');
   s.toggleEdit(false); window.__toast=null; window.__layoutChanged=null; window.__openMachine=null;
 }
 
-console.log('\n[13] グローバル名の衝突（main.js と factory-phaser.html）');
+console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と同じ操作感）');
+{
+  const toasts=[]; let layoutN=0, opened=null;
+  window.__toast=(t)=>toasts.push(String(t));
+  window.__layoutChanged=()=>{ layoutN++; };
+  window.__openMachine=(id)=>{ opened=id; };
+  const pt=(c,r)=>sandbox.cellXY(c,r);                                     // マス中心の画面座標
+  const hs=(ev)=>(s.input._h[ev]||[]);
+  // Phaser の pointer は「押した位置」を downX/downY に持つ(dragstart は最初に動かした時点で飛ぶ)
+  let dn={x:0,y:0};
+  const P=(x,y)=>({x,y,downX:dn.x,downY:dn.y});
+  const down=(x,y,over)=>{ dn={x,y}; for(const fn of hs('pointerdown')) fn(P(x,y), over||[]); };
+  const up=(x,y)=>{ for(const fn of hs('pointerup')) fn(P(x,y)); };
+  const dstart=(o,x,y)=>{ for(const fn of hs('dragstart')) fn(P(x,y),o); };
+  const dmove =(o,x,y)=>{ for(const fn of hs('drag')) fn(P(x,y),o,x,y); };
+  const dend  =(o,x,y)=>{ for(const fn of hs('dragend')) fn(P(x,y),o); };
+  const ent=(id)=>s.placed.find(x=>x.id===id);
+  const cellOf=(id)=>{ const e=ent(id); return e? e.cell.c+','+e.cell.r : '-'; };
+  // 掴んで運んで離す(押下〜離すまで一式)。to は画面座標
+  const drag=(id,to)=>{ const e=ent(id), a=pt(e.cell.c,e.cell.r), o=e.main;
+    down(a.x,a.y); dstart(o,a.x,a.y); dmove(o,to.x,to.y); dend(o,to.x,to.y); up(to.x,to.y); };
+
+  s.buildLayout([]); s.toggleEdit(true);
+  const dm=s.addPlaced('machine','s3',{cell:{c:1,r:1},dir:'u'});
+  const blk=s.addPlaced('machine','s2',{cell:{c:5,r:5},dir:'u'});
+  const de=ent(dm);
+
+  // -- 掴める(当たり判定) --
+  ok(de.main && de.main._e===de, '製造機の main に掴み手(_e)がついている');
+  const hit=s._machHit(de);
+  ok(hit.points.length===6, '当たり判定は占有マス外周＋高さの6角形');
+  const c0=pt(1,1), c2=pt(3,1);
+  ok(Phaser.Geom.Polygon.Contains(hit,c0.x,c0.y), '先頭マスの中心を掴める');
+  ok(Phaser.Geom.Polygon.Contains(hit,c2.x,c2.y), '3マス目(占有の端)の中心も掴める');
+  ok(Phaser.Geom.Polygon.Contains(hit,c0.x,c0.y-de._hgt*0.6), '筐体の高さぶん(床の外)も掴める');
+  ok(!Phaser.Geom.Polygon.Contains(hit,pt(8,8).x,pt(8,8).y), '離れたマスは掴めない');
+  const hit2=s._machHit({kind:'machine',sub:'s2',dir:'u',cell:{c:5,r:5},_hgt:de._hgt});
+  ok(!Phaser.Geom.Polygon.Contains(hit2,c0.x,c0.y), '別の製造機の当たり判定には入らない');
+
+  // -- 置ける先へドラッグして移動 --
+  const l0=layoutN;
+  drag(dm, pt(8,2));
+  ok(cellOf(dm)==='8,2', `空きマスへドラッグで移動できる → 実際 ${cellOf(dm)}`);
+  ok(s.occ.has('8,2')&&s.occ.has('9,2')&&s.occ.has('10,2')&&!s.occ.has('1,1'), '占有マスが移動先へ移る');
+  ok(layoutN===l0+1, 'ドロップで __layoutChanged() が呼ばれる');
+  ok(opened===null, 'ドラッグしたときは設定パネルを開かない');
+
+  // -- dragstart は「最初に動かした時点」で飛ぶ。起点が押した位置でないと落とし先がズレる --
+  { const e=ent(dm), a=pt(e.cell.c,e.cell.r), b=pt(4,6), h={x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+    down(a.x,a.y); dstart(e.main,h.x,h.y); dmove(e.main,b.x,b.y); dend(e.main,b.x,b.y); up(b.x,b.y);
+    ok(cellOf(dm)==='4,6', `途中から dragstart が飛んでも狙ったマスへ落ちる → 実際 ${cellOf(dm)}`); }
+  drag(dm, pt(8,2)); ok(cellOf(dm)==='8,2', 'もう一度ドラッグして元のマスへ戻せる');
+
+  // -- 置けない先はドロップしても元の位置 --
+  toasts.length=0;
+  const gx=ent(dm).objs[0].x, gy=ent(dm).objs[0].y;
+  drag(dm, pt(5,5));   // blk と重なる
+  ok(cellOf(dm)==='8,2', '置けない先へ落としても元の位置のまま');
+  ok(toasts.some(t=>t.includes('置けません')), '置けないときはトーストで知らせる');
+  ok(s.occ.has('8,2')&&s.occ.has('5,5'), '両方の占有マスが保たれる');
+  { const o=ent(dm).objs[0]; ok(o.x===gx&&o.y===gy, '絵の座標も掴む前へ戻る');
+    ok(ent(dm)._dbase==null, 'ドラッグの控えが残らない'); }
+
+  // -- 盤外へはみ出す先も不可 --
+  drag(dm, pt(11,7));
+  ok(cellOf(dm)==='8,2', '3マスぶんが盤外へ出る先には置けない');
+
+  // -- クリック(ほぼ動かない)なら設定パネル --
+  opened=null;
+  { const e=ent(dm), a=pt(e.cell.c,e.cell.r);
+    down(a.x,a.y); dstart(e.main,a.x,a.y); dmove(e.main,a.x+3,a.y+2); dend(e.main,a.x+3,a.y+2); up(a.x+3,a.y+2);
+    ok(opened===dm, 'しきい値以下の移動はクリック扱い → 設定パネルが開く');
+    ok(cellOf(dm)==='8,2', 'クリック扱いのときは移動しない'); }
+  opened=null; { const a=pt(5,5); down(a.x,a.y); up(a.x,a.y); }
+  ok(opened===blk, 'ドラッグせずクリックしただけでも設定パネルが開く');
+
+  // -- ゴミ箱へドロップで撤去 --
+  opened=null; const l1=layoutN, tr=s._trashRect, tp={x:tr.x+tr.width/2, y:tr.y+tr.height/2};
+  drag(dm, tp);
+  ok(ent(dm)===undefined, 'ゴミ箱へドラッグすると撤去される');
+  ok(!s.occ.has('8,2')&&!s.occ.has('9,2')&&!s.occ.has('10,2'), '撤去で占有マスが解放される');
+  ok(layoutN===l1+1, '撤去でも __layoutChanged() が呼ばれる');
+  ok(opened===null, '撤去したのに設定パネルは開かない');
+
+  // -- 移動モード中はドラッグと干渉しない --
+  const mm=s.addPlaced('machine','s2',{cell:{c:1,r:8},dir:'u'});
+  F().beginMoveMachine(mm);
+  { const e=ent(mm), a=pt(1,8), b=pt(8,8);
+    dstart(e.main,a.x,a.y); dmove(e.main,b.x,b.y); dend(e.main,b.x,b.y);
+    ok(cellOf(mm)==='1,8', '移動モード中はドラッグしても動かない');
+    ok(s._mdrag==null, '移動モード中はドラッグ状態を作らない');
+    ok(F().isMoving()===true, '移動モードは維持される'); }
+  F().cancelMove();
+
+  // -- 編集モード外ではドラッグしない --
+  s.toggleEdit(false);
+  { const e=ent(mm), a=pt(1,8), b=pt(6,8);
+    dstart(e.main,a.x,a.y); dmove(e.main,b.x,b.y); dend(e.main,b.x,b.y);
+    ok(cellOf(mm)==='1,8', '編集モード外ではドラッグで動かない'); }
+  opened=null; { const a=pt(1,8); down(a.x,a.y); }
+  ok(opened===mm, '編集モード外は押した時点で設定パネルが開く(従来どおり)');
+
+  // -- 編集を抜けたらドラッグ中の見た目も戻る --
+  s.toggleEdit(true);
+  { const e=ent(mm), a=pt(1,8), b=pt(6,8), o=e.objs[0], ox=o.x, oy=o.y;
+    down(a.x,a.y); dstart(e.main,a.x,a.y); dmove(e.main,b.x,b.y);
+    ok(o.x!==ox, 'ドラッグ中は絵がカーソルについてくる');
+    s.toggleEdit(false);
+    ok(s._mdrag==null, '編集を抜けるとドラッグ状態が解除される');
+    ok(o.x===ox&&o.y===oy, '絵の座標も元へ戻る'); }
+
+  // -- prop/deco の従来のドラッグが壊れていない --
+  s.buildLayout([]); s.toggleEdit(true);
+  const dc=s.addPlaced('deco','crate',{cell:{c:2,r:2}});
+  { const e=ent(dc), b=pt(7,3);
+    ok(e.main._e===e, 'deco にも掴み手がついている');
+    dmove(e.main,b.x,b.y); dend(e.main,b.x,b.y);
+    ok(cellOf(dc)==='7,3', `deco をドラッグで移動できる → 実際 ${cellOf(dc)}`); }
+  { const e=ent(dc), b=pt(7,3); dmove(e.main,b.x,b.y); dend(e.main,tp.x,tp.y);
+    ok(ent(dc)===undefined, 'deco をゴミ箱へドラッグすると撤去される'); }
+  const dc2=s.addPlaced('deco','crate',{cell:{c:2,r:2}});
+  s.addPlaced('machine','s2',{cell:{c:9,r:9},dir:'u'});
+  { const e=ent(dc2), b=pt(9,9); dmove(e.main,b.x,b.y); dend(e.main,b.x,b.y);
+    ok(cellOf(dc2)==='2,2', 'deco は製造機の占有マスへは置けず元へ戻る'); }
+
+  s.toggleEdit(false); window.__toast=null; window.__layoutChanged=null; window.__openMachine=null;
+}
+
+console.log('\n[14] グローバル名の衝突（main.js と factory-phaser.html）');
 { // クラシックスクリプト同士なので同名の const/let/class/function は SyntaxError になり
   // HTML のスクリプトが丸ごと実行されなくなる（= UIが全部死ぬ）。機械的に検出する。
   const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
