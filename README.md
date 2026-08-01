@@ -69,6 +69,20 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 | `server.mjs` | セッションを読んで配信＋静的ファイル配信する常駐サーバ |
 | `claude-factory.html` | **メインのゲーム画面**（背景画像・設置・工場/休憩室・ダッシュボード） |
 | `assets/factory-*.jpg` | Stitch 生成の空部屋背景（morning / evening / night） |
+| `assets/prop_*.png` | 装飾プロップ（汎用12種 + テーマ別6種×5テーマ）。**表示サイズに合わせて縮小済み** |
+| `assets/prop-src/prop_*.png` | 上記の原寸版（切り出したまま・200〜400px）。サイズを変えるときの元データ |
+| `assets/prop-sheets/*.jpg` | Stitch が生成したアセットシート（1枚に3×2で6体） |
+| `tools/cut_props.py` | シートから1体ずつ切り出し、背景と接地影を抜いて `assets/prop-src/` を作る |
+| `tools/fit_props.py` | 原寸版をゲーム内の表示サイズへ縮小して `assets/prop_*.png` を作る |
+
+### プロップの大きさ（コマ数）
+
+`pixelArt:true`（NEAREST）なので、原寸のまま1コマ（約42px）に縮めると描き込みが間引かれて潰れる。
+そのため **① 描き込みの多い物は使う床のコマ数を増やす ② 素材をその表示サイズまで縮小しておく** の2段で対応している。
+
+- コマ数は `game/main.js` の `PROP_SPAN`（1 / 2 / 4）が唯一の定義。表示高 = `1.35 * CELL * √コマ数`
+- 例: 回転レーン・ネタケース・人間大砲・真鍮ボイラー等は 4コマ（2×2相当）、給茶台などは 2コマ
+- `PROP_SPAN` を変えたら `python3 tools/fit_props.py` を実行して素材を焼き直す
 | `pixel-factory.html` | 旧・全手描きドット絵版（`http://localhost:4321/classic` で表示） |
 | `index.html` | 初期のシンプル版（カードUI） |
 | `machine-concepts.html` | 工場に足す機械のコンセプトボード |

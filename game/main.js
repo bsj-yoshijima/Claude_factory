@@ -55,7 +55,25 @@ const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_j
   diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino',
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
   retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen' };
-const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen'];  // Stitch製 装飾プロップ
+// Stitch製 装飾プロップ。汎用12種 + テーマ別6種×5テーマ(部屋画像と同じアイソメ視点で生成)
+const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen',
+  'cir_popcorn','cir_ballstand','cir_trunks','cir_ringtoss','cir_cannon','cir_stool',                 // 🎪 サーカス
+  'sus_lane','sus_oke','sus_tea','sus_sake','sus_neko','sus_netacase',                                // 🍣 回転寿司
+  'wes_barreltable','wes_horseshoe','wes_wheel','wes_campfire','wes_cactus','wes_assay',              // 🤠 西部開拓
+  'bee_combtable','bee_honeypots','bee_pollen','bee_candles','bee_throne','bee_frames',               // 🐝 ミツバチの巣
+  'stm_boiler','stm_cogs','stm_console','stm_chair','stm_orrery','stm_coal'];                         // ⚙️ スチームパンク
+// プロップが使う床のコマ数(=見た目の大きさ)。1コマだと潰れて読めない描き込みの多い物を 2/4 に上げる。
+// 表示高 = 1.35*CELL*√コマ数（4コマなら縦横2倍 = 2x2マス相当）。未指定は1コマ。
+// 素材PNGはこの表示サイズに合わせて縮小済み(tools/fit_props.py)。値を変えたら再実行が必要。
+const PROP_SPAN = {
+  sus_lane:4, sus_netacase:4, cir_popcorn:4, cir_cannon:4, wes_campfire:4, bee_throne:4, stm_boiler:4, stm_console:4,
+  sus_tea:2, sus_sake:2, sus_oke:2, sus_neko:2, cir_trunks:2, cir_ringtoss:2, cir_ballstand:2,
+  wes_barreltable:2, wes_horseshoe:2, wes_wheel:2, wes_assay:2,
+  bee_combtable:2, bee_honeypots:2, bee_pollen:2, bee_candles:2, bee_frames:2,
+  stm_chair:2, stm_cogs:2, stm_orrery:2,
+};
+const propSpan = (name)=> PROP_SPAN[name] || 1;
+window.PROP_SPAN = PROP_SPAN;   // ショップ表示(factory-phaser.html)から参照
 // エージェントのスキン(id=テーマキー・31種＋'none')。スキン=被り物(帽子)だけ。ベースのマスコットは常にそのまま、
 // 頭上に被り物テクスチャ hat_<id>(形状指定でStitch生成→マゼンタ抜き)を1枚重ねる。定義のあるidだけ帽子が乗る。プロジェクト単位で永続化。
 const SKINS = [
@@ -203,7 +221,7 @@ class Main extends Phaser.Scene {
       const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
       objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
     } else if(e.kind==='prop'){
-      const img=this.add.image(p.x,p.y,'prop_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.35*CELL/img.height).setTint(tint);
+      const img=this.add.image(p.x,p.y,'prop_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.35*Math.sqrt(propSpan(e.sub))*CELL/img.height).setTint(tint);
       const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.09,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.0,img.displayWidth*0.46).setAlpha(0.5);
       objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
     } else if(e.kind==='emoji'){
