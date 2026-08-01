@@ -146,13 +146,9 @@
          width:fit-content;max-width:min(340px,100%)}
   #craft:hover{border-color:var(--mint)}
   #craft .pe{font-size:25px;line-height:1;flex:none}
-  #craft .mid{min-width:132px}
   #craft .nm{font-size:11px;color:#eafff4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
-  #craft .kv{display:flex;justify-content:space-between;gap:9px;color:#9fb0c0;font-size:10px;margin-top:2px}
-  #craft .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
-  #craft .kv .run{color:#7fe6ff}
-  #craft .bar{height:7px;background:#0d1315;border:1px solid var(--edge);border-radius:4px;overflow:hidden;margin-top:3px}
-  #craft .bar>i{display:block;height:100%;background:linear-gradient(90deg,#78d0a6,var(--gold));width:0}
+  #craft .sub{font-size:10px;color:#9fb0c0;margin-top:2px}
+  #craft .sub.warn{color:#ff9f7a}
   #craft .go{font-size:10px;color:#9fdcc6;flex:none}
   /* ===== 🏭製造ダイアログ: 原材料のマスとWPの進捗 ===== */
   .mslots{display:flex;gap:7px;flex-wrap:wrap}
@@ -838,22 +834,17 @@ function renderBoard(){
 
 /* --- 製造のコンパクト表示（画面上中央）。詳しい操作は🏭製造ダイアログに寄せ、
        ここは「いま何を作っているか + WP」だけを出す導線にする --- */
+/* 上中央のこれは🏭製造ダイアログを開くためのトリガー。
+   進捗は各機械の行で見るので、ここでは稼働台数だけ出す。 */
 function renderCraft(){
   const el=document.getElementById('craft'); if(!el) return;
-  const ms=machines(), run=ms.filter(m=>machState(m.id).running);
-  // 何が作れるかは出さない。進捗は「一番先に完成する機械」を代表として見せる
-  let lead=null, leadPct=-1;
-  for(const m of run){ const st=machState(m.id), pct=st.wp/needWp(m); if(pct>leadPct){ leadPct=pct; lead=m; } }
+  const ms=machines(), run=ms.filter(m=>machState(m.id).running).length;
   const face = !ms.length ? {e:'🏭', n:'製造機なし'}
-             : run.length ? {e:'⚙️', n:`製造中 ${run.length}/${ms.length}台`}
+             : run ? {e:'⚙️', n:`製造中 ${run}/${ms.length}台`}
              : {e:'📦', n:`待機中 ${ms.length}台`};
-  const need=lead?needWp(lead):0, wp=lead?Math.floor(machState(lead.id).wp):0;
   el.innerHTML = `<span class="pe">${face.e}</span>
-    <div class="mid"><div class="nm">${face.n}</div>
-      <div class="kv"><span class="${run.length?'run':''}"${WPST.ok?'':' style="color:#ff9f7a"'}>${
-        !WPST.ok?'WP未取得':(lead?`${lead.no||''}号機がもうすぐ`:'▶製造開始でカウント')}</span>
-        <b>${lead?`${wp} / ${need} WP`:'—'}</b></div>
-      <div class="bar"><i style="width:${lead?Math.min(100,leadPct*100).toFixed(1):0}%"></i></div></div>
+    <div class="mid"><div class="nm">${face.n}</div>${
+      WPST.ok?'':'<div class="sub warn">WP未取得（サーバ未接続）</div>'}</div>
     <span class="go">🏭▸</span>`;
   el.title='クリックで🏭製造（原材料のセット・製造開始）';
   renderBoard();
