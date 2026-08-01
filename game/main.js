@@ -89,7 +89,8 @@ const PROP_SPAN = {
 };
 // 基本家具はスロットでコマ数を固定する(テーマが変わっても椅子は椅子の大きさ)。
 // `<テーマ3文字>_<スロット>` の命名なので、末尾から引ける。
-const FURN_SPAN = { chair:1, table:1, shelf:1, sofa:2, rug:2, lamp:2, plant:2 };
+// テーブルはソファとセットで置くので、ソファと同じ2コマにして大きさを揃える
+const FURN_SPAN = { chair:1, table:2, shelf:1, sofa:2, rug:2, lamp:2, plant:2 };
 const propSpan = (name)=> PROP_SPAN[name] || FURN_SPAN[String(name).split('_')[1]] || 1;
 window.PROP_SPAN = PROP_SPAN;   // ショップ表示(factory-phaser.html)から参照
 // 収納(=在庫に戻す)の対象。在庫を持つ種類だけ。絵文字装飾やガチャ景品は在庫が無く、

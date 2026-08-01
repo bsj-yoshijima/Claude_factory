@@ -51,8 +51,13 @@ def read_consts():
 # シルエットしか見えない物だけをここで持ち上げる(平均輝度が他のスロットに揃う値)。
 BRIGHTEN = {'hal_shelf': 1.5}
 
+# 左右反転。アイソメでは水平反転が「90度回した向き」に相当する。
+# ソファは全テーマ手前角が右寄りに揃っているので、逆向きに描かれたテーブルだけ
+# 反転させてセットで置いたときに向きが合うようにする(接地線の手前角で判定した)。
+FLIP = {'din_table', 'cab_table', 'hal_table'}
 
-def pixelize(im, target_h, block, colors, sharpen, brighten=1.0):
+
+def pixelize(im, target_h, block, colors, sharpen, brighten=1.0, flip=False):
     """表示サイズへ落としつつ、ドット絵の「パキッとした」質感に整える。
 
     ただ縮小しただけだと半透明の縁と中間色だらけの「精細なミニチュア」になる。
@@ -63,6 +68,8 @@ def pixelize(im, target_h, block, colors, sharpen, brighten=1.0):
       5) NEAREST で block 倍に戻す（block=1 なら等倍のまま）
     block を上げるほど粒は粗くなる。1 で細かくパキッと、2 でドット感が強い。
     """
+    if flip:
+        im = im.transpose(Image.FLIP_LEFT_RIGHT)
     if brighten != 1.0:
         r, g, b, a = im.split()
         rgb = ImageEnhance.Brightness(Image.merge('RGB', (r, g, b))).enhance(brighten)
@@ -94,7 +101,7 @@ def main(ss=1, block=1, colors=24, sharpen=140, out_dir=OUT_DIR):
         span = spans.get(name) or furn.get(name.split('_')[1] if '_' in name else '', 1)
         target_h = round(BASE * math.sqrt(span) * cell * ss)
         im = Image.open(src).convert('RGBA')
-        out = pixelize(im, target_h, block, colors, sharpen, BRIGHTEN.get(name, 1.0))
+        out = pixelize(im, target_h, block, colors, sharpen, BRIGHTEN.get(name, 1.0), name in FLIP)
         out.save(os.path.join(out_dir, f'prop_{name}.png'))
         rows.append(f'  {name:18s} {span}コマ  {im.width}x{im.height} → {out.size[0]}x{out.size[1]}')
     print('\n'.join(rows))
