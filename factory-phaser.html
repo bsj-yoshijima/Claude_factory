@@ -23,7 +23,11 @@
   #menu .mi{padding:8px 11px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--ink);text-decoration:none;display:block}
   #menu .mi:hover{background:#1d262c;color:var(--gold)}
   /* ===== 今日の労働量（このゲームの主役の数字。製造設定とは分ける） ===== */
-  #board{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;display:flex;gap:0;
+  /* 実績ボードと製造設定は横並び。幅が足りなければ上下に折り返す */
+  #topwrap{position:absolute;top:10px;left:0;right:0;margin:0 auto;z-index:7;display:flex;gap:10px;
+           flex-wrap:wrap;justify-content:center;align-items:flex-start;
+           width:fit-content;max-width:min(1040px,calc(100vw - 190px))}
+  #board{display:flex;gap:0;flex:none;
          background:var(--panel);border:1px solid var(--edge);border-radius:12px;overflow:hidden;backdrop-filter:blur(4px)}
   #board .m{padding:8px 22px;text-align:center;min-width:126px}
   #board .m+.m{border-left:1px solid var(--edge)}
@@ -103,11 +107,11 @@
   .pitem.dim{opacity:.4;cursor:default}
   .phint{font-size:10px;color:#9fb0c0}
   /* ===== 製造（抽出機に原材料をセット → WPを溜めて製品化）。コア機能なので上中央 ===== */
-  #craft{position:absolute;top:76px;left:50%;transform:translateX(-50%);z-index:7;background:var(--panel);
-         border:1px solid var(--edge);border-radius:11px;padding:8px 11px;font-size:11px;backdrop-filter:blur(4px);
-         display:flex;align-items:center;gap:11px;flex-wrap:wrap;
-         /* max-content にしないと折り返しの都合でボックスが不必要に細くなる */
-         width:max-content;max-width:min(760px,calc(100vw - 24px))}
+  #craft{background:var(--panel);border:1px solid var(--edge);border-radius:11px;padding:8px 11px;font-size:11px;
+         backdrop-filter:blur(4px);display:flex;align-items:center;gap:11px;flex-wrap:wrap;
+         /* 内容に合わせた幅。max-width で頭を押さえておくと、長い注意文だけが下段に折り返る
+            （折り返し可の flex は max-content = 全要素の合計幅になるため上限が必要） */
+         width:fit-content;max-width:min(486px,100%)}
   #craft .slots{display:flex;gap:5px}
   #craft .slot{width:52px;height:46px;border:2px dashed #33443f;border-radius:8px;display:flex;flex-direction:column;
                align-items:center;justify-content:center;cursor:pointer;background:#0e1417}
@@ -156,9 +160,11 @@
     <div class="mi" id="shopBtn">🏪 ショップ</div>
     <a class="mi" href="/metrics">📊 メトリクス</a>
   </div>
-  <div id="board"></div>
+  <div id="topwrap">
+    <div id="board"></div>
+    <div id="craft"></div>
+  </div>
   <div id="doneBtn">🎁 完成品 <span id="doneN"></span></div>
-  <div id="craft"></div>
   <div id="editFab">🔧 レイアウト編集</div>
   <div id="hud"></div>
   <div id="palette"></div>
