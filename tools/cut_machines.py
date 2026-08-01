@@ -4,12 +4,14 @@
     使い方: python3 tools/cut_machines.py
 
 入力 : assets/mach-sheets/<theme>.png   … 左上から 2/3/4/5 マス機の順(2x2)
-出力 : assets/mach-<theme>-s<N>.png     … 透過PNG・ゲーム内の表示幅ちょうど
-       assets/mach-fit.json             … 素材ごとのスロット中心(スプライト幅/高さに対する比)
+出力 : assets/mach-<theme>-s<N>.png     … 透過PNG・ゲーム内の表示サイズちょうど
 
-なぜ mach-fit.json が要るか:
-  絵の筐体の比率は、ゲーム側で計算する占有外周の比率とぴったりは一致しない。
-  スロット位置を計算で出すと素材アイコンが絵の穴からズレるので、絵から実測して持たせる。
+サイズの決め方（ここが肝）:
+  4台は「同じ機械の長さ違い」なので、**筐体の高さは4台とも同じ**でなければならない。
+  ところが生成された絵は台ごとにマスピッチが違う（例: アラビアで1マス 92/69/58/48px）。
+  幅だけ占有外周に合わせると、長い台ほど筐体が高くなってしまう（実測で最大+37%）。
+  そこで幅=占有外周の幅、高さ=占有外周の高さ+共通の筐体高、として**縦横別々に**合わせる。
+  共通の筐体高は4台の中央値。歪みは数%に収まるが、閾値を超えたら警告を出す。
 
 なぜ表示幅まで縮小するか:
   Phaser は pixelArt:true (NEAREST) なので、245px の素材を 155px で描くとピクセルが
@@ -92,7 +94,7 @@ def key_out(im):
     return im
 
 
-def slot_centers(sp, n):
+def _unused_slot_centers(sp, n):
     """スプライトから凹みスロットの中心を実測する。
     穴は「面積のある暗い塊」。輪郭線と区別するため収縮して残るものだけを拾う。"""
     w, h = sp.size
@@ -162,9 +164,16 @@ def slot_centers(sp, n):
     return cs
 
 
+def target_height(n, W, H, GU, GV, iso, IN):
+    """u方向にNマス並べたときの、占有外周の画面bbox高さ(px)。筐体の高さは含まない"""
+    return abs((n - 2 * IN) / GU * iso['uy'] * H) + abs((1 - 2 * IN) / GV * iso['vy'] * H)
+
+
+MAX_WARP = 0.15   # 縦の歪みがこれを超えたら警告(背の高い意匠を潰している可能性)
+
+
 def main():
     W, H, GU, GV, iso, IN = main_js_consts()
-    fit = {}
     for f in sorted(os.listdir(SHEETS)):
         if not f.lower().endswith('.png'):
             continue
@@ -172,6 +181,8 @@ def main():
         sheet = key_out(Image.open(os.path.join(SHEETS, f)))
         sw, sh = sheet.size
         print(f'== {f} ({sw}x{sh})')
+        # 1周目: 切り出して、幅を占有外周に合わせたときの「筐体の高さ」を測る
+        cut = []
         for i, n in enumerate(SIZES):
             cx, cy = i % COLS, i // COLS
             quad = sheet.crop((cx * sw // COLS, cy * sh // ROWS,
@@ -181,26 +192,26 @@ def main():
                 print(f'   s{n}: 中身なし・スキップ'); continue
             sp = quad.crop(bb)
             tw = target_width(n, W, H, GU, GV, iso, IN)
-            th = max(1, round(sp.height * tw / sp.width))
-            out = sp.resize((round(tw), th), Image.LANCZOS)
+            fh = target_height(n, W, H, GU, GV, iso, IN)
+            hw = sp.height * tw / sp.width          # 幅だけ合わせたときの高さ
+            cut.append((n, sp, tw, fh, hw - fh))    # 末尾 = そのときの筐体高
+        if not cut:
+            continue
+        bodies = sorted(c[4] for c in cut)
+        body = bodies[len(bodies) // 2]             # 共通の筐体高 = 中央値
+        print(f'   共通の筐体高 = {body:.1f}px (実測 {", ".join(f"{c[4]:.0f}" for c in cut)})')
+
+        # 2周目: 幅=占有外周の幅 / 高さ=占有外周の高さ+共通の筐体高 で焼く
+        for n, sp, tw, fh, b in cut:
+            th = fh + body
+            warp = th / (fh + b) - 1                # 縦の歪み
+            out = sp.resize((round(tw), round(th)), Image.LANCZOS)
             path = os.path.join(OUT, f'mach-{theme}-s{n}.png')
             out.save(path)
-            cs = slot_centers(out, n)
-            if cs:
-                fit.setdefault(theme, {})[str(n)] = [[round(x / out.width, 4), round(y / out.height, 4)] for x, y in cs]
-                gap = (cs[-1][0] - cs[0][0]) / (n - 1)
-                note = f'スロット{n}個 検出 (間隔 {gap:.1f}px)'
-            else:
-                note = f'!! スロット検出に失敗({n}個見つからず) → 計算位置で描画'
-            pitch = sp.width / n      # 素材側の1マスあたりの幅(整合の目安)
-            print(f'   s{n}: 原寸 {sp.width}x{sp.height} (1マス={pitch:.0f}px) '
-                  f'→ {out.width}x{out.height}  {note}')
+            flag = '  !! 縦の歪みが大きい' if abs(warp) > MAX_WARP else ''
+            print(f'   s{n}: 原寸 {sp.width}x{sp.height} → {out.width}x{out.height}'
+                  f'  筐体 {b:.0f}→{body:.0f}px  縦{warp*+100:+.1f}%{flag}')
 
-
-    import json
-    with open(os.path.join(OUT, 'mach-fit.json'), 'w', encoding='utf-8') as fp:
-        json.dump(fit, fp, ensure_ascii=False, indent=1)
-    print('\nwrote assets/mach-fit.json')
 
 
 if __name__ == '__main__':

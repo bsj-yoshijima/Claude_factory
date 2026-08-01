@@ -145,6 +145,10 @@ ok(await ev(`!${gobtn}.disabled`), '行の ▶製造開始 が押せる');
 await ev(`${gobtn}.click()`); await sleep(350);
 ok(await ev(`machState(${JSON.stringify(mid)}).running===true`), '▶製造開始でその機械が稼働する');
 ok(await ev(`/\\d+ \\/ \\d+ WP/.test(document.querySelector('.mrow .wpline').textContent)`), '行にWPの進捗が出る');
+ok((await ev(`document.querySelectorAll('.mrow .wpline b').length`))===nrow, '行ごとにWP表示がある');
+ok(await ev(`/\\d+ \\/ \\d+ WP/.test(document.querySelector('.mrow .wpline b').textContent)`), 'WPは「現在 / 必要」形式');
+// 必要WP = マス数 × WP_PER_SLOT
+ok(await ev(`(function(){const m=machinesSorted()[0]; return needWp(m)===m.size*WP_PER_SLOT;})()`), '必要WPがマス数に比例する');
 await ev(`${gobtn}.click()`); await sleep(300);
 ok(await ev(`machState(${JSON.stringify(mid)}).running===false`), '■停止で止まる');
 await sleep(1200);
