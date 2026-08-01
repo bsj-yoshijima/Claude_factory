@@ -73,7 +73,28 @@ const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion',
   'fan_chair','fan_table','fan_sofa','fan_shelf','fan_rug','fan_lamp','fan_plant','fan_cauldron',     // 🧙 ファンタジー
   'pir_chair','pir_table','pir_sofa','pir_shelf','pir_rug','pir_lamp','pir_plant','pir_chest',        // 🏴‍☠️ 海賊船
   'hal_chair','hal_table','hal_sofa','hal_shelf','hal_rug','hal_lamp','hal_plant','hal_pumpkin',      // 🎃 ハロウィン
-  'sea_chair','sea_table','sea_sofa','sea_shelf','sea_rug','sea_lamp','sea_plant','sea_treasure'];    // 🐚 海底
+  'sea_chair','sea_table','sea_sofa','sea_shelf','sea_rug','sea_lamp','sea_plant','sea_treasure',     // 🐚 海底
+  'arb_chair','arb_table','arb_sofa','arb_shelf','arb_rug','arb_lamp','arb_plant','arb_hookah',       // 🕌 アラビア
+  'chn_chair','chn_table','chn_sofa','chn_shelf','chn_rug','chn_lamp','chn_plant','chn_censer',       // 🐉 中華
+  'dno_chair','dno_table','dno_sofa','dno_shelf','dno_rug','dno_lamp','dno_plant','dno_fossil',       // 🦖 ダイナソー
+  'hnt_chair','hnt_table','hnt_sofa','hnt_shelf','hnt_rug','hnt_lamp','hnt_plant','hnt_clock',        // 👻 幽霊屋敷
+  'wes_chair','wes_table','wes_sofa','wes_shelf','wes_rug','wes_lamp','wes_plant','wes_piano',        // 🤠 西部開拓
+  'bee_chair','bee_table','bee_sofa','bee_shelf','bee_rug','bee_lamp','bee_plant','bee_honeyfountain',// 🐝 ミツバチの巣
+  'cir_chair','cir_table','cir_sofa','cir_shelf','cir_rug','cir_lamp','cir_plant','cir_carousel',     // 🎪 サーカス
+  'tky_chair','tky_table','tky_sofa','tky_shelf','tky_rug','tky_lamp','tky_plant','tky_vending',      // 🌃 Tokyo
+  'cct_chair','cct_table','cct_sofa','cct_shelf','cct_rug','cct_lamp','cct_plant','cct_podium',       // 🏁 サーキット
+  'dwf_chair','dwf_table','dwf_sofa','dwf_shelf','dwf_rug','dwf_lamp','dwf_plant','dwf_forge',        // ⛏️ ドワーフ鉱山
+  'hel_chair','hel_table','hel_sofa','hel_shelf','hel_rug','hel_lamp','hel_plant','hel_cauldron',     // 😈 地獄
+  'rft_chair','rft_table','rft_sofa','rft_shelf','rft_rug','rft_lamp','rft_plant','rft_organ',        // 🛸 レトロ未来
+  'crn_chair','crn_table','crn_sofa','crn_shelf','crn_rug','crn_lamp','crn_plant','crn_maskpedestal', // 🎭 カーニバル
+  'dst_chair','dst_table','dst_sofa','dst_shelf','dst_rug','dst_lamp','dst_plant','dst_skull',        // 🏜️ 砂漠
+  'jgl_chair','jgl_table','jgl_sofa','jgl_shelf','jgl_rug','jgl_lamp','jgl_plant','jgl_idol',         // 🌿 ジャングル
+  'egy_chair','egy_table','egy_sofa','egy_shelf','egy_rug','egy_lamp','egy_plant','egy_sarcophagus',  // 🔺 エジプト
+  'xms_chair','xms_table','xms_sofa','xms_shelf','xms_rug','xms_lamp','xms_plant','xms_fireplace',    // 🎄 クリスマス
+  'spc_chair','spc_table','spc_sofa','spc_shelf','spc_rug','spc_lamp','spc_plant','spc_console',      // 🛰️ 宇宙
+  'ice_chair','ice_table','ice_sofa','ice_shelf','ice_rug','ice_lamp','ice_plant','ice_throne',       // ❄️ 氷の城
+  'msh_chair','msh_table','msh_sofa','msh_shelf','msh_rug','msh_lamp','msh_plant','msh_bed',          // 🍄 森のキノコ
+  'ons_chair','ons_table','ons_sofa','ons_shelf','ons_rug','ons_lamp','ons_plant','ons_rotenburo'];   // ♨️ 温泉
 // プロップが使う床のコマ数(=見た目の大きさ)。1コマだと潰れて読めない描き込みの多い物を 2/4 に上げる。
 // 表示高 = 1.35*CELL*√コマ数（4コマなら縦横2倍 = 2x2マス相当）。未指定は1コマ。
 // 素材PNGはこの表示サイズに合わせて縮小済み(tools/fit_props.py)。値を変えたら再実行が必要。
@@ -83,9 +104,13 @@ const PROP_SPAN = {
   wes_barreltable:2, wes_horseshoe:2, wes_wheel:2, wes_assay:2,
   bee_combtable:2, bee_honeypots:2, bee_pollen:2, bee_candles:2, bee_frames:2,
   stm_armchair:2, stm_cogs:2, stm_orrery:2,
-  // 各テーマの名物(一点物)
+  // 各テーマの名物(一点物)。基本家具と同じ2コマ
   sus_noren:2, stm_helmet:2, jpn_byobu:2, din_jukebox:2, cab_hearth:2,
   sci_starmap:2, fan_cauldron:2, pir_chest:2, hal_pumpkin:2, sea_treasure:2,
+  arb_hookah:2, chn_censer:2, dno_fossil:2, hnt_clock:2, wes_piano:2,
+  bee_honeyfountain:2, cir_carousel:2, tky_vending:2, cct_podium:2, dwf_forge:2,
+  hel_cauldron:2, rft_organ:2, crn_maskpedestal:2, dst_skull:2, jgl_idol:2,
+  egy_sarcophagus:2, xms_fireplace:2, spc_console:2, ice_throne:2, msh_bed:2, ons_rotenburo:2,
 };
 // 基本家具はスロットでコマ数を固定する(テーマが変わっても椅子は椅子の大きさ)。
 // `<テーマ3文字>_<スロット>` の命名なので、末尾から引ける。

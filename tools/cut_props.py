@@ -49,6 +49,48 @@ SHEETS = {
                            'cab_rug', 'cab_lamp', 'cab_plant', 'cab_hearth']),
     'halloween-furn': (4, ['hal_chair', 'hal_table', 'hal_sofa', 'hal_shelf',
                            'hal_rug', 'hal_lamp', 'hal_plant', 'hal_pumpkin']),
+    'china-furn':     (4, ['chn_chair', 'chn_table', 'chn_sofa', 'chn_shelf',
+                           'chn_rug', 'chn_lamp', 'chn_plant', 'chn_censer']),
+    'haunted-furn':   (4, ['hnt_chair', 'hnt_table', 'hnt_sofa', 'hnt_shelf',
+                           'hnt_rug', 'hnt_lamp', 'hnt_plant', 'hnt_clock']),
+    'arabia-furn':    (4, ['arb_chair', 'arb_table', 'arb_sofa', 'arb_shelf',
+                           'arb_rug', 'arb_lamp', 'arb_plant', 'arb_hookah']),
+    'western-furn':   (4, ['wes_chair', 'wes_table', 'wes_sofa', 'wes_shelf',
+                           'wes_rug', 'wes_lamp', 'wes_plant', 'wes_piano']),
+    'tokyo-furn':     (4, ['tky_chair', 'tky_table', 'tky_sofa', 'tky_shelf',
+                           'tky_rug', 'tky_lamp', 'tky_plant', 'tky_vending']),
+    'dino-furn':      (4, ['dno_chair', 'dno_table', 'dno_sofa', 'dno_shelf',
+                           'dno_rug', 'dno_lamp', 'dno_plant', 'dno_fossil']),
+    'circus-furn':    (4, ['cir_chair', 'cir_table', 'cir_sofa', 'cir_shelf',
+                           'cir_rug', 'cir_lamp', 'cir_plant', 'cir_carousel']),
+    'beehive-furn':   (4, ['bee_chair', 'bee_table', 'bee_sofa', 'bee_shelf',
+                           'bee_rug', 'bee_lamp', 'bee_plant', 'bee_honeyfountain']),
+    'hell-furn':      (4, ['hel_chair', 'hel_table', 'hel_sofa', 'hel_shelf',
+                           'hel_rug', 'hel_lamp', 'hel_plant', 'hel_cauldron']),
+    'circuit-furn':   (4, ['cct_chair', 'cct_table', 'cct_sofa', 'cct_shelf',
+                           'cct_rug', 'cct_lamp', 'cct_plant', 'cct_podium']),
+    'dwarf-furn':     (4, ['dwf_chair', 'dwf_table', 'dwf_sofa', 'dwf_shelf',
+                           'dwf_rug', 'dwf_lamp', 'dwf_plant', 'dwf_forge']),
+    'retrofuture-furn': (4, ['rft_chair', 'rft_table', 'rft_sofa', 'rft_shelf',
+                           'rft_rug', 'rft_lamp', 'rft_plant', 'rft_organ']),
+    'carnival-furn':  (4, ['crn_chair', 'crn_table', 'crn_sofa', 'crn_shelf',
+                           'crn_rug', 'crn_lamp', 'crn_plant', 'crn_maskpedestal']),
+    'desert-furn':    (4, ['dst_chair', 'dst_table', 'dst_sofa', 'dst_shelf',
+                           'dst_rug', 'dst_lamp', 'dst_plant', 'dst_skull']),
+    'jungle-furn':    (4, ['jgl_chair', 'jgl_table', 'jgl_sofa', 'jgl_shelf',
+                           'jgl_rug', 'jgl_lamp', 'jgl_plant', 'jgl_idol']),
+    'egypt-furn':     (4, ['egy_chair', 'egy_table', 'egy_sofa', 'egy_shelf',
+                           'egy_rug', 'egy_lamp', 'egy_plant', 'egy_sarcophagus']),
+    'christmas-furn': (4, ['xms_chair', 'xms_table', 'xms_sofa', 'xms_shelf',
+                           'xms_rug', 'xms_lamp', 'xms_plant', 'xms_fireplace']),
+    'space-furn':     (4, ['spc_chair', 'spc_table', 'spc_sofa', 'spc_shelf',
+                           'spc_rug', 'spc_lamp', 'spc_plant', 'spc_console']),
+    'ice-furn':       (4, ['ice_chair', 'ice_table', 'ice_sofa', 'ice_shelf',
+                           'ice_rug', 'ice_lamp', 'ice_plant', 'ice_throne']),
+    'mushroom-furn':  (4, ['msh_chair', 'msh_table', 'msh_sofa', 'msh_shelf',
+                           'msh_rug', 'msh_lamp', 'msh_plant', 'msh_bed']),
+    'onsen-furn':     (4, ['ons_chair', 'ons_table', 'ons_sofa', 'ons_shelf',
+                           'ons_rug', 'ons_lamp', 'ons_plant', 'ons_rotenburo']),
 }
 ROWS = 2
 # 「囲まれた背景を抜く」処理を無効にするアイテム。
@@ -257,8 +299,17 @@ class Cell:
         return dropped
 
     def drop_outside(self, x0, x1):
-        """重心が [x0,x1) の外にある塊を捨てる(のりしろで拾った隣の物を除く)。"""
-        seen, dropped = [[False] * self.w for _ in range(self.h)], 0
+        """のりしろで拾った隣の物を捨てる。
+
+        1セルには1体しか無い前提で「セル中心に一番近い塊」を主体とし、
+        そこから離れた塊だけを落とす。重心が自セル内かどうかで判定すると、
+        ラグのようにセル幅を超える物が境界をまたいだとき、隣のセルに
+        重心ごと入り込んで残ってしまうため。
+        主体の近く(20px以内)かつ十分小さい(主体の20%以下)塊だけは、輪投げの輪や
+        蒸気のような離れパーツなので残す。シートは詰まっていて隣の家具も20px程度まで
+        寄っているため、距離だけでは切り分けられない。
+        """
+        comps, seen, dropped = [], [[False] * self.w for _ in range(self.h)], 0
         for sy in range(self.h):
             for sx in range(self.w):
                 if self.bg[sy][sx] or seen[sy][sx]:
@@ -271,11 +322,30 @@ class Cell:
                         nx, ny = x + dx, y + dy
                         if 0 <= nx < self.w and 0 <= ny < self.h and not self.bg[ny][nx] and not seen[ny][nx]:
                             seen[ny][nx] = True; q.append((nx, ny))
-                cx = sum(p[0] for p in pts) / len(pts)
-                if not (x0 <= cx < x1):
-                    for x, y in pts:
-                        self.bg[y][x] = True
-                    dropped += 1
+                comps.append(pts)
+        if not comps:
+            return 0
+        mid = (x0 + x1) / 2
+        big = [c for c in comps if len(c) >= 200] or comps
+        prim = min(big, key=lambda c: abs(sum(p[0] for p in c) / len(c) - mid))
+        pxs = [p[0] for p in prim]; pys = [p[1] for p in prim]
+        px0, px1, py0, py1 = min(pxs), max(pxs), min(pys), max(pys)
+        for c in comps:
+            if c is prim:
+                continue
+            cxs = [p[0] for p in c]; cys = [p[1] for p in c]
+            gap_x = max(0, max(min(cxs) - px1, px0 - max(cxs)))
+            gap_y = max(0, max(min(cys) - py1, py0 - max(cys)))
+            # 重心が自セル内にあるものは同じ物の一部(ランプの傘・釜の脚など)なので残す。
+            # 列境界を上下段で別々に取っているので、隣の家具の重心はセル外に出る。
+            ccx = sum(cxs) / len(c)
+            if x0 <= ccx < x1:
+                continue
+            if gap_x <= 20 and gap_y <= 20 and len(c) <= 0.2 * len(prim):
+                continue                       # セル外だが主体のすぐ近くの小片(はみ出した装飾)
+            for x, y in c:
+                self.bg[y][x] = True
+            dropped += 1
         return dropped
 
     def bbox(self):
@@ -307,13 +377,14 @@ def make_blend_test(c1, c2):
     return test
 
 
-def col_bounds(px, W, H, test, ncols):
-    """列の境界を「本体が無い縦帯」の中心から決める。
+def col_bounds(px, W, y0, y1, test, ncols):
+    """y0..y1 の帯だけを見て、列の境界を「本体が無い縦帯」の中心から決める。
 
     等分だと、セル幅より広い物(ラグ等)が隣のセルへはみ出して切れてしまうため、
     理想位置(W*i/ncols)に一番近い空白帯の中心を境界に使う。
+    上段と下段で列位置がズレて生成されるシートがあるので、行ごとに別々に求める。
     """
-    empty = [x for x in range(W) if all(test(px[x, y]) for y in range(H))]
+    empty = [x for x in range(W) if all(test(px[x, y]) for y in range(y0, y1))]
     runs = []
     for x in empty:
         if runs and x == runs[-1][1] + 1:
@@ -359,13 +430,15 @@ def main(src_dir, out_dir):
         corners = [px[2, 2], px[W - 3, 2], px[2, H - 3], px[W - 3, H - 3]]
         bgc = tuple(sum(c[i] for c in corners) // 4 for i in range(3))
         test = make_bg_test(bgc)
-        xs = col_bounds(px, W, H, test, COLS)
-        splits = [row_split(px, H, xs[c], xs[c + 1], test) for c in range(COLS)]
-        print(f'{sheet}: 背景 {bgc} / 列境界 {xs} / 段境界 {splits}')
+        top = col_bounds(px, W, 0, H // 2, test, COLS)          # 上段の列境界
+        bot = col_bounds(px, W, H // 2, H, test, COLS)           # 下段の列境界(ズレることがある)
+        splits = [row_split(px, H, min(top[c], bot[c]), max(top[c + 1], bot[c + 1]), test) for c in range(COLS)]
+        print(f'{sheet}: 背景 {bgc} / 上段列 {top} / 下段列 {bot} / 段境界 {splits}')
         for i, name in enumerate(names):
             cx, cy = i % COLS, i // COLS
+            xs = top if cy == 0 else bot
             # セル幅を超える物(ラグ等)が切れないよう、左右に のりしろ を取って読む
-            margin = round((xs[cx + 1] - xs[cx]) * 0.5)
+            margin = round((xs[cx + 1] - xs[cx]) * 0.35)
             x0, x1 = max(0, xs[cx] - margin), min(W, xs[cx + 1] + margin)
             y0, y1 = (0, splits[cx]) if cy == 0 else (splits[cx], H)
             cell = Cell(px, x0, y0, x1, y1)
