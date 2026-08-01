@@ -21,7 +21,7 @@ import os
 import re
 import sys
 
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAIN_JS = os.path.join(ROOT, 'game', 'main.js')
@@ -40,29 +40,90 @@ def read_consts():
             + math.hypot(float(iso['vx']) * W / GV, float(iso['vy']) * H / GV)) / 2
     span_body = re.search(r'const PROP_SPAN\s*=\s*\{(.*?)\n\};', js, re.S).group(1)
     spans = {k: int(v) for k, v in re.findall(r'(\w+)\s*:\s*(\d+)', span_body)}
+    # 基本家具はスロット(chair/table/...)でコマ数が決まる。main.js の FURN_SPAN と同じ規則を使う
+    furn_body = re.search(r'const FURN_SPAN\s*=\s*\{([^}]*)\}', js).group(1)
+    furn = {k: int(v) for k, v in re.findall(r'(\w+)\s*:\s*(\d+)', furn_body)}
     names = re.findall(r"'([a-z][a-z0-9_]*)'", re.search(r'const PROP_NAMES\s*=\s*\[(.*?)\];', js, re.S).group(1))
-    return cell, spans, names
+    return cell, spans, furn, names
 
 
-def main(ss=1):
-    cell, spans, names = read_consts()
-    print(f'CELL={cell:.1f}px  supersample={ss}')
+# 個別の明るさ補正。Stitch が暗く描いてしまい、暗いテーマの床に置くと沈んで
+# シルエットしか見えない物だけをここで持ち上げる(平均輝度が他のスロットに揃う値)。
+BRIGHTEN = {'hal_shelf': 1.5}
+
+# レベル補正(黒点, 白点)。Stitch が「白」を灰色で描いてしまった物を、
+# 暗部を保ったまま白へ持ち上げる(横断歩道ラグの白線が (159,157,168) の灰色だった)。
+LEVELS = {'tky_rug': (45, 162)}
+
+# 左右反転。アイソメでは水平反転が「90度回した向き」に相当する。
+# ソファは全テーマ手前角が右寄りに揃っているので、逆向きに描かれたテーブルだけ
+# 反転させてセットで置いたときに向きが合うようにする(接地線の手前角で判定した)。
+FLIP = {'din_table', 'cab_table', 'hal_table'}
+
+
+def pixelize(im, target_h, block, colors, sharpen, brighten=1.0, flip=False, levels=None):
+    """表示サイズへ落としつつ、ドット絵の「パキッとした」質感に整える。
+
+    ただ縮小しただけだと半透明の縁と中間色だらけの「精細なミニチュア」になる。
+      1) 論理解像度(表示サイズ / block)へ LANCZOS 縮小
+      2) アンシャープで、縮小で鈍ったエッジのコントラストを戻す ← パキッとさせる本体
+      3) 色数を落として面を平坦化(中間色の帯を減らす)
+      4) アルファを2値化して輪郭の滲みを断つ
+      5) NEAREST で block 倍に戻す（block=1 なら等倍のまま）
+    block を上げるほど粒は粗くなる。1 で細かくパキッと、2 でドット感が強い。
+    """
+    if flip:
+        im = im.transpose(Image.FLIP_LEFT_RIGHT)
+    if levels:
+        lo, hi = levels
+        lut = [0 if v <= lo else (255 if v >= hi else round((v - lo) * 255 / (hi - lo))) for v in range(256)]
+        r, g, b, a = im.split()
+        im = Image.merge('RGBA', (r.point(lut), g.point(lut), b.point(lut), a))
+    if brighten != 1.0:
+        r, g, b, a = im.split()
+        rgb = ImageEnhance.Brightness(Image.merge('RGB', (r, g, b))).enhance(brighten)
+        im = Image.merge('RGBA', (*rgb.split(), a))
+    lh = max(1, round(target_h / block))
+    lw = max(1, round(im.width * (target_h / im.height) / block))
+    small = im.resize((lw, lh), Image.LANCZOS)
+    if sharpen:
+        r, g, b, a = small.split()
+        rgb = Image.merge('RGB', (r, g, b)).filter(
+            ImageFilter.UnsharpMask(radius=1, percent=sharpen, threshold=2))
+        small = Image.merge('RGBA', (*rgb.split(), a))
+    r, g, b, a = small.split()
+    a = a.point(lambda v: 255 if v >= 128 else 0)                       # 輪郭を硬く
+    rgb = Image.merge('RGB', (r, g, b)).quantize(colors=colors, dither=Image.Dither.NONE).convert('RGB')
+    small = Image.merge('RGBA', (*rgb.split(), a))
+    return small if block == 1 else small.resize((lw * block, lh * block), Image.NEAREST)
+
+
+def main(ss=1, block=1, colors=24, sharpen=140, out_dir=OUT_DIR):
+    cell, spans, furn, names = read_consts()
+    print(f'CELL={cell:.1f}px  ss={ss}  block={block}px  colors={colors}  sharpen={sharpen}%  out={out_dir}')
     missing, rows = [], []
     for name in names:
         src = os.path.join(SRC_DIR, f'prop_{name}.png')
         if not os.path.exists(src):
             missing.append(name)
             continue
-        span = spans.get(name, 1)
+        span = spans.get(name) or furn.get(name.split('_')[1] if '_' in name else '', 1)
         target_h = round(BASE * math.sqrt(span) * cell * ss)
         im = Image.open(src).convert('RGBA')
-        scale = target_h / im.height
-        out = im.resize((max(1, round(im.width * scale)), target_h), Image.LANCZOS)
-        out.save(os.path.join(OUT_DIR, f'prop_{name}.png'))
+        out = pixelize(im, target_h, block, colors, sharpen, BRIGHTEN.get(name, 1.0), name in FLIP, LEVELS.get(name))
+        out.save(os.path.join(out_dir, f'prop_{name}.png'))
         rows.append(f'  {name:18s} {span}コマ  {im.width}x{im.height} → {out.size[0]}x{out.size[1]}')
     print('\n'.join(rows))
     print(f'{len(rows)}体を書き出しました' + (f' / 原寸なし: {missing}' if missing else ''))
 
 
 if __name__ == '__main__':
-    main(int(sys.argv[1]) if len(sys.argv) > 1 else 1)
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--supersample', type=int, default=1)
+    ap.add_argument('--block', type=int, default=1, help='1ドットの大きさ(px)。2〜3でドット絵の粒になる')
+    ap.add_argument('--colors', type=int, default=24, help='1体あたりの色数')
+    ap.add_argument('--sharpen', type=int, default=140, help='アンシャープの強さ(%%)。0で無効')
+    ap.add_argument('--out', default=OUT_DIR)
+    a = ap.parse_args()
+    main(a.supersample, a.block, a.colors, a.sharpen, a.out)

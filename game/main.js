@@ -116,13 +116,46 @@ const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_j
   diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino',
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
   retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen' };
-// Stitch製 装飾プロップ。汎用12種 + テーマ別6種×5テーマ(部屋画像と同じアイソメ視点で生成)
+// Stitch製 装飾プロップ(部屋画像と同じアイソメ視点で生成)。
+//   汎用12種 + テーマ別の「名物」6種×5テーマ + テーマ別の「基本家具」7種×テーマ
+// 基本家具は全テーマ共通のスロット(chair/table/sofa/shelf/rug/lamp/plant)で、材質と色だけテーマで差し替える。
 const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion','bonsai','lantern','pedestal','flower','screen',
   'cir_popcorn','cir_ballstand','cir_trunks','cir_ringtoss','cir_cannon','cir_stool',                 // 🎪 サーカス
   'sus_lane','sus_oke','sus_tea','sus_sake','sus_neko','sus_netacase',                                // 🍣 回転寿司
   'wes_barreltable','wes_horseshoe','wes_wheel','wes_campfire','wes_cactus','wes_assay',              // 🤠 西部開拓
   'bee_combtable','bee_honeypots','bee_pollen','bee_candles','bee_throne','bee_frames',               // 🐝 ミツバチの巣
-  'stm_boiler','stm_cogs','stm_console','stm_chair','stm_orrery','stm_coal'];                         // ⚙️ スチームパンク
+  'stm_boiler','stm_cogs','stm_console','stm_armchair','stm_orrery','stm_coal',                       // ⚙️ スチームパンク
+  'sus_chair','sus_table','sus_sofa','sus_shelf','sus_rug','sus_lamp','sus_plant','sus_noren',        // 🍣 家具セット
+  'stm_chair','stm_table','stm_sofa','stm_shelf','stm_rug','stm_lamp','stm_plant','stm_helmet',       // ⚙️ 家具セット
+  'jpn_chair','jpn_table','jpn_sofa','jpn_shelf','jpn_rug','jpn_lamp','jpn_plant','jpn_byobu',        // ⛩️ 日本
+  'din_chair','din_table','din_sofa','din_shelf','din_rug','din_lamp','din_plant','din_jukebox',      // 🍔 ダイナー
+  'cab_chair','cab_table','cab_sofa','cab_shelf','cab_rug','cab_lamp','cab_plant','cab_hearth',       // 🌲 森コテージ
+  'sci_chair','sci_table','sci_sofa','sci_shelf','sci_rug','sci_lamp','sci_plant','sci_starmap',      // 🚀 SF宇宙
+  'fan_chair','fan_table','fan_sofa','fan_shelf','fan_rug','fan_lamp','fan_plant','fan_cauldron',     // 🧙 ファンタジー
+  'pir_chair','pir_table','pir_sofa','pir_shelf','pir_rug','pir_lamp','pir_plant','pir_chest',        // 🏴‍☠️ 海賊船
+  'hal_chair','hal_table','hal_sofa','hal_shelf','hal_rug','hal_lamp','hal_plant','hal_pumpkin',      // 🎃 ハロウィン
+  'sea_chair','sea_table','sea_sofa','sea_shelf','sea_rug','sea_lamp','sea_plant','sea_treasure',     // 🐚 海底
+  'arb_chair','arb_table','arb_sofa','arb_shelf','arb_rug','arb_lamp','arb_plant','arb_hookah',       // 🕌 アラビア
+  'chn_chair','chn_table','chn_sofa','chn_shelf','chn_rug','chn_lamp','chn_plant','chn_censer',       // 🐉 中華
+  'dno_chair','dno_table','dno_sofa','dno_shelf','dno_rug','dno_lamp','dno_plant','dno_fossil',       // 🦖 ダイナソー
+  'hnt_chair','hnt_table','hnt_sofa','hnt_shelf','hnt_rug','hnt_lamp','hnt_plant','hnt_clock',        // 👻 幽霊屋敷
+  'wes_chair','wes_table','wes_sofa','wes_shelf','wes_rug','wes_lamp','wes_plant','wes_piano',        // 🤠 西部開拓
+  'bee_chair','bee_table','bee_sofa','bee_shelf','bee_rug','bee_lamp','bee_plant','bee_honeyfountain',// 🐝 ミツバチの巣
+  'cir_chair','cir_table','cir_sofa','cir_shelf','cir_rug','cir_lamp','cir_plant','cir_carousel',     // 🎪 サーカス
+  'tky_chair','tky_table','tky_sofa','tky_shelf','tky_rug','tky_lamp','tky_plant','tky_vending',      // 🌃 Tokyo
+  'cct_chair','cct_table','cct_sofa','cct_shelf','cct_rug','cct_lamp','cct_plant','cct_podium',       // 🏁 サーキット
+  'dwf_chair','dwf_table','dwf_sofa','dwf_shelf','dwf_rug','dwf_lamp','dwf_plant','dwf_forge',        // ⛏️ ドワーフ鉱山
+  'hel_chair','hel_table','hel_sofa','hel_shelf','hel_rug','hel_lamp','hel_plant','hel_cauldron',     // 😈 地獄
+  'rft_chair','rft_table','rft_sofa','rft_shelf','rft_rug','rft_lamp','rft_plant','rft_organ',        // 🛸 レトロ未来
+  'crn_chair','crn_table','crn_sofa','crn_shelf','crn_rug','crn_lamp','crn_plant','crn_maskpedestal', // 🎭 カーニバル
+  'dst_chair','dst_table','dst_sofa','dst_shelf','dst_rug','dst_lamp','dst_plant','dst_skull',        // 🏜️ 砂漠
+  'jgl_chair','jgl_table','jgl_sofa','jgl_shelf','jgl_rug','jgl_lamp','jgl_plant','jgl_idol',         // 🌿 ジャングル
+  'egy_chair','egy_table','egy_sofa','egy_shelf','egy_rug','egy_lamp','egy_plant','egy_sarcophagus',  // 🔺 エジプト
+  'xms_chair','xms_table','xms_sofa','xms_shelf','xms_rug','xms_lamp','xms_plant','xms_fireplace',    // 🎄 クリスマス
+  'spc_chair','spc_table','spc_sofa','spc_shelf','spc_rug','spc_lamp','spc_plant','spc_console',      // 🛰️ 宇宙
+  'ice_chair','ice_table','ice_sofa','ice_shelf','ice_rug','ice_lamp','ice_plant','ice_throne',       // ❄️ 氷の城
+  'msh_chair','msh_table','msh_sofa','msh_shelf','msh_rug','msh_lamp','msh_plant','msh_bed',          // 🍄 森のキノコ
+  'ons_chair','ons_table','ons_sofa','ons_shelf','ons_rug','ons_lamp','ons_plant','ons_rotenburo'];   // ♨️ 温泉
 // プロップが使う床のコマ数(=見た目の大きさ)。1コマだと潰れて読めない描き込みの多い物を 2/4 に上げる。
 // 表示高 = 1.35*CELL*√コマ数（4コマなら縦横2倍 = 2x2マス相当）。未指定は1コマ。
 // 素材PNGはこの表示サイズに合わせて縮小済み(tools/fit_props.py)。値を変えたら再実行が必要。
@@ -131,10 +164,30 @@ const PROP_SPAN = {
   sus_tea:2, sus_sake:2, sus_oke:2, sus_neko:2, cir_trunks:2, cir_ringtoss:2, cir_ballstand:2,
   wes_barreltable:2, wes_horseshoe:2, wes_wheel:2, wes_assay:2,
   bee_combtable:2, bee_honeypots:2, bee_pollen:2, bee_candles:2, bee_frames:2,
-  stm_chair:2, stm_cogs:2, stm_orrery:2,
+  stm_armchair:2, stm_cogs:2, stm_orrery:2,
+  // 各テーマの名物(一点物)。基本家具と同じ2コマ
+  sus_noren:2, stm_helmet:2, jpn_byobu:2, din_jukebox:2, cab_hearth:2,
+  sci_starmap:2, fan_cauldron:2, pir_chest:2, hal_pumpkin:2, sea_treasure:2,
+  arb_hookah:2, chn_censer:2, dno_fossil:2, hnt_clock:2, wes_piano:2,
+  bee_honeyfountain:2, cir_carousel:2, tky_vending:2, cct_podium:2, dwf_forge:2,
+  hel_cauldron:2, rft_organ:2, crn_maskpedestal:2, dst_skull:2, jgl_idol:2,
+  egy_sarcophagus:2, xms_fireplace:2, spc_console:2, ice_throne:2, msh_bed:2, ons_rotenburo:2,
 };
-const propSpan = (name)=> PROP_SPAN[name] || 1;
+// 基本家具はスロットでコマ数を固定する(テーマが変わっても椅子は椅子の大きさ)。
+// `<テーマ3文字>_<スロット>` の命名なので、末尾から引ける。
+// テーブルはソファとセットで置くので、ソファと同じ2コマにして大きさを揃える
+const FURN_SPAN = { chair:1, table:2, shelf:1, sofa:2, rug:2, lamp:2, plant:2 };
+// ラグは床に敷くだけの平物。セルを占有しないので上に家具を置け、キャラも上を歩ける。
+// 汎用の 'rug' と各テーマの '<pre>_rug' が対象。
+const isFlatProp = (sub)=> /(^|_)rug$/.test(String(sub));
+// ラグの描画深度。床(-999)より上・他のオブジェクト(depth=画面y なので正の値)より下に固定し、
+// 手前のマスに敷いても家具やキャラの上に被らないようにする。
+const RUG_DEPTH = -950;
+const propSpan = (name)=> PROP_SPAN[name] || FURN_SPAN[String(name).split('_')[1]] || 1;
 window.PROP_SPAN = PROP_SPAN;   // ショップ表示(factory-phaser.html)から参照
+// 収納(=在庫に戻す)の対象。在庫を持つ種類だけ。絵文字装飾やガチャ景品は在庫が無く、
+// 戻すと復元できないので対象外にする。
+const STOWABLE = ['prop','deco'];
 // エージェントのスキン(id=テーマキー・31種＋'none')。スキン=被り物(帽子)だけ。ベースのマスコットは常にそのまま、
 // 頭上に被り物テクスチャ hat_<id>(形状指定でStitch生成→マゼンタ抜き)を1枚重ねる。定義のあるidだけ帽子が乗る。プロジェクト単位で永続化。
 const SKINS = [
@@ -196,7 +249,7 @@ class Main extends Phaser.Scene {
     const grd=shg.createRadialGradient(32,16,1,32,16,30); grd.addColorStop(0,'rgba(0,0,0,0.5)'); grd.addColorStop(1,'rgba(0,0,0,0)');
     shg.fillStyle=grd; shg.fillRect(0,0,64,32); this.textures.addCanvas('shadow',shc);
 
-    this.occ=new Set(); this.machineCells=[]; this.placed=[]; this.editMode=false;
+    this.occ=new Set(); this.rugOcc=new Set(); this.machineCells=[]; this.placed=[]; this.editMode=false;
     this.partsTheme=null; this.placeDir='u';   // placeDir = 設置プレビューの向き(Rキーで切替)
     this.moveId=null;   // 移動モードで掴んでいる製造機のid(null=移動していない)
     for(const o of DEMO) this.addPlaced('deco', o.k.replace('dec_',''), {cell:{c:o.c,r:o.r}, silent:true});
@@ -258,9 +311,15 @@ class Main extends Phaser.Scene {
       const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
       objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
     } else if(e.kind==='prop'){
-      const img=this.add.image(p.x,p.y,'prop_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.35*Math.sqrt(propSpan(e.sub))*CELL/img.height).setTint(tint);
-      const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.09,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.0,img.displayWidth*0.46).setAlpha(0.5);
-      objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
+      // ラグは床に寝かせる平物: 影なし・マス中心に置く(足元基準だと奥にズレて浮いて見える)・常に最背面
+      const flat=isFlatProp(e.sub);
+      const img=this.add.image(p.x,p.y,'prop_'+e.sub).setOrigin(0.5,flat?0.5:1).setDepth(flat?RUG_DEPTH:p.y);
+      img.setScale(1.35*Math.sqrt(propSpan(e.sub))*CELL/img.height).setTint(tint);
+      if(!flat){
+        const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.09,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.0,img.displayWidth*0.46).setAlpha(0.5);
+        objs.push(sh);
+      }
+      objs.push(img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
     } else if(e.kind==='emoji'){
       const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.05,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.72,CELL*0.32).setAlpha(0.42);
       const t=this.add.text(p.x,p.y-CELL*0.12,e.sub,{fontSize:Math.round(CELL*1.05)+'px'}).setOrigin(0.5,1).setDepth(p.y);
@@ -372,11 +431,20 @@ class Main extends Phaser.Scene {
   _remake(e){ this._detach(e); this._makeObjs(e); if(this.editMode) this._enableDrag(e); }
 
   /* ---- 占有・設置可否 ---- */
-  _syncOcc(){ this.occ.clear(); for(const e of this.placed) for(const q of this.cellsOf(e)) this.occ.add(K(q.c,q.r)); }
+  _syncOcc(){ this.occ.clear(); this.rugOcc.clear();
+    for(const e of this.placed){
+      if(this.isFlat(e)){ this.rugOcc.add(K(e.cell.c,e.cell.r)); continue; }   // ラグは床の平物。マスを塞がない
+      for(const q of this.cellsOf(e)) this.occ.add(K(q.c,q.r)); } }
+  isRugFree(c,r){ return c>=0&&r>=0&&c<GU&&r<GV && !this.rugOcc.has(K(c,r)); }
+  freeRugCell(){ for(let i=0;i<60;i++){ const c=Math.floor(Math.random()*GU), r=Math.floor(Math.random()*GV);
+      if(this.isRugFree(c,r)) return {c,r}; }
+    for(let c=0;c<GU;c++) for(let r=0;r<GV;r++) if(this.isRugFree(c,r)) return {c,r};
+    return null; }
   machineAtCell(c,r){ return this.placed.find(e=>e.kind==='machine' && this.cellsOf(e).some(q=>q.c===c&&q.r===r))||null; }
   entryAtCell(c,r){ return this.placed.find(e=>this.cellsOf(e).some(q=>q.c===c&&q.r===r))||null; }
   /* 仮の entry を作って占有マスを判定する(設置前チェック用) */
   canPlace(kind,c,r,opt){ opt=opt||{};
+    if(kind==='prop' && isFlatProp(opt.sub)) return this.isRugFree(c,r);   // ラグは家具の上にも敷ける
     if(kind!=='machine') return this.isFree(c,r);
     const probe={kind:'machine', sub:opt.sub||'s1', dir:opt.dir||'u', cell:{c,r}};
     const skip=opt.ignoreId||null;
@@ -397,10 +465,12 @@ class Main extends Phaser.Scene {
     if(kind==='deco' && !this.textures.exists('dec_'+sub)) return null;
     if(kind==='machine') sub = 's'+machSize(sub);
     let dir = (kind==='machine') ? (extra.dir==='v'?'v':'u') : undefined;
+    // ラグは平物。家具の占有(occ)を無視して敷けるが、ラグ同士(rugOcc)は重ねない
+    const flat = kind==='prop' && isFlatProp(sub);
     let cell=extra.cell||null;
     if(cell && !this.canPlace(kind,cell.c,cell.r,{sub,dir})) cell=null;
     if(!cell && extra.strict) return null;              // レイアウト復元: 勝手に別マスへ動かさない
-    if(!cell){ const o={sub,dir}; cell=this.autoCell(kind,o); if(cell&&cell.dir) dir=cell.dir; }
+    if(!cell) cell = flat ? this.freeRugCell() : (function(o){ const q=this.autoCell(kind,o); if(q&&q.dir) dir=q.dir; return q; }).call(this,{sub,dir});
     if(!cell) return null;
     const e={ id: extra.id||('o'+(this._oid=(this._oid||0)+1)), kind, sub, lvl:extra.lvl||1,
       cell:{c:cell.c,r:cell.r}, dir, slots:(kind==='machine'? (extra.slots||[]) : undefined) };
@@ -413,7 +483,10 @@ class Main extends Phaser.Scene {
     if(e._lit){ const i=this.lit.findIndex(x=>x.sp===e._lit); if(i>=0)this.lit.splice(i,1); }
     if(e.kind==='machine'){ for(const q of this.cellsOf(e)){
       const i=this.machineCells.findIndex(m=>m.c===q.c&&m.r===q.r); if(i>=0)this.machineCells.splice(i,1); } } }
+  // ラグは平物。占有レイヤーが家具(occ)と別なので判定を切り替える
+  isFlat(e){ return e.kind==='prop' && isFlatProp(e.sub); }
   removeItem(id){ const i=this.placed.findIndex(x=>x.id===id); if(i<0) return false;
+    if(this.sel) this.sel.delete(id);
     this._detach(this.placed[i]); this.placed.splice(i,1); this.lastRemoved=1; this._syncOcc();
     if(this.moveId===id) this.cancelMove();   // 掴んでいた物が消えたら移動モードも抜ける
     if(this._mdrag && this._mdrag.id===id) this._mdrag=null;   // ドラッグ中の物が消えた場合も同様
@@ -513,6 +586,7 @@ class Main extends Phaser.Scene {
       this.add.text(0,0,'↔ 移動先の床をクリック ・ R:回転 ・ Esc:やめる',{fontSize:'13px',color:'#c8fff0'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     // 床クリック: 製造機の上なら設定パネル、空きマスならパレットで選択中のアイテムを設置
     this.input.on('pointerdown',(po,over)=>{
+      if(this.selectMode) return;   // 収納の選択中は設置も移動もしない
       this._tap=null;
       const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
@@ -585,11 +659,15 @@ class Main extends Phaser.Scene {
      多角形(見た目のシルエット)を渡す。A(最奥) B C(最手前) D の上辺と手前2面を結んだ6角形。 */
   _machHit(e){ const [A,B,C,D]=this._machFootprint(e), h=e._hgt||0;
     return new Phaser.Geom.Polygon([A.x,A.y-h, B.x,B.y-h, B.x,B.y, C.x,C.y, D.x,D.y, D.x,D.y-h]); }
+  // 通常は「ドラッグで移動」、収納の選択モード中は「クリックで選択」に付け替える
   _enableDrag(e){ const m=e.main; if(!m)return; m._e=e;
     if(e.kind==='machine') m.setInteractive({ hitArea:this._machHit(e), hitAreaCallback:Phaser.Geom.Polygon.Contains, useHandCursor:true });
     else m.setInteractive({useHandCursor:true});
-    this.input.setDraggable(m,true); }
-  _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; }
+    m.removeAllListeners('pointerdown');
+    const selectable = this.selectMode && STOWABLE.includes(e.kind);
+    this.input.setDraggable(m, !this.selectMode);
+    if(selectable) m.on('pointerdown', ()=>this.toggleSelect(e.id)); }
+  _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.removeAllListeners('pointerdown'); m.disableInteractive(); m._e=null; }
   _diamond(g,c,r){ const p0=uvXY(c/GU,r/GV),p1=uvXY((c+1)/GU,r/GV),p2=uvXY((c+1)/GU,(r+1)/GV),p3=uvXY(c/GU,(r+1)/GV);
     g.beginPath(); g.moveTo(p0.x,p0.y); g.lineTo(p1.x,p1.y); g.lineTo(p2.x,p2.y); g.lineTo(p3.x,p3.y); g.closePath(); }
   _drawHover(po){ const g=this.hoverGfx; if(!g)return;
@@ -621,12 +699,34 @@ class Main extends Phaser.Scene {
     for(const q of cells){ if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) continue;
       g.fillStyle(col,0.30); this._diamond(g,q.c,q.r); g.fillPath();
       g.lineStyle(2,col,0.95); this._diamond(g,q.c,q.r); g.strokePath(); } }
-  toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode); this.trash.setVisible(this.editMode);
-    if(!this.editMode){ this.cancelMove();   // 編集を抜けたら移動モードも解除(元の位置のまま)
+  toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode);
+    if(!this.editMode){ this.setSelectMode(false);
+      this.cancelMove();   // 編集を抜けたら移動モードも解除(元の位置のまま)
       this._tap=null;
       if(this._mdrag){ const dg=this.placed.find(x=>x.id===this._mdrag.id); this._mdrag=null; if(dg) this._snapBack(dg); } }
+    this.trash.setVisible(this.editMode && !this.selectMode);
     if(this.hoverGfx){ this.hoverGfx.clear(); this.hoverGfx.setVisible(false); }
     for(const e of this.placed){ this.editMode?this._enableDrag(e):this._disableDrag(e); } return this.editMode; }
+  /* ===== 収納(在庫に戻す) ===== */
+  stowables(){ return this.placed.filter(e=>STOWABLE.includes(e.kind)); }
+  stowAll(){ const list=this.stowables(); for(const e of list) this.removeItem(e.id); this._drawSel(); return list.length; }
+  setSelectMode(on){ const v=!!on; if(v===!!this.selectMode) return v;
+    this.selectMode=v; this.sel=new Set();
+    this.trash.setVisible(this.editMode && !v);
+    for(const e of this.placed) if(this.editMode) this._enableDrag(e);
+    this._drawSel(); this._notifySel(); return v; }
+  toggleSelect(id){ if(!this.sel) this.sel=new Set();
+    this.sel.has(id) ? this.sel.delete(id) : this.sel.add(id);
+    this._drawSel(); this._notifySel(); }
+  stowSelected(){ const ids=[...(this.sel||[])]; for(const id of ids) this.removeItem(id);
+    this.sel=new Set(); this._drawSel(); this._notifySel(); return ids.length; }
+  _notifySel(){ if(window.__selChanged) window.__selChanged(this.sel?this.sel.size:0); }
+  _drawSel(){ if(!this.selGfx) this.selGfx=this.add.graphics().setDepth(8400);
+    const g=this.selGfx; g.clear(); if(!this.selectMode) return;
+    for(const e of this.placed){ if(!this.sel || !this.sel.has(e.id)) continue;
+      const p=cellXY(e.cell.c,e.cell.r);
+      g.fillStyle(0x7fe6ff,0.20); g.fillEllipse(p.x,p.y-2,CELL*1.12,CELL*0.56);
+      g.lineStyle(2,0x7fe6ff,0.95); g.strokeEllipse(p.x,p.y-2,CELL*1.12,CELL*0.56); } }
   /* 窓オブジェクトを座標で定義(左壁 u=0)。床エッジ uvXY(0,v) を基準に壁の高さ方向へ立ち上げる。
      光源(採光の床帯・月/星のマスク)はすべてこの窓定義から導出する。 */
   defineWindows(){
@@ -767,6 +867,11 @@ class Main extends Phaser.Scene {
       g.fillStyle(pal.m1,0.95); g.fillPoints(ins(0.60),true);   // 芯ダイヤ(モチーフ)
     } }
   isFree(c,r){ return c>=0&&r>=0&&c<GU&&r<GV && !this.occ.has(K(c,r)); }
+  // ラグは家具とは別レイヤーで1マス1枚。家具のあるマスにも敷けるが、ラグ同士は重ねない
+  isRugFree(c,r){ return c>=0&&r>=0&&c<GU&&r<GV && !this.rugOcc.has(K(c,r)); }
+  freeRugCell(){ for(let i=0;i<80;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=1+Math.floor(Math.random()*(GV-2)); if(this.isRugFree(c,r)) return {c,r}; }
+    for(let c=0;c<GU;c++) for(let r=0;r<GV;r++) if(this.isRugFree(c,r)) return {c,r};
+    return {c:1,r:1}; }
   freeCell(){ for(let i=0;i<50;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=1+Math.floor(Math.random()*(GV-2)); if(this.isFree(c,r)) return {c,r}; } return {c:1,r:1}; }
   freeCellIn(minr,maxr){ for(let i=0;i<40;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=minr+Math.floor(Math.random()*(maxr-minr+1)); if(this.isFree(c,r)) return {c,r}; } return null; }
   freeAdjacent(cell){ const dirs=[[1,0],[-1,0],[0,1],[0,-1]]; Phaser.Utils.Array.Shuffle(dirs);

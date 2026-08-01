@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Stitch生成の3x2アセットシート(JPEG)を1体ずつ切り出して透過PNGにする。
+"""Stitch生成のアセットシート(JPEG)を1体ずつ切り出して透過PNGにする。
 
-    使い方: python3 tools/cut_props.py assets/prop-sheets assets
-    (素のPythonで全ピクセルを走査するので 1体あたり1分前後・全30体で30〜45分かかる)
+    使い方: python3 tools/cut_props.py assets/prop-sheets assets/prop-src [シート名...]
+            (シート名を渡すとそれだけ処理する)
+    (素のPythonで全ピクセルを走査するので 1体あたり1分前後かかる)
+
+シートは 3列x2行=6体(名物) か 4列x2行=8体(家具テンプレート)。列数は SHEETS で指定する。
 
 背景の紺と接地影を落とし、スプライト本体(暗い輪郭・黒い鉄・石炭を含む)は残す。
 
@@ -18,14 +21,87 @@ import sys, os
 from collections import deque, Counter
 from PIL import Image
 
+# シート名 -> (列数, 左上から行優先で並ぶ名前). 名物シートは3列x2行=6体、家具シートは4列x2行=8体。
 SHEETS = {
-    'circus':    ['cir_popcorn', 'cir_ballstand', 'cir_trunks', 'cir_ringtoss', 'cir_cannon', 'cir_stool'],
-    'sushi':     ['sus_lane', 'sus_oke', 'sus_tea', 'sus_sake', 'sus_neko', 'sus_netacase'],
-    'western':   ['wes_barreltable', 'wes_horseshoe', 'wes_wheel', 'wes_campfire', 'wes_cactus', 'wes_assay'],
-    'beehive':   ['bee_combtable', 'bee_honeypots', 'bee_pollen', 'bee_candles', 'bee_throne', 'bee_frames'],
-    'steampunk': ['stm_boiler', 'stm_cogs', 'stm_console', 'stm_chair', 'stm_orrery', 'stm_coal'],
+    'circus':         (3, ['cir_popcorn', 'cir_ballstand', 'cir_trunks', 'cir_ringtoss', 'cir_cannon', 'cir_stool']),
+    'sushi':          (3, ['sus_lane', 'sus_oke', 'sus_tea', 'sus_sake', 'sus_neko', 'sus_netacase']),
+    'western':        (3, ['wes_barreltable', 'wes_horseshoe', 'wes_wheel', 'wes_campfire', 'wes_cactus', 'wes_assay']),
+    'beehive':        (3, ['bee_combtable', 'bee_honeypots', 'bee_pollen', 'bee_candles', 'bee_throne', 'bee_frames']),
+    'steampunk':      (3, ['stm_boiler', 'stm_cogs', 'stm_console', 'stm_armchair', 'stm_orrery', 'stm_coal']),
+    # 家具テンプレート(全テーマ共通スロット): chair/table/sofa/shelf/rug/lamp/plant + 名物1
+    'sushi-furn':     (4, ['sus_chair', 'sus_table', 'sus_sofa', 'sus_shelf',
+                           'sus_rug', 'sus_lamp', 'sus_plant', 'sus_noren']),
+    'steampunk-furn': (4, ['stm_chair', 'stm_table', 'stm_sofa', 'stm_shelf',
+                           'stm_rug', 'stm_lamp', 'stm_plant', 'stm_helmet']),
+    'japan-furn':     (4, ['jpn_chair', 'jpn_table', 'jpn_sofa', 'jpn_shelf',
+                           'jpn_rug', 'jpn_lamp', 'jpn_plant', 'jpn_byobu']),
+    'diner-furn':     (4, ['din_chair', 'din_table', 'din_sofa', 'din_shelf',
+                           'din_rug', 'din_lamp', 'din_plant', 'din_jukebox']),
+    'scifi-furn':     (4, ['sci_chair', 'sci_table', 'sci_sofa', 'sci_shelf',
+                           'sci_rug', 'sci_lamp', 'sci_plant', 'sci_starmap']),
+    'fantasy-furn':   (4, ['fan_chair', 'fan_table', 'fan_sofa', 'fan_shelf',
+                           'fan_rug', 'fan_lamp', 'fan_plant', 'fan_cauldron']),
+    'pirate-furn':    (4, ['pir_chair', 'pir_table', 'pir_sofa', 'pir_shelf',
+                           'pir_rug', 'pir_lamp', 'pir_plant', 'pir_chest']),
+    'undersea-furn':  (4, ['sea_chair', 'sea_table', 'sea_sofa', 'sea_shelf',
+                           'sea_rug', 'sea_lamp', 'sea_plant', 'sea_treasure']),
+    'cabin-furn':     (4, ['cab_chair', 'cab_table', 'cab_sofa', 'cab_shelf',
+                           'cab_rug', 'cab_lamp', 'cab_plant', 'cab_hearth']),
+    'halloween-furn': (4, ['hal_chair', 'hal_table', 'hal_sofa', 'hal_shelf',
+                           'hal_rug', 'hal_lamp', 'hal_plant', 'hal_pumpkin']),
+    'china-furn':     (4, ['chn_chair', 'chn_table', 'chn_sofa', 'chn_shelf',
+                           'chn_rug', 'chn_lamp', 'chn_plant', 'chn_censer']),
+    'haunted-furn':   (4, ['hnt_chair', 'hnt_table', 'hnt_sofa', 'hnt_shelf',
+                           'hnt_rug', 'hnt_lamp', 'hnt_plant', 'hnt_clock']),
+    'arabia-furn':    (4, ['arb_chair', 'arb_table', 'arb_sofa', 'arb_shelf',
+                           'arb_rug', 'arb_lamp', 'arb_plant', 'arb_hookah']),
+    'western-furn':   (4, ['wes_chair', 'wes_table', 'wes_sofa', 'wes_shelf',
+                           'wes_rug', 'wes_lamp', 'wes_plant', 'wes_piano']),
+    'tokyo-furn':     (4, ['tky_chair', 'tky_table', 'tky_sofa', 'tky_shelf',
+                           'tky_rug', 'tky_lamp', 'tky_plant', 'tky_vending']),
+    'dino-furn':      (4, ['dno_chair', 'dno_table', 'dno_sofa', 'dno_shelf',
+                           'dno_rug', 'dno_lamp', 'dno_plant', 'dno_fossil']),
+    'circus-furn':    (4, ['cir_chair', 'cir_table', 'cir_sofa', 'cir_shelf',
+                           'cir_rug', 'cir_lamp', 'cir_plant', 'cir_carousel']),
+    'beehive-furn':   (4, ['bee_chair', 'bee_table', 'bee_sofa', 'bee_shelf',
+                           'bee_rug', 'bee_lamp', 'bee_plant', 'bee_honeyfountain']),
+    'hell-furn':      (4, ['hel_chair', 'hel_table', 'hel_sofa', 'hel_shelf',
+                           'hel_rug', 'hel_lamp', 'hel_plant', 'hel_cauldron']),
+    'circuit-furn':   (4, ['cct_chair', 'cct_table', 'cct_sofa', 'cct_shelf',
+                           'cct_rug', 'cct_lamp', 'cct_plant', 'cct_podium']),
+    'dwarf-furn':     (4, ['dwf_chair', 'dwf_table', 'dwf_sofa', 'dwf_shelf',
+                           'dwf_rug', 'dwf_lamp', 'dwf_plant', 'dwf_forge']),
+    'retrofuture-furn': (4, ['rft_chair', 'rft_table', 'rft_sofa', 'rft_shelf',
+                           'rft_rug', 'rft_lamp', 'rft_plant', 'rft_organ']),
+    'carnival-furn':  (4, ['crn_chair', 'crn_table', 'crn_sofa', 'crn_shelf',
+                           'crn_rug', 'crn_lamp', 'crn_plant', 'crn_maskpedestal']),
+    'desert-furn':    (4, ['dst_chair', 'dst_table', 'dst_sofa', 'dst_shelf',
+                           'dst_rug', 'dst_lamp', 'dst_plant', 'dst_skull']),
+    'jungle-furn':    (4, ['jgl_chair', 'jgl_table', 'jgl_sofa', 'jgl_shelf',
+                           'jgl_rug', 'jgl_lamp', 'jgl_plant', 'jgl_idol']),
+    'egypt-furn':     (4, ['egy_chair', 'egy_table', 'egy_sofa', 'egy_shelf',
+                           'egy_rug', 'egy_lamp', 'egy_plant', 'egy_sarcophagus']),
+    'christmas-furn': (4, ['xms_chair', 'xms_table', 'xms_sofa', 'xms_shelf',
+                           'xms_rug', 'xms_lamp', 'xms_plant', 'xms_fireplace']),
+    'space-furn':     (4, ['spc_chair', 'spc_table', 'spc_sofa', 'spc_shelf',
+                           'spc_rug', 'spc_lamp', 'spc_plant', 'spc_console']),
+    'ice-furn':       (4, ['ice_chair', 'ice_table', 'ice_sofa', 'ice_shelf',
+                           'ice_rug', 'ice_lamp', 'ice_plant', 'ice_throne']),
+    'mushroom-furn':  (4, ['msh_chair', 'msh_table', 'msh_sofa', 'msh_shelf',
+                           'msh_rug', 'msh_lamp', 'msh_plant', 'msh_bed']),
+    'onsen-furn':     (4, ['ons_chair', 'ons_table', 'ons_sofa', 'ons_shelf',
+                           'ons_rug', 'ons_lamp', 'ons_plant', 'ons_rotenburo']),
 }
-COLS, ROWS = 3, 2
+ROWS = 2
+# 「囲まれた背景を抜く」処理を無効にするアイテム。
+# 背景と同じ紺で塗られた模様(ダイナーのチェッカー柄の黒マス等)を持つ物は、
+# ポケット除去が模様ごと抜いてしまうので除外する。
+NO_POCKET = {'din_rug'}
+# 背景と同系色の暗い陰影を持つ物。通常判定だと縫い目や陰から背景が食い込むので、
+# 「背景と同じ明るさの色」だけを背景とみなす厳しい判定に切り替える。
+STRICT_BG = {'tky_sofa'}
+# 影の剥がしと破片除去が本体の陰影まで持っていく物。影は1回だけ剥がし、破片除去はしない。
+SAFE_ITEMS = {'tky_sofa'}
 PAD = 3          # 切り出し後に足す余白(px)
 ERODE = 2        # 影判定の収縮半径(px)
 BLOB_MIN = 150   # 収縮後にこれだけ残れば「塊」=影
@@ -227,6 +303,59 @@ class Cell:
                 dropped += 1
         return dropped
 
+    def drop_outside(self, x0, x1):
+        """のりしろで拾った隣の物を捨てる。
+
+        1セルには1体しか無い前提で「セル中心に一番近い塊」を主体とし、
+        そこから離れた塊だけを落とす。重心が自セル内かどうかで判定すると、
+        ラグのようにセル幅を超える物が境界をまたいだとき、隣のセルに
+        重心ごと入り込んで残ってしまうため。
+        主体の近く(20px以内)かつ十分小さい(主体の20%以下)塊だけは、輪投げの輪や
+        蒸気のような離れパーツなので残す。シートは詰まっていて隣の家具も20px程度まで
+        寄っているため、距離だけでは切り分けられない。
+        """
+        comps, seen, dropped = [], [[False] * self.w for _ in range(self.h)], 0
+        for sy in range(self.h):
+            for sx in range(self.w):
+                if self.bg[sy][sx] or seen[sy][sx]:
+                    continue
+                q, pts = deque([(sx, sy)]), []
+                seen[sy][sx] = True
+                while q:
+                    x, y = q.popleft(); pts.append((x, y))
+                    for dx, dy in NB:
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < self.w and 0 <= ny < self.h and not self.bg[ny][nx] and not seen[ny][nx]:
+                            seen[ny][nx] = True; q.append((nx, ny))
+                comps.append(pts)
+        if not comps:
+            return 0
+        mid = (x0 + x1) / 2
+        big = [c for c in comps if len(c) >= 200] or comps
+        prim = min(big, key=lambda c: abs(sum(p[0] for p in c) / len(c) - mid))
+        pxs = [p[0] for p in prim]; pys = [p[1] for p in prim]
+        px0, px1, py0, py1 = min(pxs), max(pxs), min(pys), max(pys)
+        for c in comps:
+            if c is prim:
+                continue
+            cxs = [p[0] for p in c]; cys = [p[1] for p in c]
+            gap_x = max(0, max(min(cxs) - px1, px0 - max(cxs)))
+            gap_y = max(0, max(min(cys) - py1, py0 - max(cys)))
+            # 重心が自セル内にあるものは同じ物の一部(ランプの傘・釜の脚など)なので残す。
+            # 列境界を上下段で別々に取っているので、隣の家具の重心はセル外に出る。
+            ccx = sum(cxs) / len(c)
+            if x0 <= ccx < x1:
+                continue
+            if gap_x <= 8 and gap_y <= 8 and len(c) <= 0.08 * len(prim) \
+                    and x0 - 40 <= ccx < x1 + 40:
+                continue                       # セル外だが主体に密着した極小の片(はみ出した装飾)
+                                               # のりしろを広く取ると隣の破片を拾うので、
+                                               # セルから大きく離れた片は例外にしない
+            for x, y in c:
+                self.bg[y][x] = True
+            dropped += 1
+        return dropped
+
     def bbox(self):
         minx, miny, maxx, maxy = self.w, self.h, -1, -1
         for y in range(self.h):
@@ -256,6 +385,31 @@ def make_blend_test(c1, c2):
     return test
 
 
+def col_bounds(px, W, y0, y1, test, ncols):
+    """y0..y1 の帯だけを見て、列の境界を「本体が無い縦帯」の中心から決める。
+
+    等分だと、セル幅より広い物(ラグ等)が隣のセルへはみ出して切れてしまうため、
+    理想位置(W*i/ncols)に一番近い空白帯の中心を境界に使う。
+    上段と下段で列位置がズレて生成されるシートがあるので、行ごとに別々に求める。
+    """
+    empty = [x for x in range(W) if all(test(px[x, y]) for y in range(y0, y1))]
+    runs = []
+    for x in empty:
+        if runs and x == runs[-1][1] + 1:
+            runs[-1][1] = x
+        else:
+            runs.append([x, x])
+    centers = [(a + b) // 2 for a, b in runs if 0 < (a + b) // 2 < W - 1]
+    bounds, cw = [0], W / ncols
+    for i in range(1, ncols):
+        ideal = W * i / ncols
+        # 理想位置の近傍にある空白帯だけを候補にする(遠くの帯を掴むとセルが潰れる)
+        cand = [c for c in centers if abs(c - ideal) <= cw * 0.3 and c > bounds[-1] + cw * 0.4]
+        bounds.append(min(cand, key=lambda c: abs(c - ideal)) if cand else round(ideal))
+    bounds.append(W)
+    return bounds
+
+
 def row_split(px, H, x0, x1, test):
     """列内で上下段の境界行を「本体が無い帯」の中心から決める(背の高い物体の切れ防止)。"""
     lo, hi = int(H * 0.33), int(H * 0.67)
@@ -274,29 +428,38 @@ def row_split(px, H, x0, x1, test):
 
 
 def main(src_dir, out_dir):
-    for sheet, names in SHEETS.items():
+    only = set(sys.argv[3:])
+    for sheet, (COLS, names) in SHEETS.items():
+        if only and sheet not in only:
+            continue
         im = Image.open(os.path.join(src_dir, f'{sheet}.jpg')).convert('RGB')
         W, H = im.size
         px = im.load()
         corners = [px[2, 2], px[W - 3, 2], px[2, H - 3], px[W - 3, H - 3]]
         bgc = tuple(sum(c[i] for c in corners) // 4 for i in range(3))
         test = make_bg_test(bgc)
-        cw = W // COLS
-        splits = [row_split(px, H, c * cw, (c + 1) * cw, test) for c in range(COLS)]
-        print(f'{sheet}: 背景 {bgc} / 段境界 {splits}')
+        top = col_bounds(px, W, 0, H // 2, test, COLS)          # 上段の列境界
+        bot = col_bounds(px, W, H // 2, H, test, COLS)           # 下段の列境界(ズレることがある)
+        splits = [row_split(px, H, min(top[c], bot[c]), max(top[c + 1], bot[c + 1]), test) for c in range(COLS)]
+        print(f'{sheet}: 背景 {bgc} / 上段列 {top} / 下段列 {bot} / 段境界 {splits}')
         for i, name in enumerate(names):
             cx, cy = i % COLS, i // COLS
-            x0, x1 = cx * cw, (cx + 1) * cw
+            xs = top if cy == 0 else bot
+            # セル幅を超える物(ラグ等)が切れないよう、左右に のりしろ を取って読む
+            # ラグはセル幅を大きく超えるので、のりしろをさらに広く取る(右下の角が切れるのを防ぐ)
+            margin = round((xs[cx + 1] - xs[cx]) * (0.95 if name.endswith('_rug') else 0.6))
+            x0, x1 = max(0, xs[cx] - margin), min(W, xs[cx + 1] + margin)
             y0, y1 = (0, splits[cx]) if cy == 0 else (splits[cx], H)
             cell = Cell(px, x0, y0, x1, y1)
-            cell.fill_from_edges(test)
-            pockets = cell.fill_pockets(make_bg_test(bgc, 0.85), 300)
+            cell.fill_from_edges(make_bg_test(bgc, 0.85) if name in STRICT_BG else test)
+            pockets = 0 if name in NO_POCKET else cell.fill_pockets(make_bg_test(bgc, 0.85), 300)
             shadows = []
-            for _ in range(3):
+            for _ in range(1 if name in SAFE_ITEMS else 3):
                 s_ = cell.strip_shadow()
                 if not s_: break
                 shadows.append(s_)
-            specks = cell.clean_specks()
+            outside = cell.drop_outside(xs[cx] - x0, xs[cx + 1] - x0)  # のりしろで拾った隣の物を捨てる
+            specks = 0 if name in SAFE_ITEMS else cell.clean_specks()
             minx, miny, maxx, maxy = cell.bbox()
             if maxx < 0:
                 print(f'  !! {name}: 本体が見つからない'); continue
@@ -311,7 +474,7 @@ def main(src_dir, out_dir):
                     if not cell.bg[y][x]:
                         op[x - bx0, y - by0] = cell.p[y][x] + (255,)
             out.save(os.path.join(out_dir, f'prop_{name}.png'))
-            note = (('影 ' + ' + '.join(map(str, shadows))) if shadows else '影なし') + (f' / 内側{pockets}箇所' if pockets else '') + (f' / 破片{specks}除去' if specks else '')
+            note = (('影 ' + ' + '.join(map(str, shadows))) if shadows else '影なし') + (f' / 隣{outside}除去' if outside else '') + (f' / 内側{pockets}箇所' if pockets else '') + (f' / 破片{specks}除去' if specks else '')
             print(f'  {name:18s} {out.size[0]:>4}x{out.size[1]:<4} {note}'
                   + (f'  ⚠ セル端に接触: {",".join(clip)}' if clip else ''))
 

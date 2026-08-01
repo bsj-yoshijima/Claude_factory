@@ -128,6 +128,9 @@
   .pcat{display:flex;gap:5px;flex-wrap:wrap;pointer-events:none}
   .pcat .c{background:#141b20;border:1px solid var(--edge);border-radius:7px;padding:4px 11px;cursor:pointer;font-size:12px;color:#9fdcc6;pointer-events:auto}
   .pcat .c.on{border-color:var(--gold);color:var(--gold);background:#1d262c}
+  /* 装飾のテーマ絞り込み行。数が多いので少し小さめ＋横スクロールで1〜2段に収める */
+  .pfil{max-width:min(860px,90vw);max-height:56px;overflow-y:auto;pointer-events:none}
+  .pfil .c{font-size:11px;padding:3px 8px;pointer-events:auto}
   .pitems{display:flex;gap:6px;flex-wrap:wrap;width:min(860px,90vw);max-height:132px;overflow-y:auto;pointer-events:none}
   .pitem{width:62px;height:64px;border:2px solid #2c3a38;border-radius:8px;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative;pointer-events:auto}
   .pitem:hover{border-color:#5f8a80}
@@ -259,10 +262,173 @@ const PROP={ vase:{e:'🏺',n:'装飾壺',price:220}, palm:{e:'🌴',n:'ヤシ�
   bee_throne:{e:'👑',n:'女王蜂の玉座',price:520,th:'beehive'},       bee_frames:{e:'🪟',n:'巣枠ラック',price:280,th:'beehive'},
   // ⚙️ スチームパンク
   stm_boiler:{e:'⚗️',n:'真鍮ボイラー',price:460,th:'steampunk'},     stm_cogs:{e:'⚙️',n:'歯車の山',price:220,th:'steampunk'},
-  stm_console:{e:'🎛️',n:'圧力計コンソール',price:400,th:'steampunk'},stm_chair:{e:'🛋️',n:'銅管のアームチェア',price:360,th:'steampunk'},
-  stm_orrery:{e:'🔭',n:'天球儀',price:480,th:'steampunk'},           stm_coal:{e:'🪣',n:'石炭バケツ',price:200,th:'steampunk'} };
+  stm_console:{e:'🎛️',n:'圧力計コンソール',price:400,th:'steampunk'},stm_armchair:{e:'🛋️',n:'銅管のアームチェア',price:360,th:'steampunk'},
+  stm_orrery:{e:'🔭',n:'天球儀',price:480,th:'steampunk'},           stm_coal:{e:'🪣',n:'石炭バケツ',price:200,th:'steampunk'},
+  // ===== 基本家具(fu:true) — 全テーマ共通スロット。価格はスロットで固定し、テーマ差は見た目だけ =====
+  // 🍣 回転寿司
+  sus_chair:{e:'🪑',n:'白木のスツール',price:200,th:'sushi',fu:1},    sus_table:{e:'🪵',n:'一枚板のテーブル',price:280,th:'sushi',fu:1},
+  sus_sofa:{e:'🛋️',n:'生成りのベンチソファ',price:420,th:'sushi',fu:1},sus_shelf:{e:'🗄️',n:'白木の食器棚',price:320,th:'sushi',fu:1},
+  sus_rug:{e:'🟦',n:'畳のラグ',price:240,th:'sushi',fu:1},            sus_lamp:{e:'🏮',n:'行灯スタンド',price:260,th:'sushi',fu:1},
+  sus_plant:{e:'🎋',n:'竹の鉢',price:220,th:'sushi',fu:1},            sus_noren:{e:'🎏',n:'暖簾立て',price:340,th:'sushi'},
+  // ⚙️ スチームパンク
+  stm_chair:{e:'🪑',n:'銅管の椅子',price:200,th:'steampunk',fu:1},    stm_table:{e:'🪵',n:'歯車のテーブル',price:280,th:'steampunk',fu:1},
+  stm_sofa:{e:'🛋️',n:'革張りのソファ',price:420,th:'steampunk',fu:1}, stm_shelf:{e:'🗄️',n:'鉄フレームの棚',price:320,th:'steampunk',fu:1},
+  stm_rug:{e:'🟥',n:'歯車柄のラグ',price:240,th:'steampunk',fu:1},    stm_lamp:{e:'💡',n:'真鍮のフロアランプ',price:260,th:'steampunk',fu:1},
+  stm_plant:{e:'🪴',n:'銅鉢のシダ',price:220,th:'steampunk',fu:1},    stm_helmet:{e:'🤿',n:'潜水ヘルメット台',price:380,th:'steampunk'},
+  // ⛩️ 日本
+  jpn_chair:{e:'🪑',n:'座椅子',price:200,th:'japan',fu:1},           jpn_table:{e:'🍵',n:'ちゃぶ台',price:280,th:'japan',fu:1},
+  jpn_sofa:{e:'🛋️',n:'縁台ベンチ',price:420,th:'japan',fu:1},         jpn_shelf:{e:'🗄️',n:'和箪笥',price:320,th:'japan',fu:1},
+  jpn_rug:{e:'🟩',n:'畳マット',price:240,th:'japan',fu:1},           jpn_lamp:{e:'🏮',n:'行灯',price:260,th:'japan',fu:1},
+  jpn_plant:{e:'🎋',n:'鉢植えの竹',price:220,th:'japan',fu:1},        jpn_byobu:{e:'🌸',n:'桜の屏風',price:380,th:'japan'},
+  // 🍔 ダイナー
+  din_chair:{e:'🪑',n:'クロームチェア',price:200,th:'diner',fu:1},     din_table:{e:'🍟',n:'ダイナーテーブル',price:280,th:'diner',fu:1},
+  din_sofa:{e:'🛋️',n:'レッドブースソファ',price:420,th:'diner',fu:1},  din_shelf:{e:'🥤',n:'ミルクシェイク棚',price:320,th:'diner',fu:1},
+  din_rug:{e:'🏁',n:'チェッカーマット',price:240,th:'diner',fu:1},     din_lamp:{e:'💡',n:'ストライプランプ',price:260,th:'diner',fu:1},
+  din_plant:{e:'🪴',n:'モンステラの鉢',price:220,th:'diner',fu:1},     din_jukebox:{e:'🎶',n:'ジュークボックス',price:380,th:'diner'},
+  // 🌲 森コテージ
+  cab_chair:{e:'🪑',n:'丸太の椅子',price:200,th:'cabin',fu:1},        cab_table:{e:'🪵',n:'丸太のテーブル',price:280,th:'cabin',fu:1},
+  cab_sofa:{e:'🛋️',n:'ログソファ',price:420,th:'cabin',fu:1},         cab_shelf:{e:'🗄️',n:'山小屋の棚',price:320,th:'cabin',fu:1},
+  cab_rug:{e:'🟫',n:'編み込みラグ',price:240,th:'cabin',fu:1},        cab_lamp:{e:'🏮',n:'吊りランタン',price:260,th:'cabin',fu:1},
+  cab_plant:{e:'🌲',n:'樽植えのモミ',price:220,th:'cabin',fu:1},      cab_hearth:{e:'🔥',n:'石の暖炉',price:380,th:'cabin'},
+  // 🚀 SF宇宙
+  sci_chair:{e:'🪑',n:'操舵席チェア',price:200,th:'scifi',fu:1},      sci_table:{e:'🛸',n:'ホロ投影テーブル',price:280,th:'scifi',fu:1},
+  sci_sofa:{e:'🛋️',n:'クルー用ソファ',price:420,th:'scifi',fu:1},     sci_shelf:{e:'🗄️',n:'補給物資ラック',price:320,th:'scifi',fu:1},
+  sci_rug:{e:'🔷',n:'ヘクスデッキマット',price:240,th:'scifi',fu:1},   sci_lamp:{e:'💡',n:'ケージ型ランプ',price:260,th:'scifi',fu:1},
+  sci_plant:{e:'🪴',n:'水耕培養槽シダ',price:220,th:'scifi',fu:1},     sci_starmap:{e:'🖥️',n:'星図コンソール',price:380,th:'scifi'},
+  // 🧙 ファンタジー
+  fan_chair:{e:'🪑',n:'魔道士の椅子',price:200,th:'fantasy',fu:1},     fan_table:{e:'📖',n:'魔導書の作業机',price:280,th:'fantasy',fu:1},
+  fan_sofa:{e:'🌙',n:'三日月のソファ',price:420,th:'fantasy',fu:1},    fan_shelf:{e:'📚',n:'秘薬と魔導書の棚',price:320,th:'fantasy',fu:1},
+  fan_rug:{e:'🔮',n:'魔法陣のラグ',price:240,th:'fantasy',fu:1},      fan_lamp:{e:'🕯️',n:'錬鉄のランタン灯',price:260,th:'fantasy',fu:1},
+  fan_plant:{e:'🪴',n:'光る魔法草の鉢',price:220,th:'fantasy',fu:1},   fan_cauldron:{e:'🧪',n:'大魔女の大釜',price:380,th:'fantasy'},
+  // 🏴‍☠️ 海賊船
+  pir_chair:{e:'🪑',n:'船長の椅子',price:200,th:'pirate',fu:1},       pir_table:{e:'🗺️',n:'海図テーブル',price:280,th:'pirate',fu:1},
+  pir_sofa:{e:'🛋️',n:'船室のベンチソファ',price:420,th:'pirate',fu:1}, pir_shelf:{e:'🔭',n:'航海道具の棚',price:320,th:'pirate',fu:1},
+  pir_rug:{e:'🧭',n:'羅針盤のラグ',price:240,th:'pirate',fu:1},       pir_lamp:{e:'🏮',n:'真鍮のランタン灯',price:260,th:'pirate',fu:1},
+  pir_plant:{e:'🌴',n:'樽植えのヤシ',price:220,th:'pirate',fu:1},     pir_chest:{e:'💰',n:'財宝の宝箱',price:380,th:'pirate'},
+  // 🎃 ハロウィン
+  hal_chair:{e:'🪑',n:'ゴシックの玉座',price:200,th:'halloween',fu:1}, hal_table:{e:'🕯️',n:'獣脚のロウソク机',price:280,th:'halloween',fu:1},
+  hal_sofa:{e:'💀',n:'紫ベルベットのソファ',price:420,th:'halloween',fu:1}, hal_shelf:{e:'📚',n:'魔導書の棚',price:320,th:'halloween',fu:1},
+  hal_rug:{e:'🕸️',n:'蜘蛛の巣ラグ',price:240,th:'halloween',fu:1},    hal_lamp:{e:'🏮',n:'鉄のランタン灯',price:260,th:'halloween',fu:1},
+  hal_plant:{e:'🪴',n:'枯れいばらの鉢',price:220,th:'halloween',fu:1}, hal_pumpkin:{e:'🎃',n:'大かぼちゃランタン',price:380,th:'halloween'},
+  // 🐚 海底
+  sea_chair:{e:'🪑',n:'ホタテ貝の椅子',price:200,th:'undersea',fu:1},  sea_table:{e:'🫧',n:'シーグラスのテーブル',price:280,th:'undersea',fu:1},
+  sea_sofa:{e:'🐚',n:'シャコ貝のソファ',price:420,th:'undersea',fu:1}, sea_shelf:{e:'🪸',n:'珊瑚の飾り棚',price:320,th:'undersea',fu:1},
+  sea_rug:{e:'🌀',n:'海藻織りのラグ',price:240,th:'undersea',fu:1},    sea_lamp:{e:'🎐',n:'クラゲのランプ',price:260,th:'undersea',fu:1},
+  sea_plant:{e:'🌿',n:'コンブの鉢植え',price:220,th:'undersea',fu:1},  sea_treasure:{e:'💰',n:'沈没船の宝箱',price:380,th:'undersea'},
+  // 🕌 アラビア
+  arb_chair:{e:'🪑',n:'透かし彫りの椅子',price:200,th:'arabia',fu:1},  arb_table:{e:'🫖',n:'真鍮のトレイテーブル',price:280,th:'arabia',fu:1},
+  arb_sofa:{e:'🛋️',n:'マジュリスのソファ',price:420,th:'arabia',fu:1}, arb_shelf:{e:'🏺',n:'馬蹄アーチの飾り棚',price:320,th:'arabia',fu:1},
+  arb_rug:{e:'🧶',n:'ペルシャ絨毯',price:240,th:'arabia',fu:1},        arb_lamp:{e:'🏮',n:'モロッコランタン',price:260,th:'arabia',fu:1},
+  arb_plant:{e:'🌴',n:'ナツメヤシの鉢',price:220,th:'arabia',fu:1},    arb_hookah:{e:'💨',n:'水たばこ',price:380,th:'arabia'},
+  // 🐉 中華
+  chn_chair:{e:'🪑',n:'紫檀の官帽椅',price:200,th:'china',fu:1},       chn_table:{e:'🍵',n:'朱漆の茶卓',price:280,th:'china',fu:1},
+  chn_sofa:{e:'🛋️',n:'羅漢榻',price:420,th:'china',fu:1},             chn_shelf:{e:'🏺',n:'多宝格の飾り棚',price:320,th:'china',fu:1},
+  chn_rug:{e:'🐉',n:'龍紋の絨毯',price:240,th:'china',fu:1},           chn_lamp:{e:'🏮',n:'紅提灯スタンド',price:260,th:'china',fu:1},
+  chn_plant:{e:'🎍',n:'青花鉢の竹',price:220,th:'china',fu:1},         chn_censer:{e:'🪔',n:'黄金の龍香炉',price:380,th:'china'},
+  // 🦖 ダイナソー
+  dno_chair:{e:'🪑',n:'骨アーチの石イス',price:200,th:'dino',fu:1},    dno_table:{e:'🥚',n:'化石テーブル',price:280,th:'dino',fu:1},
+  dno_sofa:{e:'🛋️',n:'毛皮ソファ',price:420,th:'dino',fu:1},          dno_shelf:{e:'🦴',n:'発掘標本棚',price:320,th:'dino',fu:1},
+  dno_rug:{e:'🐾',n:'足あとラグ',price:240,th:'dino',fu:1},            dno_lamp:{e:'💡',n:'琥珀ランプ',price:260,th:'dino',fu:1},
+  dno_plant:{e:'🌿',n:'古代シダ',price:220,th:'dino',fu:1},            dno_fossil:{e:'🦖',n:'ティラノの全身骨格',price:380,th:'dino'},
+  // 👻 幽霊屋敷
+  hnt_chair:{e:'🪑',n:'呪われた高背椅子',price:200,th:'haunted',fu:1}, hnt_table:{e:'💀',n:'髑髏のテーブル',price:280,th:'haunted',fu:1},
+  hnt_sofa:{e:'🛋️',n:'破れたビロードのソファ',price:420,th:'haunted',fu:1}, hnt_shelf:{e:'📚',n:'蜘蛛の巣の本棚',price:320,th:'haunted',fu:1},
+  hnt_rug:{e:'🟥',n:'虫食いのペルシャ絨毯',price:240,th:'haunted',fu:1}, hnt_lamp:{e:'🕯️',n:'蝋燭の燭台スタンド',price:260,th:'haunted',fu:1},
+  hnt_plant:{e:'🥀',n:'枯れ木の石壺',price:220,th:'haunted',fu:1},     hnt_clock:{e:'🕰️',n:'亡霊の振り子時計',price:380,th:'haunted'},
+  // 🤠 西部開拓（家具）
+  wes_chair:{e:'🪑',n:'牛革の木椅子',price:200,th:'western',fu:1},     wes_table:{e:'🪵',n:'古板のテーブル',price:280,th:'western',fu:1},
+  wes_sofa:{e:'🛋️',n:'革張りベンチソファ',price:420,th:'western',fu:1}, wes_shelf:{e:'🥃',n:'酒瓶の棚',price:320,th:'western',fu:1},
+  wes_rug:{e:'🧶',n:'ナバホ織のラグ',price:240,th:'western',fu:1},     wes_lamp:{e:'🏮',n:'カンテラ立てランプ',price:260,th:'western',fu:1},
+  wes_plant:{e:'🌿',n:'ユッカの木桶',price:220,th:'western',fu:1},     wes_piano:{e:'🎹',n:'酒場のピアノ',price:380,th:'western'},
+  // 🐝 ミツバチの巣（家具）
+  bee_chair:{e:'🪑',n:'ハニカムチェア',price:200,th:'beehive',fu:1},   bee_table:{e:'🧇',n:'蜜ろうテーブル',price:280,th:'beehive',fu:1},
+  bee_sofa:{e:'🛋️',n:'ワックスソファ',price:420,th:'beehive',fu:1},   bee_shelf:{e:'🗄️',n:'蜂蜜棚',price:320,th:'beehive',fu:1},
+  bee_rug:{e:'🟨',n:'ハニカムラグ',price:240,th:'beehive',fu:1},       bee_lamp:{e:'🏮',n:'琥珀ランタン',price:260,th:'beehive',fu:1},
+  bee_plant:{e:'🌼',n:'クローバーの鉢',price:220,th:'beehive',fu:1},   bee_honeyfountain:{e:'⛲',n:'ハチミツの泉',price:380,th:'beehive'},
+  // 🎪 サーカス（家具）
+  cir_chair:{e:'🪑',n:'星付きサーカスチェア',price:200,th:'circus',fu:1}, cir_table:{e:'🪧',n:'ストライプのローテーブル',price:280,th:'circus',fu:1},
+  cir_sofa:{e:'🛋️',n:'紫ベルベットのソファ',price:420,th:'circus',fu:1}, cir_shelf:{e:'🗄️',n:'曲芸道具の棚',price:320,th:'circus',fu:1},
+  cir_rug:{e:'🟥',n:'放射ストライプのラグ',price:240,th:'circus',fu:1}, cir_lamp:{e:'💡',n:'電球付きテントランプ',price:260,th:'circus',fu:1},
+  cir_plant:{e:'🌴',n:'ドラム鉢のヤシ',price:220,th:'circus',fu:1},    cir_carousel:{e:'🎠',n:'ミニ回転木馬',price:380,th:'circus'},
+  // 🌃 Tokyo
+  tky_chair:{e:'🪑',n:'居酒屋スツール',price:200,th:'tokyo',fu:1},     tky_table:{e:'🍜',n:'ラーメンテーブル',price:280,th:'tokyo',fu:1},
+  tky_sofa:{e:'🛋️',n:'ネオンソファ',price:420,th:'tokyo',fu:1},       tky_shelf:{e:'🏪',n:'コンビニ棚',price:320,th:'tokyo',fu:1},
+  tky_rug:{e:'🚸',n:'横断歩道ラグ',price:240,th:'tokyo',fu:1},         tky_lamp:{e:'🏮',n:'赤提灯ランプ',price:260,th:'tokyo',fu:1},
+  tky_plant:{e:'🎍',n:'竹の鉢植え',price:220,th:'tokyo',fu:1},         tky_vending:{e:'🥤',n:'自動販売機',price:380,th:'tokyo'},
+  // 🏁 サーキット
+  cct_chair:{e:'🪑',n:'バケットシート',price:200,th:'circuit',fu:1},   cct_table:{e:'🛞',n:'タイヤテーブル',price:280,th:'circuit',fu:1},
+  cct_sofa:{e:'🛋️',n:'ピットレザーソファ',price:420,th:'circuit',fu:1}, cct_shelf:{e:'🔧',n:'ピットツールラック',price:320,th:'circuit',fu:1},
+  cct_rug:{e:'🛣️',n:'サーキットラグ',price:240,th:'circuit',fu:1},     cct_lamp:{e:'🚦',n:'ピットシグナルランプ',price:260,th:'circuit',fu:1},
+  cct_plant:{e:'🌳',n:'月桂樹タイヤ鉢',price:220,th:'circuit',fu:1},   cct_podium:{e:'🏆',n:'表彰台',price:380,th:'circuit'},
+  // ⛏️ ドワーフ鉱山
+  dwf_chair:{e:'🪑',n:'鉄鋲の樫椅子',price:200,th:'dwarf',fu:1},       dwf_table:{e:'🪨',n:'花崗岩のテーブル',price:280,th:'dwarf',fu:1},
+  dwf_sofa:{e:'🛋️',n:'革張りの長椅子',price:420,th:'dwarf',fu:1},     dwf_shelf:{e:'💎',n:'鉱石棚',price:320,th:'dwarf',fu:1},
+  dwf_rug:{e:'🟥',n:'宝石紋のラグ',price:240,th:'dwarf',fu:1},         dwf_lamp:{e:'🏮',n:'坑道ランタン',price:260,th:'dwarf',fu:1},
+  dwf_plant:{e:'🍄',n:'光るキノコ鉢',price:220,th:'dwarf',fu:1},       dwf_forge:{e:'⚒️',n:'ドワーフの鍛冶炉',price:380,th:'dwarf'},
+  // 😈 地獄
+  hel_chair:{e:'🪑',n:'魔王の玄武岩チェア',price:200,th:'hell',fu:1},  hel_table:{e:'🔥',n:'溶岩ひび割れテーブル',price:280,th:'hell',fu:1},
+  hel_sofa:{e:'🛋️',n:'骨トゲの血赤ソファ',price:420,th:'hell',fu:1},  hel_shelf:{e:'💀',n:'髑髏の鉄棚',price:320,th:'hell',fu:1},
+  hel_rug:{e:'⭐',n:'魔法陣ラグ',price:240,th:'hell',fu:1},            hel_lamp:{e:'🕯️',n:'髑髏の炎スタンド',price:260,th:'hell',fu:1},
+  hel_plant:{e:'🌹',n:'茨の魔樹',price:220,th:'hell',fu:1},            hel_cauldron:{e:'🍲',n:'煮えたぎる溶岩鍋',price:380,th:'hell'},
+  // 🛸 レトロ未来
+  rft_chair:{e:'🪑',n:'艦長の革張り椅子',price:200,th:'retrofuture',fu:1}, rft_table:{e:'🗺️',n:'海図テーブル',price:280,th:'retrofuture',fu:1},
+  rft_sofa:{e:'🛋️',n:'サロンのソファ',price:420,th:'retrofuture',fu:1}, rft_shelf:{e:'🧪',n:'標本棚',price:320,th:'retrofuture',fu:1},
+  rft_rug:{e:'🧭',n:'羅針盤の絨毯',price:240,th:'retrofuture',fu:1},   rft_lamp:{e:'🏮',n:'深海ランタン灯',price:260,th:'retrofuture',fu:1},
+  rft_plant:{e:'🌿',n:'海藻の鉢植え',price:220,th:'retrofuture',fu:1}, rft_organ:{e:'🎹',n:'真鍮のパイプオルガン',price:380,th:'retrofuture'},
+  // 🎭 カーニバル
+  crn_chair:{e:'🪑',n:'バロックの金彩チェア',price:200,th:'carnival',fu:1}, crn_table:{e:'🎭',n:'大理石のテーブル',price:280,th:'carnival',fu:1},
+  crn_sofa:{e:'🛋️',n:'紫ベルベットの長椅子',price:420,th:'carnival',fu:1}, crn_shelf:{e:'📿',n:'仮面と首飾りの棚',price:320,th:'carnival',fu:1},
+  crn_rug:{e:'🔶',n:'ハーレクイン柄のラグ',price:240,th:'carnival',fu:1}, crn_lamp:{e:'🕯️',n:'金のキャンドルスタンド',price:260,th:'carnival',fu:1},
+  crn_plant:{e:'🌴',n:'ビーズのパルメット',price:220,th:'carnival',fu:1}, crn_maskpedestal:{e:'🎭',n:'仮面の台座',price:380,th:'carnival'},
+  // 🏜️ 砂漠
+  dst_chair:{e:'🪑',n:'キリムチェア',price:200,th:'desert',fu:1},      dst_table:{e:'🏺',n:'砂岩スラブテーブル',price:280,th:'desert',fu:1},
+  dst_sofa:{e:'🛋️',n:'サンドストーンソファ',price:420,th:'desert',fu:1}, dst_shelf:{e:'🪟',n:'岩窟シェルフ',price:320,th:'desert',fu:1},
+  dst_rug:{e:'🧶',n:'キリムラグ',price:240,th:'desert',fu:1},          dst_lamp:{e:'🏮',n:'砂漠ランタン',price:260,th:'desert',fu:1},
+  dst_plant:{e:'🌵',n:'サボテンの鉢',price:220,th:'desert',fu:1},      dst_skull:{e:'🐂',n:'頭骨トーテム',price:380,th:'desert'},
+  // 🌿 ジャングル
+  jgl_chair:{e:'🪑',n:'石の玉座',price:200,th:'jungle',fu:1},          jgl_table:{e:'🪨',n:'遺跡の石卓',price:280,th:'jungle',fu:1},
+  jgl_sofa:{e:'🛋️',n:'苔むす石のベンチ',price:420,th:'jungle',fu:1},  jgl_shelf:{e:'🏺',n:'祭壇の石棚',price:320,th:'jungle',fu:1},
+  jgl_rug:{e:'🧶',n:'部族模様の敷物',price:240,th:'jungle',fu:1},      jgl_lamp:{e:'💎',n:'翡翠の灯り',price:260,th:'jungle',fu:1},
+  jgl_plant:{e:'🌿',n:'モンステラの鉢',price:220,th:'jungle',fu:1},    jgl_idol:{e:'🗿',n:'古代の石像頭',price:380,th:'jungle'},
+  // 🔺 エジプト
+  egy_chair:{e:'🪑',n:'ファラオの玉座',price:200,th:'egypt',fu:1},     egy_table:{e:'🏺',n:'供物の石卓',price:280,th:'egypt',fu:1},
+  egy_sofa:{e:'🛋️',n:'獅子脚の長椅子',price:420,th:'egypt',fu:1},     egy_shelf:{e:'📜',n:'パピルスの石棚',price:320,th:'egypt',fu:1},
+  egy_rug:{e:'🧿',n:'ホルスの目の敷物',price:240,th:'egypt',fu:1},     egy_lamp:{e:'🔥',n:'パピルス柱の聖火灯',price:260,th:'egypt',fu:1},
+  egy_plant:{e:'🪷',n:'青蓮とパピルスの壺',price:220,th:'egypt',fu:1}, egy_sarcophagus:{e:'⚱️',n:'黄金の石棺',price:380,th:'egypt'},
+  // 🎄 クリスマス
+  xms_chair:{e:'🪑',n:'ヒイラギの木椅子',price:200,th:'christmas',fu:1}, xms_table:{e:'🍪',n:'ジンジャークッキーの卓',price:280,th:'christmas',fu:1},
+  xms_sofa:{e:'🛋️',n:'赤いベルベットソファ',price:420,th:'christmas',fu:1}, xms_shelf:{e:'🎁',n:'プレゼント棚',price:320,th:'christmas',fu:1},
+  xms_rug:{e:'❄️',n:'雪の結晶ラグ',price:240,th:'christmas',fu:1},     xms_lamp:{e:'💡',n:'リースのフロアランプ',price:260,th:'christmas',fu:1},
+  xms_plant:{e:'🎄',n:'クリスマスツリー',price:220,th:'christmas',fu:1}, xms_fireplace:{e:'🔥',n:'石造りの暖炉',price:380,th:'christmas'},
+  // 🛰️ 宇宙
+  spc_chair:{e:'🪑',n:'クルーシート',price:200,th:'space',fu:1},       spc_table:{e:'🍽️',n:'ギャレーテーブル',price:280,th:'space',fu:1},
+  spc_sofa:{e:'🛋️',n:'クルーベンチ',price:420,th:'space',fu:1},       spc_shelf:{e:'📦',n:'補給ラック',price:320,th:'space',fu:1},
+  spc_rug:{e:'🟨',n:'デッキマット',price:240,th:'space',fu:1},         spc_lamp:{e:'💡',n:'ワークライト',price:260,th:'space',fu:1},
+  spc_plant:{e:'🥬',n:'植物栽培装置',price:220,th:'space',fu:1},       spc_console:{e:'🛰️',n:'司令コンソール',price:380,th:'space'},
+  // ❄️ 氷の城
+  ice_chair:{e:'🪑',n:'氷彫りの椅子',price:200,th:'ice',fu:1},         ice_table:{e:'🧊',n:'氷板のテーブル',price:280,th:'ice',fu:1},
+  ice_sofa:{e:'🛋️',n:'氷結のソファ',price:420,th:'ice',fu:1},         ice_shelf:{e:'🗄️',n:'霜の飾り棚',price:320,th:'ice',fu:1},
+  ice_rug:{e:'❄️',n:'雪華の毛皮ラグ',price:240,th:'ice',fu:1},         ice_lamp:{e:'🏮',n:'氷晶ランプ',price:260,th:'ice',fu:1},
+  ice_plant:{e:'🌲',n:'樹氷の小松',price:220,th:'ice',fu:1},           ice_throne:{e:'👑',n:'氷の玉座',price:380,th:'ice'},
+  // 🍄 森のキノコ
+  msh_chair:{e:'🪑',n:'ベニテングダケの椅子',price:200,th:'mushroom',fu:1}, msh_table:{e:'🪵',n:'切り株テーブル',price:280,th:'mushroom',fu:1},
+  msh_sofa:{e:'🛋️',n:'丸太のソファ',price:420,th:'mushroom',fu:1},    msh_shelf:{e:'🗄️',n:'木のうろ棚',price:320,th:'mushroom',fu:1},
+  msh_rug:{e:'🟩',n:'妖精の輪ラグ',price:240,th:'mushroom',fu:1},      msh_lamp:{e:'💡',n:'光るキノコランプ',price:260,th:'mushroom',fu:1},
+  msh_plant:{e:'🪴',n:'シダと光るキノコ',price:220,th:'mushroom',fu:1}, msh_bed:{e:'🛏️',n:'キノコのベッド',price:380,th:'mushroom'},
+  // ♨️ 温泉
+  ons_chair:{e:'🪑',n:'檜の椅子',price:200,th:'onsen',fu:1},           ons_table:{e:'🍶',n:'湯上がりの座卓',price:280,th:'onsen',fu:1},
+  ons_sofa:{e:'🛋️',n:'檜の湯上がりベンチ',price:420,th:'onsen',fu:1}, ons_shelf:{e:'🧺',n:'湯桶の棚',price:320,th:'onsen',fu:1},
+  ons_rug:{e:'🍁',n:'紅葉の畳マット',price:240,th:'onsen',fu:1},       ons_lamp:{e:'🏮',n:'行灯',price:260,th:'onsen',fu:1},
+  ons_plant:{e:'🍁',n:'紅葉の鉢植え',price:220,th:'onsen',fu:1},       ons_rotenburo:{e:'♨️',n:'岩風呂',price:380,th:'onsen'} };
 // ショップでプロップをテーマ別に見出し分けする
-const PROP_GROUPS=[['','🧰 汎用'],['circus','🎪 サーカス'],['sushi','🍣 回転寿司'],['western','🤠 西部開拓'],['beehive','🐝 ミツバチの巣'],['steampunk','⚙️ スチームパンク']];
+const PROP_GROUPS=[['','🧰 汎用'],
+  ['japan','⛩️ 日本'],['onsen','♨️ 温泉'],['tokyo','🌃 Tokyo'],['sushi','🍣 回転寿司'],['china','🐉 中華'],
+  ['arabia','🕌 アラビア'],['desert','🏜️ 砂漠'],['egypt','🔺 エジプト'],['jungle','🌿 ジャングル'],['undersea','🐚 海底'],
+  ['diner','🍔 ダイナー'],['cabin','🌲 森コテージ'],['mushroom','🍄 森のキノコ'],['ice','❄️ 氷の城'],['christmas','🎄 クリスマス'],
+  ['fantasy','🧙 ファンタジー'],['dwarf','⛏️ ドワーフ鉱山'],['hell','😈 地獄'],['haunted','👻 幽霊屋敷'],['halloween','🎃 ハロウィン'],
+  ['pirate','🏴‍☠️ 海賊船'],['western','🤠 西部開拓'],['dino','🦖 ダイナソー'],['circus','🎪 サーカス'],['carnival','🎭 カーニバル'],
+  ['circuit','🏁 サーキット'],['steampunk','⚙️ スチームパンク'],['retrofuture','🛸 レトロ未来'],['scifi','🚀 SF宇宙'],['space','🛰️ 宇宙'],
+  ['beehive','🐝 ミツバチの巣']];
 const BG={ auto:{n:'標準（時刻連動）',price:0}, blue:{n:'快晴',price:1800}, sunset:{n:'夕焼け',price:2200}, night:{n:'星空',price:2600}, space:{n:'宇宙',price:4200}, aurora:{n:'オーロラ',price:5200} };
 const FLOOR={ wood:{n:'木材（標準）',price:0}, cool:{n:'クールグレー',price:1000}, crimson:{n:'レッドタイル',price:1200}, forest:{n:'フォレスト',price:1200}, gold:{n:'ゴールド',price:3200} };
 // テーマシリーズ: 空テーマ(sky)＋床材(floor)＋絵文字装飾セット(decos) をまとめて購入/適用
@@ -940,9 +1106,11 @@ function shopBody(){
       body = '<div class="cost" style="margin:2px 0 8px">購入すると在庫に入ります。設置は 🔧編集 のパレットから床をクリック。</div>';
       body += '<div class="cost" style="margin:12px 0 6px">装飾プロップ（Stitch製）</div>';
       for(const [th,label] of PROP_GROUPS){
-        const ks=Object.keys(PROP).filter(t=>(PROP[t].th||'')===th);
-        if(!ks.length) continue;
+        const all=Object.keys(PROP).filter(t=>(PROP[t].th||'')===th);
+        if(!all.length) continue;
         body += `<div class="cost" style="margin:10px 0 4px;color:#7fe6ff">${label}</div>`;
+        // 基本家具(全テーマ共通スロット)と名物(そのテーマだけの一点物)を分けて並べる
+        const ks=[...all.filter(t=>PROP[t].fu), ...all.filter(t=>!PROP[t].fu)];
         body += ks.map(t=>{ const sp=(window.PROP_SPAN||{})[t]||1;   // 占有コマ数(見た目の大きさ)
           return `<div class="rc"><div class="ic">${PROP[t].e}</div>
           <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('prop',t)}</span></div>
@@ -1015,29 +1183,76 @@ function ownedBgs(){ const a=['auto']; for(const k of SKY_THEMES) if(G.bgOwned.i
 function applyBg(k){ G.bg=k; if(window.__scene){ window.__scene.setSkyTheme(k); window.__scene.setFloor(ROOM_THEMES.includes(k)?'wood':G.floor); } saveGame(); updateBadge(); }
 const paletteEl=document.getElementById('palette');
 let editCat='bg', editSel=null; window.__editSel=null;
+let selMode=false, selN=0;                       // 収納の複数選択モードと選択数
+let propFilter=null;                             // 装飾の絞り込みテーマ(null=すべて / ''=汎用)
+window.__selChanged=(n)=>{ selN=n; renderPalette(); };
 function renderPalette(){
   const cats=[['bg','🌏 背景'],['prop','🧰 装飾'],['machine','🏭 製造機']];
-  let items='', hint='';
+  let items='', hint='', acts='', fil='';
   const cell=(dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
   if(editCat==='bg'){ hint='背景を選ぶと即適用（部屋ごと切替）';
     items=ownedBgs().map(k=>`<div class="pitem ${G.bg===k?'cur':''}" data-bg="${k}">${BG_META[k].e}<small>${BG_META[k].n}</small></div>`).join('');
-  } else if(editCat==='prop'){ hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')
-      +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去';
-    const P=Object.keys(PROP).filter(t=>availN('prop',t)>0).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
-    const D=Object.keys(DECO).filter(t=>availN('deco',t)>0).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
-    items=(P.concat(D).join(''))||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
+  } else if(editCat==='prop'){
+    const s=window.__scene, placedN=s?s.stowables().length:0;
+    if(selMode){ hint=`床の装飾をクリックで選択（もう一度クリックで解除）・ ${selN}個 選択中`;
+      items=`<div class="phint" style="padding:8px">選択モード中です。戻したい装飾を床でクリックしてください。</div>`;
+    } else {
+      hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')
+        +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去 ・ ラグは床の平物なので家具の下に敷けます';
+      // テーマ(=背景)で絞り込む。propFilter が null なら全部。DECO は汎用('')扱い
+      const inFilter=(th)=> propFilter===null || (th||'')===propFilter;
+      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
+      const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
+      items=(P.concat(D).join(''))||`<div class="phint" style="padding:8px">${propFilter===null?'在庫なし。🏪ショップ→設備 で購入してください。':'このテーマの在庫がありません。「すべて」に戻すか、🏪ショップで購入してください。'}</div>`;
+      // 絞り込み行: 在庫のあるテーマだけ出す。適用中の背景と同じテーマには印を付ける
+      const nOf=(th)=> Object.keys(PROP).filter(t=>(PROP[t].th||'')===th&&availN('prop',t)>0).length
+                     + (th===''?Object.keys(DECO).filter(t=>availN('deco',t)>0).length:0);
+      const chips=PROP_GROUPS.filter(([th])=>nOf(th)>0).map(([th,label])=>{
+        const cur=(th&&th===G.bg)?' ●':'';                      // いま適用中の背景と同じテーマ
+        return `<span class="c ${propFilter===th?'on':''}" data-pfil="${th}">${label}${cur} <span style="color:#9fb0c0">${nOf(th)}</span></span>`; });
+      const allN=Object.keys(PROP).filter(t=>availN('prop',t)>0).length
+               + Object.keys(DECO).filter(t=>availN('deco',t)>0).length;
+      fil=`<span class="c ${propFilter===null?'on':''}" data-pfil="*">すべて <span style="color:#9fb0c0">${allN}</span></span>`+chips.join('');
+    }
+    // 収納(設置済みを在庫に戻す)。位置は失われるが、在庫に戻るので置き直せる
+    acts = selMode
+      ? `<span class="c ${selN?'on':''}" data-stow="sel">📦 選択した${selN}個を収納</span><span class="c" data-selmode="0">✖ 選択をやめる</span>`
+      : `<span class="c" data-stow="all">📦 すべて収納 (${placedN})</span><span class="c" data-selmode="1">☑️ 選んで収納</span>`;
   } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です')
       +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去 ・ クリックで設定パネル（↻回転・✥移動／素材は🏭製造タブ）';
     const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.sub===t));
     items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
   }
   paletteEl.innerHTML=`<div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
-    <div class="pitems">${items}</div><div class="phint">${hint}</div>`;
-  paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; renderPalette(); });
+    ${fil?`<div class="pcat pfil">${fil}</div>`:''}
+    <div class="pitems">${items}</div>${acts?`<div class="pcat">${acts}</div>`:''}<div class="phint">${hint}</div>`;
+  paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; setSelMode(false); renderPalette(); });
+  paletteEl.querySelectorAll('[data-pfil]').forEach(el=>el.onclick=()=>{ propFilter=el.dataset.pfil==='*'?null:el.dataset.pfil; renderPalette(); });
+  paletteEl.querySelectorAll('[data-selmode]').forEach(el=>el.onclick=()=>{ setSelMode(el.dataset.selmode==='1'); renderPalette(); });
+  paletteEl.querySelectorAll('[data-stow]').forEach(el=>el.onclick=()=>stow(el.dataset.stow));
   paletteEl.querySelectorAll('[data-bg]').forEach(el=>el.onclick=()=>{ applyBg(el.dataset.bg); renderPalette(); });
   paletteEl.querySelectorAll('[data-place]').forEach(el=>el.onclick=()=>{ const p=el.dataset.place.split(':'); editSel={kind:p[0],sub:p[1]||null}; window.__editSel=editSel; renderPalette(); });
 }
 window.renderPalette=renderPalette;
+function setSelMode(on){ const s=window.__scene; if(!s) return;
+  selMode=!!on; selN=0; s.setSelectMode(selMode);
+  if(selMode){ editSel=null; window.__editSel=null; }   // 選択中は誤って設置しないように
+}
+// 収納 = 設置済みの装飾を在庫に戻す(位置は失われるが置き直せる)
+function stow(mode){ const s=window.__scene; if(!s) return;
+  let n=0;
+  if(mode==='all'){
+    const total=s.stowables().length;
+    if(!total){ toast('床に装飾がありません'); return; }
+    if(!confirm(`床の装飾 ${total} 個をすべて在庫に戻します。配置はやり直しになります。よろしいですか？`)) return;
+    n=s.stowAll();
+  } else {
+    if(!selN){ toast('戻す装飾を床でクリックして選んでください'); return; }
+    n=s.stowSelected();
+  }
+  snapLayout(); saveGame(); updateBadge(); renderPalette();
+  toast(`${n}個を在庫に戻しました`);
+}
 window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
   if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
   const s=window.__scene; const id = s.addPlaced(sel.kind, sel.sub, {cell:{c,r}, dir:s.placeDir});
