@@ -4,11 +4,14 @@
    追加: 接地影(背景に溶け込む), idle小ネタ(座り💤 / コーヒー☕ / 壁際にもたれる)。 */
 
 const W = 1024, H = 572, GU = 12, GV = 12;
-const ISO = { Bx:0.4858, By:0.3685, ux:0.3398, uy:0.3138, vx:-0.3121, vy:0.2852 };
+// ISO は背景 factory-room.png に「描かれた床タイル格子」(12x12)を画像から実測フィットした値。
+// 旧値は床の縁(トリム)基準で、描き込みのタイル目地と半マス位相＋約5%ピッチがずれており、
+// マス中心に置いた設置物が"目地の交差点"に乗って見えていた。GU/GV=12 は不変なので保存レイアウトは互換。
+const ISO = { Bx:0.4930, By:0.3584, ux:0.3240, uy:0.3005, vx:-0.3281, vy:0.2864 };
 const CELL = ( Math.hypot(ISO.ux*W/GU, ISO.uy*H/GU) + Math.hypot(ISO.vx*W/GV, ISO.vy*H/GV) ) / 2;
 function isoToScreen(u,v){ return { x:(ISO.Bx+u*ISO.ux+v*ISO.vx)*W, y:(ISO.By+u*ISO.uy+v*ISO.vy)*H }; }
 const OFF_U = 0, OFF_V = 0;
-// オブジェクトは各マスの中心(c+0.5)/GU に置く。編集グリッド線はマス境界(c/GU)に引く→各オブジェクトが四角の中央に入る。コンベアは中心どうしを結ぶ。
+// オブジェクトは各マスの中心(c+0.5)/GU に置く。編集グリッド線はマス境界(c/GU)に引く→各オブジェクトが四角の中央に入る。
 function cellXY(c,r){ return isoToScreen((c+0.5+OFF_U)/GU,(r+0.5+OFF_V)/GV); }   // c,r は連続値でも可
 const ISO_DET = ISO.ux*ISO.vy - ISO.vx*ISO.uy;
 function screenToIso(sx,sy){ const nx=sx/W-ISO.Bx, ny=sy/H-ISO.By;
@@ -17,6 +20,82 @@ function uvXY(u,v){ return { x:(ISO.Bx+u*ISO.ux+v*ISO.vx)*W, y:(ISO.By+u*ISO.uy+
 const AU={x:ISO.ux*W/GU, y:ISO.uy*H/GU};   // 1セル u方向 の画面ベクトル
 const AV={x:ISO.vx*W/GV, y:ISO.vy*H/GV};   // 1セル v方向 の画面ベクトル
 const K = (c,r)=> c+','+r;
+const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
+
+/* ===== 製造機のスキン =====
+   スキンは「テクスチャの命名規約 + パレット」の2段。
+   1) テクスチャ mach_<theme>_body があればそれを使う（未整備）
+   2) 無ければ手続き描画にフォールバックし、PART_SKIN_BY_THEME のパレットで色だけ替える
+   → 新テーマは「PNGを置く」か「パレットを1行足す」だけで足りる(コード変更不要)。 */
+const PART_PAL = {
+  default:{ top:0x39424b, side:0x1b2026, edge:0x11151a, rim:0x6b7681, glow:0x7fe6ff },
+  wood:   { top:0x7a5a38, side:0x3a2a18, edge:0x1e150c, rim:0xb8935a, glow:0xffd08a },
+  aqua:   { top:0x246d76, side:0x0e3138, edge:0x061c21, rim:0x55b8bb, glow:0x9ff0e6 },
+  neon:   { top:0x232a52, side:0x0c1226, edge:0x050813, rim:0x5566bb, glow:0x7fffd4 },
+  brass:  { top:0x574029, side:0x241a0e, edge:0x120c05, rim:0xc09550, glow:0xffd27f },
+  candy:  { top:0x7a3d5c, side:0x321528, edge:0x1a0a14, rim:0xdd85ac, glow:0xfff0a0 },
+};
+const PART_SKIN_BY_THEME = {
+  japan:'wood', onsen:'wood', cabin:'wood', sushi:'wood', western:'wood', pirate:'wood', jungle:'wood', mushroom:'wood',
+  undersea:'aqua', ice:'aqua', beehive:'brass', steampunk:'brass', dwarf:'brass', hell:'brass', egypt:'brass', china:'brass', arabia:'brass',
+  scifi:'neon', space:'neon', circuit:'neon', tokyo:'neon', retrofuture:'neon', haunted:'neon',
+  circus:'candy', carnival:'candy', christmas:'candy', halloween:'candy', diner:'candy', fantasy:'candy', desert:'candy', dino:'candy',
+};
+// 製造機の見た目(セル比)。inset=マス境界からの余白 / height=筐体の高さ / slot=スロット穴の大きさ
+const MACH_GEO = { inset:0.10, height:0.42, slot:0.52 };
+// 製造機のサイズ。sub('s2'..'s5') が在庫キー兼サイズ。1マス=スロット1つ。1マス機は廃止(最小2マス)。
+const MACH_SIZES = [2,3,4,5];
+const KINDS = ['machine','deco','prop','emoji','prize'];   // 設置できる種類（belt/outlet は廃止）
+const MACH_MIN = 2;
+const MACH_ART = ['normal','arabia'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
+const machSize = (sub)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(sub||'').replace(/\D/g,''))||MACH_MIN));
+
+/* ===== 素材とレシピ =====
+   製造機の各マス(スロット)に素材を1つ設定する。1台に入っている素材の「集合」でできる物が変わる。
+   ・順不同（牛乳→卵→小麦粉 と 卵→牛乳→小麦粉 は同じケーキ）。同じ素材の重複は1つとして数える。
+   ・既知レシピに無い組合せ → 「謎の塊」。
+   ・レシピ表は window.__factory.recipes で差し替え可能（組合せロジックは別担当に渡せる）。 */
+const MATS = {
+  milk:   {e:'🥛', n:'牛乳',      c:0xf2f0e6},
+  egg:    {e:'🥚', n:'卵',        c:0xf5e6c8},
+  flour:  {e:'🌾', n:'小麦粉',    c:0xe0c98a},
+  sugar:  {e:'🍬', n:'砂糖',      c:0xf6dce8},
+  berry:  {e:'🍓', n:'いちご',    c:0xe05a6a},
+  cocoa:  {e:'🫘', n:'カカオ',    c:0x7a4a2a},
+  gelatin:{e:'🧊', n:'ゼラチン',  c:0xbfe6ee},
+  coffee: {e:'☕', n:'コーヒー豆', c:0x5a3a24},
+  honey:  {e:'🍯', n:'はちみつ',  c:0xe8b13a},
+  rice:   {e:'🍚', n:'米',        c:0xf0efe8},
+  fish:   {e:'🐟', n:'魚',        c:0x6aa8d0},
+  nori:   {e:'🍃', n:'海苔',      c:0x2f5a3a},
+};
+const RECIPES = [
+  {k:['milk','egg','flour'],                    e:'🍰', n:'ケーキ'},
+  {k:['milk','egg','flour','sugar'],            e:'🎂', n:'デコレーションケーキ'},
+  {k:['milk','egg','flour','sugar','berry'],    e:'🥞', n:'ベリーパンケーキ'},
+  {k:['berry','gelatin'],                       e:'🍮', n:'いちごゼリー'},
+  {k:['milk','sugar','gelatin'],                e:'🍨', n:'パンナコッタ'},
+  {k:['flour','sugar','cocoa'],                 e:'🍪', n:'ココアクッキー'},
+  {k:['milk','sugar','cocoa'],                  e:'🍫', n:'ミルクチョコ'},
+  {k:['coffee','milk'],                         e:'🥤', n:'カフェオレ'},
+  {k:['coffee','milk','sugar','cocoa'],         e:'☕', n:'モカ'},
+  {k:['honey','milk'],                          e:'🍼', n:'ハニーミルク'},
+  {k:['honey','flour','egg'],                   e:'🍩', n:'ハニードーナツ'},
+  {k:['rice','egg'],                            e:'🍳', n:'卵かけごはん'},
+  {k:['rice','fish'],                           e:'🍣', n:'寿司'},
+  {k:['rice','fish','nori'],                    e:'🍙', n:'手巻き'},
+  {k:['fish','nori'],                           e:'🍥', n:'なると'},
+  {k:['rice','fish','nori','egg','gelatin'],    e:'🍱', n:'弁当'},
+];
+const UNKNOWN_PRODUCT = {e:'🪨', n:'謎の塊', unknown:true};
+const matKey = (list)=> Array.from(new Set(list.filter(Boolean))).sort().join('+');
+/* スロットの素材配列 → 作れる物。1つも入っていなければ null(未設定)。 */
+function recipeFor(slots){
+  const key=matKey(slots||[]); if(!key) return null;
+  const table=(window.__factory && window.__factory.recipes) || RECIPES;
+  for(const r of table) if(matKey(r.k)===key) return r;
+  return UNKNOWN_PRODUCT;
+}
 
 const INK = '#3b4643', EYE = '#241713';
 const PRESETS = [
@@ -49,8 +128,6 @@ function makeMascot(scene, key, pal, pose){
   scene.textures.addCanvas(key, cv);
 }
 
-const MACHINES = ['m_red','m_blue','m_green','m_yellow'];
-const MACHS_JP = { red:'抽出機', green:'成形機', blue:'演算機', yellow:'選別機' };
 // テーマ専用の部屋画像(Stitch製・壁/床/窓を焼き込み)。ここにあるテーマは背景ごと差し替える
 const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_japan', china:'room_china',
   diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino',
@@ -110,12 +187,10 @@ class Main extends Phaser.Scene {
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
     for(const s of SKINS) if(s.id!=='none') this.load.image('hat_'+s.id, `assets/hat-${s.id}.png`);   // 被り物。未生成でもPhaserは欠損扱い→描画側でexistsチェック
     this.load.json('hatfit','assets/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る
-    for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
-    this.load.image('belt_seg','assets/belt_seg.png');
-    this.load.image('belt_corner','assets/belt_corner.png');   // belt_seg 由来(同一パレット)
-    for(const pc of ['straight','corner','tee','cross']) this.load.image('belt_normal_'+pc, `assets/belt-normal-${pc}.png`);   // スキン=素材セット(接続に応じて配置)
-    this.load.image('item_box','assets/obj_crate.png');
+    // 製造機スプライト(Stitch製)。命名規約 mach_<theme>_s<N>。無いテーマは normal → 手続き描画 の順にフォールバック
+    for(const th of MACH_ART) for(const n of MACH_SIZES) this.load.image(`mach_${th}_s${n}`, `assets/mach-${th}-s${n}.png`);
+    this.load.json('machfit','assets/mach-fit.json');   // 絵から実測したスロット中心(幅/高さ比)。素材アイコンを穴にぴったり載せる
   }
   create(){
     this.bgImg=this.add.image(0,0,'bg_room').setOrigin(0,0).setDisplaySize(W,H).setDepth(-1000);
@@ -137,12 +212,9 @@ class Main extends Phaser.Scene {
     shg.fillStyle=grd; shg.fillRect(0,0,64,32); this.textures.addCanvas('shadow',shc);
 
     this.occ=new Set(); this.machineCells=[]; this.placed=[]; this.editMode=false;
-    for(const o of DEMO){ const isM=MACHINES.includes(o.k);
-      this.addPlaced(isM?'machine':'deco', isM?o.k.replace('m_',''):o.k.replace('dec_',''), {cell:{c:o.c,r:o.r}, silent:true}); }
+    this.partsTheme=null; this.placeDir='u';   // placeDir = 設置プレビューの向き(Rキーで切替)
+    for(const o of DEMO) this.addPlaced('deco', o.k.replace('dec_',''), {cell:{c:o.c,r:o.r}, silent:true});
     this.setupEdit();
-    // 出荷口を右下辺の中央に隣接2つ(固定・撤去/移動不可)。コンベアの接続先(ライン終端)になる。
-    for(const [c,r] of [[GU-1,5],[GU-1,6]]) this.addPlaced('outlet', null, {cell:{c,r}, silent:true, fixed:true});
-    // this.createBelt();  // 旧デモベルト無効化(設置式の自動接続コンベアに置換)
     this.createNightFx();
     this.updateLighting(); this.time.addEvent({delay:4000,loop:true,callback:()=>this.updateLighting()});
     // 床グリッド確認(?grid=1): 設置物が正しくセルに接地しているか検証
@@ -163,67 +235,35 @@ class Main extends Phaser.Scene {
       getAgents:()=>Object.keys(this.agents).map(k=>{ const a=this.agents[k]; return {proj:a.proj, skinId:a.skinId||'none', working:!!a.busy, color:PRESETS[a.ci].b}; }),
       applySkin:(proj,skinId)=>this.applySkin(proj,skinId),
       skinList:SKINS,
+      setPartsTheme:(t)=>this.setPartsTheme(t),   // 製造機のスキン(テーマ)切替
+      // 製造機の素材スロット。UI(パレット/設定パネル)はここ越しにシーンを触る
+      materials:MATS, recipes:RECIPES, machSizes:MACH_SIZES,
+      getMachine:(id)=>this.getMachine(id),
+      setSlot:(id,i,mat)=>this.setSlot(id,i,mat),
+      rotateMachine:(id)=>this.rotateMachine(id),
+      moveMachine:(id,c,r)=>this.moveItem(id,c,r),
+      removeMachine:(id)=>this.removeItem(id),
+      recipeFor:(slots)=>recipeFor(slots),
     };
     this.poll(); this.time.addEvent({delay:1500,loop:true,callback:()=>this.poll()});
   }
-  createBelt(){
-    // ベルト実寸: 1セル強に収めて隣と自然に連結（元は2.3セルで重なっていた）
-    const BW=1.28*CELL, bscale=BW/965;
-    this.beltH=0.34*CELL;            // 箱の底をベルト天面に合わせる高さ(側面に被らないよう)
-    this.beltLift=0.8*CELL;          // 箱をこの分だけ手前セグメントより上に描く(奥に隠れないよう)
-    // L字ベルト: 手前(6,9)→(6,6)で右折→(9,6)。矢印なしスプライトをセルごとに連結
-    const armA=[{c:6,r:9},{c:6,r:8},{c:6,r:7}];       // V軸(手前→奥・右上へ)
-    const corner={c:6,r:6};
-    const armB=[{c:7,r:6},{c:8,r:6},{c:9,r:6}];        // U軸(右下へ)
-    const put=(c,r,flip,tex)=>{ const p=cellXY(c,r);
-      const s=this.add.image(p.x,p.y,tex||'belt_seg').setOrigin(0.5,0.72).setScale(bscale).setFlipX(!!flip).setDepth(p.y);
-      this.add.image(p.x+CELL*0.16,p.y+CELL*0.07,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(s.displayWidth*0.82,s.displayWidth*0.36).setAlpha(0.45);
-      this.lit.push({sp:s, u:(c+0.5)/GU, v:(r+0.5)/GV});   // 採光対象
-      this.occ.add(K(c,r)); return s; };
-    for(const o of armA) put(o.c,o.r,false);
-    put(corner.c,corner.r,false,'belt_corner');            // コーナー(専用エルボ)
-    for(const o of armB) put(o.c,o.r,true);                // U軸側は反転して斜めを合わせる
-    // 製品を L字 Path に沿って流す(矢印なし・箱の動きで方向が分かる)
-    const h=this.beltH, P=(c,r)=>{ const p=cellXY(c,r); return {x:p.x,y:p.y-h}; };
-    const a=P(6,9.4), pre=P(6,6.5), cor=P(6,6), post=P(6.5,6), b=P(9.4,6);
-    this.beltPath=new Phaser.Curves.Path(a.x,a.y);
-    this.beltPath.lineTo(pre.x,pre.y);
-    this.beltPath.quadraticBezierTo(post.x,post.y,cor.x,cor.y);   // (endX,endY,ctrlX,ctrlY) コーナーで滑らかに右折
-    this.beltPath.lineTo(b.x,b.y);
-    this._pv=new Phaser.Math.Vector2();
-    this.items=[]; const N=5;
-    for(let i=0;i<N;i++){ const it=this.add.image(a.x,a.y,'item_box').setOrigin(0.5,0.9); it.setScale(0.5*CELL/it.height); it.t=i/N; this.items.push(it); }
-    // edit時のみ流れる向きを表示する矢印レイヤー
-    this.beltDirGfx=this.add.graphics().setDepth(8600);
+  /* ===== 配置レジストリ（位置指定・移動・撤去に対応。編集画面の土台） =====
+     製造機だけが複数マス(1〜5)を占有する。占有マスは cellsOf() が唯一の定義。 */
+  cellsOf(e){ if(e.kind!=='machine') return [e.cell];
+    const n=machSize(e.sub), du=(e.dir==='v')?0:1, dv=(e.dir==='v')?1:0, out=[];
+    for(let i=0;i<n;i++) out.push({c:e.cell.c+du*i, r:e.cell.r+dv*i});
+    return out; }
+  /* 製造機の占有マス群の外周(uv)。描画とヒット判定で共用 */
+  _machFootprint(e){ const n=machSize(e.sub), IN=MACH_GEO.inset;
+    const c0=e.cell.c, r0=e.cell.r, du=(e.dir==='v')?0:1, dv=(e.dir==='v')?1:0;
+    const u0=(c0+IN)/GU, u1=(c0+du*(n-1)+1-IN)/GU, v0=(r0+IN)/GV, v1=(r0+dv*(n-1)+1-IN)/GV;
+    return [uvXY(u0,v0), uvXY(u1,v0), uvXY(u1,v1), uvXY(u0,v1)];   // A(最奥) B C(最手前) D
   }
-  drawBeltDir(time){
-    const g=this.beltDirGfx; g.clear(); if(!this.editMode||!this.beltPath) return;
-    g.lineStyle(4,0x7fecec,0.95); g.lineCap='round';
-    const v=new Phaser.Math.Vector2(), v2=new Phaser.Math.Vector2();
-    const off=((time*0.0005)%0.07);
-    for(let t=off; t<1; t+=0.07){ this.beltPath.getPoint(t,v); this.beltPath.getPoint(Math.min(1,t+0.02),v2);
-      const dx=v2.x-v.x, dy=v2.y-v.y, L=Math.hypot(dx,dy)||1, ax=dx/L, ay=dy/L, nx=-ay, ny=ax;
-      const cx=v.x, cy=v.y-3, tip={x:cx+ax*7,y:cy+ay*7};
-      const la={x:cx-ax*2-nx*5,y:cy-ay*2-ny*5}, lb={x:cx-ax*2+nx*5,y:cy-ay*2+ny*5};
-      g.beginPath(); g.moveTo(la.x,la.y); g.lineTo(tip.x,tip.y); g.lineTo(lb.x,lb.y); g.strokePath(); }
-  }
-  /* ===== 配置レジストリ（位置指定・移動・撤去に対応。編集画面の土台） ===== */
   _makeObjs(e){ const {c,r}=e.cell; const p=cellXY(c,r); const u=(c+0.5)/GU, v=(r+0.5)/GV;
     const tint=this.tintByLight(u,v); const objs=[]; let main=null; e._lit=null;
     if(e.kind==='machine'){
-      const tex={red:'m_red',blue:'m_blue',green:'m_green',yellow:'m_yellow'}[e.sub];
-      const img=this.add.image(p.x,p.y,tex).setOrigin(0.5,1).setDepth(p.y); img.setScale(2.0*CELL/img.height).setTint(tint);
-      const sh=this.add.image(p.x+CELL*0.24,p.y+CELL*0.12,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.15,img.displayWidth*0.52).setAlpha(0.5);
-      const lbl=this.add.text(p.x,p.y-2.0*CELL-4,(MACHS_JP[e.sub]||'')+(e.lvl>1?` Lv${e.lvl}`:''),{fontFamily:'monospace',fontSize:'10px',color:'#eafff6'}).setOrigin(0.5,1).setDepth(p.y+1); lbl.setShadow(0,1,'#000',3,true,true);
-      objs.push(sh,img,lbl); main=img; e._lit=img; this.lit.push({sp:img,u,v}); this.machineCells.push({c,r});
-    } else if(e.kind==='belt'){
-      // 見た目は共有 beltGfx が rot に応じて無地描画。ここは掴む/クリック(回転)用の透明ヒット矩形のみ。
-      const hit=this.add.rectangle(p.x,p.y,CELL*0.82,CELL*0.5,0xffffff,0.002).setDepth(p.y);
-      objs.push(hit); main=hit;
-    } else if(e.kind==='outlet'){
-      // 目立たない出荷口(絵文字/矢印なし): 床面の暗いスロット + 細い縁だけ
-      const slot=this.add.rectangle(p.x,p.y-CELL*0.02,CELL*0.46,CELL*0.26,0x171b1f,0.9).setDepth(p.y-0.2).setStrokeStyle(1,0x4a5a54);
-      objs.push(slot); main=slot;
+      this._makeMachine(e, objs); main=e.main;
+      for(const q of this.cellsOf(e)) this.machineCells.push({c:q.c,r:q.r});
     } else if(e.kind==='deco'){
       const img=this.add.image(p.x,p.y,'dec_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.0*CELL/img.height).setTint(tint);
       const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
@@ -244,122 +284,203 @@ class Main extends Phaser.Scene {
       const t=this.add.text(p.x,p.y-CELL*0.26,e.sub.e,{fontSize:Math.round(CELL*0.95)+'px'}).setOrigin(0.5,1).setDepth(p.y+0.1);
       objs.push(sh,gl,base,t); main=t;
     }
-    e.objs=objs; e.main=main; return e;
+    if(e.kind!=='machine'){ e.objs=objs; e.main=main; }
+    return e;
   }
+  /* ---- 製造機の描画。スプライト(mach_<theme>_s<N>)があればそれ、無ければ手続きの筐体。
+       どちらの場合も「1マス=スロット1つ」の位置は占有マスから計算するので、素材アイコンは必ずマスに乗る。 ---- */
+  machTex(e){ const n=machSize(e.sub);
+    for(const th of [this.partsTheme, 'normal']){ const k=`mach_${th}_s${n}`;
+      if(th && this.textures.exists(k)) return {key:k, theme:th, n}; }
+    return null; }
+  /* 絵のスロット中心(幅/高さ比)。v向きは左右反転して描くので x も反転する */
+  machSlotPts(tex, img, flip){
+    const fit=((this.cache.json.get('machfit')||{})[tex.theme]||{})[String(tex.n)];
+    if(!fit) return null;
+    const L=img.x-img.displayWidth/2, T=img.y-img.displayHeight;
+    return fit.map(([fx,fy])=>({ x:L+(flip?1-fx:fx)*img.displayWidth, y:T+fy*img.displayHeight })); }
+  _makeMachine(e, objs){
+    const sk=this.partsSkin();
+    const [A,B,C,D]=this._machFootprint(e);
+    const xs=[A.x,B.x,C.x,D.x], ys=[A.y,B.y,C.y,D.y];
+    const bx0=Math.min(...xs), bx1=Math.max(...xs), by0=Math.min(...ys), by1=Math.max(...ys);
+    const u=(e.cell.c+0.5)/GU, v=(e.cell.r+0.5)/GV, tint=this.tintByLight(u,v);
+    const tex=this.machTex(e);
+    const g=this.add.graphics().setDepth(C.y+0.1); objs.push(g); e._gfx=g;
+    let HG, slotPts=null;   // 天面の高さ(px) / スロット中心(スプライトのときは絵から実測)
+    if(tex){
+      // 素材の footprint 幅はゲーム側の占有外周と一致するよう焼いてある(tools/cut_machines.py)
+      const img=this.add.image((bx0+bx1)/2, by1, tex.key).setOrigin(0.5,1).setDepth(C.y).setTint(tint);
+      img.setDisplaySize(bx1-bx0, img.height*(bx1-bx0)/img.width);
+      if(e.dir==='v') img.setFlipX(true);   // 素材はu方向。v方向は左右反転で角度が合う
+      objs.push(img); e._lit=img; this.lit.push({sp:img,u,v});
+      HG = Math.max(2, img.displayHeight-(by1-by0));
+      slotPts = this.machSlotPts(tex, img, e.dir==='v');
+      const sh=this.add.image((bx0+bx1)/2+3, by1-2, 'shadow').setDepth(C.y-0.5)
+        .setDisplaySize((bx1-bx0)*0.95,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);
+    } else {
+      HG = MACH_GEO.height*CELL;
+      const up=(q)=>({x:q.x, y:q.y-HG});
+      g.fillStyle(0x000000,0.34); g.fillPoints([A,B,C,D].map(q=>({x:q.x+3,y:q.y+3})),true);   // 接地影
+      g.fillStyle(sk.side,1);                                                                 // 手前2面(側面)
+      g.fillPoints([B,C,up(C),up(B)],true); g.fillPoints([D,C,up(C),up(D)],true);
+      g.fillStyle(sk.top,1); g.fillPoints([A,B,C,D].map(up),true);                            // 天面
+      g.lineStyle(2,sk.rim,0.95); g.strokePoints([A,B,C,D].map(up),true);                     // 天面の縁
+      g.lineStyle(2,sk.edge,0.9);
+      for(const q of [B,C,D]) g.lineBetween(q.x,q.y,q.x,q.y-HG);                              // 縦のエッジ
+    }
+    const up=(q)=>({x:q.x, y:q.y-HG});
+
+    // スロット(1マス1つ)。素材が入っていれば素材色で光らせ、絵文字を天面に載せる
+    e.slots = Array.isArray(e.slots) ? e.slots.slice(0, machSize(e.sub)) : [];
+    while(e.slots.length < machSize(e.sub)) e.slots.push(null);
+    e._slotObjs=[];
+    const SL=MACH_GEO.slot;
+    this.cellsOf(e).forEach((q,idx)=>{
+      const mat=e.slots[idx], m=mat&&MATS[mat];
+      const ctr = (slotPts && slotPts[idx]) || up(cellXY(q.c,q.r));   // 絵の実測位置 > 計算位置
+      if(slotPts){ if(m){ g.fillStyle(m.c,0.5); g.fillEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24);
+                          g.lineStyle(1.5,sk.glow,0.85); g.strokeEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24); } }
+      else {   // 手続き描画: 穴そのものを描く
+        const s0=uvXY((q.c+0.5-SL/2)/GU,(q.r+0.5-SL/2)/GV), s1=uvXY((q.c+0.5+SL/2)/GU,(q.r+0.5-SL/2)/GV);
+        const s2=uvXY((q.c+0.5+SL/2)/GU,(q.r+0.5+SL/2)/GV), s3=uvXY((q.c+0.5-SL/2)/GU,(q.r+0.5+SL/2)/GV);
+        const poly=[s0,s1,s2,s3].map(up);
+        g.fillStyle(m?m.c:0x0d1116, m?0.85:0.6); g.fillPoints(poly,true);
+        g.lineStyle(1.5, m?sk.glow:sk.edge, m?0.9:0.7); g.strokePoints(poly,true);
+      }
+      if(m){ const t=this.add.text(ctr.x,ctr.y-CELL*0.08,m.e,{fontSize:Math.round(CELL*0.5)+'px'}).setOrigin(0.5,0.5).setDepth(C.y+0.2+idx*0.01);
+             objs.push(t); e._slotObjs.push(t); }
+    });
+
+    // 完成品の表示(筐体の上)。素材未設定なら出さない
+    const prod=recipeFor(e.slots); e.product=prod;
+    const mid={x:(bx0+bx1)/2, y:by0-HG};
+    if(prod){
+      const badge=this.add.text(mid.x, mid.y-CELL*0.30, prod.e, {fontSize:Math.round(CELL*0.8)+'px'}).setOrigin(0.5,1).setDepth(C.y+2);
+      const nm=this.add.text(mid.x, mid.y-CELL*0.28, prod.n, {fontFamily:'monospace',fontSize:'10px',color:prod.unknown?'#d9b48a':'#eafff6'}).setOrigin(0.5,0).setDepth(C.y+2);
+      nm.setShadow(0,1,'#000',3,true,true);
+      objs.push(badge,nm); e._badge=badge;
+    } else {
+      const hint=this.add.text(mid.x, mid.y-CELL*0.1, '素材未設定', {fontFamily:'monospace',fontSize:'10px',color:'#93a39d'}).setOrigin(0.5,1).setDepth(C.y+2);
+      hint.setShadow(0,1,'#000',3,true,true); objs.push(hint);
+    }
+    if(e.lvl>1){ const lv=this.add.text(bx0+6, by1-HG, `Lv${e.lvl}`, {fontFamily:'monospace',fontSize:'9px',color:'#9fb0c0'}).setOrigin(0,1).setDepth(C.y+2);
+      lv.setShadow(0,1,'#000',3,true,true); objs.push(lv); }
+    e.objs=objs; e.main=g;
+  }
+  partsSkin(){ const t=this.partsTheme||null;
+    return Object.assign({theme:t}, PART_PAL[PART_SKIN_BY_THEME[t]||'default']); }
+  /* パーツのテーマを切り替える(背景テーマに追従 / 単体でも呼べる) */
+  setPartsTheme(theme){ if(this.partsTheme===theme) return; this.partsTheme=theme||null;
+    for(const e of this.placed.slice()) if(e.kind==='machine') this._remake(e); }
+  _remake(e){ this._detach(e); this._makeObjs(e); if(this.editMode) this._enableDrag(e); }
+
+  /* ---- 占有・設置可否 ---- */
+  _syncOcc(){ this.occ.clear(); for(const e of this.placed) for(const q of this.cellsOf(e)) this.occ.add(K(q.c,q.r)); }
+  machineAtCell(c,r){ return this.placed.find(e=>e.kind==='machine' && this.cellsOf(e).some(q=>q.c===c&&q.r===r))||null; }
+  entryAtCell(c,r){ return this.placed.find(e=>this.cellsOf(e).some(q=>q.c===c&&q.r===r))||null; }
+  /* 仮の entry を作って占有マスを判定する(設置前チェック用) */
+  canPlace(kind,c,r,opt){ opt=opt||{};
+    if(kind!=='machine') return this.isFree(c,r);
+    const probe={kind:'machine', sub:opt.sub||'s1', dir:opt.dir||'u', cell:{c,r}};
+    const skip=opt.ignoreId||null;
+    for(const q of this.cellsOf(probe)){
+      if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) return false;
+      const at=this.entryAtCell(q.c,q.r); if(at && at.id!==skip) return false;
+    }
+    return true; }
+  /* 位置未指定のときの落とし先(その向き・サイズで収まる空き) */
+  autoCell(kind,opt){ if(kind!=='machine') return this.freeCell();
+    for(const dir of [opt&&opt.dir||'u','u','v'])
+      for(let r=1;r<GV-1;r++) for(let c=1;c<GU-1;c++)
+        if(this.canPlace('machine',c,r,{sub:opt&&opt.sub,dir})){ if(opt) opt.dir=dir; return {c,r,dir}; }
+    return null; }
   addPlaced(kind, sub, extra){ extra=extra||{};
+    // 知らない kind(廃止した belt/outlet など)は絵の無い幽霊エントリになるので弾く
+    if(KINDS.indexOf(kind)<0) return null;
     if(kind==='deco' && !this.textures.exists('dec_'+sub)) return null;
-    const cell=(extra.cell && this.isFree(extra.cell.c,extra.cell.r)) ? extra.cell : this.freeCell();
-    const e={ id: extra.id||('o'+(this._oid=(this._oid||0)+1)), kind, sub, lvl:extra.lvl||1, cell, rot:(kind==='belt' ? (extra.rot!=null?extra.rot:null) : undefined), fixed:!!extra.fixed };
-    this._makeObjs(e); this.occ.add(K(cell.c,cell.r)); this.placed.push(e);
+    if(kind==='machine') sub = 's'+machSize(sub);
+    let dir = (kind==='machine') ? (extra.dir==='v'?'v':'u') : undefined;
+    let cell=extra.cell||null;
+    if(cell && !this.canPlace(kind,cell.c,cell.r,{sub,dir})) cell=null;
+    if(!cell && extra.strict) return null;              // レイアウト復元: 勝手に別マスへ動かさない
+    if(!cell){ const o={sub,dir}; cell=this.autoCell(kind,o); if(cell&&cell.dir) dir=cell.dir; }
+    if(!cell) return null;
+    const e={ id: extra.id||('o'+(this._oid=(this._oid||0)+1)), kind, sub, lvl:extra.lvl||1,
+      cell:{c:cell.c,r:cell.r}, dir, slots:(kind==='machine'? (extra.slots||[]) : undefined) };
+    this._makeObjs(e); this.placed.push(e); this._syncOcc();
     if(this.editMode) this._enableDrag(e);
     if(!extra.silent){ const p=cellXY(cell.c,cell.r); this._spawnPop(p.x,p.y); }
-    if(kind==='belt'||kind==='machine'||kind==='outlet') this.computeBelts();
     return e.id;
   }
   _detach(e){ for(const o of e.objs) o.destroy();
     if(e._lit){ const i=this.lit.findIndex(x=>x.sp===e._lit); if(i>=0)this.lit.splice(i,1); }
-    if(e.kind==='machine'){ const i=this.machineCells.findIndex(m=>m.c===e.cell.c&&m.r===e.cell.r); if(i>=0)this.machineCells.splice(i,1); } }
-  removeItem(id){ const i=this.placed.findIndex(e=>e.id===id); if(i<0)return false; const e=this.placed[i];
-    if(e.fixed) return false;
-    this._detach(e); this.occ.delete(K(e.cell.c,e.cell.r)); this.placed.splice(i,1);
-    if(e.kind==='belt'||e.kind==='machine') this.computeBelts(); return true; }
-  moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e||e.fixed)return false;
-    const same=(e.cell.c===c&&e.cell.r===r); if(!same && !this.isFree(c,r)) return false;
-    this._detach(e); this.occ.delete(K(e.cell.c,e.cell.r));
-    e.cell={c,r}; this._makeObjs(e); this.occ.add(K(c,r));
-    if(e.kind==='belt'||e.kind==='machine') this.computeBelts();
+    if(e.kind==='machine'){ for(const q of this.cellsOf(e)){
+      const i=this.machineCells.findIndex(m=>m.c===q.c&&m.r===q.r); if(i>=0)this.machineCells.splice(i,1); } } }
+  removeItem(id){ const i=this.placed.findIndex(x=>x.id===id); if(i<0) return false;
+    this._detach(this.placed[i]); this.placed.splice(i,1); this.lastRemoved=1; this._syncOcc(); return true; }
+  moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
+    if(!this.canPlace(e.kind,c,r,{sub:e.sub,dir:e.dir,ignoreId:id})) return false;
+    this._detach(e); e.cell={c,r}; this._makeObjs(e); this._syncOcc();
     if(this.editMode) this._enableDrag(e); return true; }
-  getLayout(){ return this.placed.filter(e=>e.kind!=='outlet').map(e=>({id:e.id,kind:e.kind,sub:e.sub,lvl:e.lvl,rot:e.rot,c:e.cell.c,r:e.cell.r})); }
-  buildLayout(list){ for(const e of this.placed.slice()) if(e.kind!=='outlet') this.removeItem(e.id);
-    for(const it of (list||[])) this.addPlaced(it.kind, it.sub, {cell:{c:it.c,r:it.r}, lvl:it.lvl, id:it.id, rot:it.rot, silent:true});
-    this._oid=Math.max(0,...this.placed.map(e=>parseInt(String(e.id).replace(/\D/g,''))||0)); this.computeBelts(); }
-  setMachineLevel(id,lvl){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e)return; e.lvl=lvl; this.moveItem(id,e.cell.c,e.cell.r); }
+  /* 製造機を90°回転(u軸⇔v軸)。回した先が空いていなければ何もしない */
+  rotateMachine(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return false;
+    const nd=(e.dir==='v')?'u':'v';
+    if(!this.canPlace('machine',e.cell.c,e.cell.r,{sub:e.sub,dir:nd,ignoreId:id})) return false;
+    this._detach(e); e.dir=nd; this._makeObjs(e); this._syncOcc();
+    if(this.editMode) this._enableDrag(e); return true; }
+  /* スロット i に素材をセット(null でクリア)。作れる物が即座に変わる */
+  setSlot(id,i,mat){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return false;
+    if(i<0||i>=machSize(e.sub)) return false;
+    if(mat!=null && !MATS[mat]) return false;
+    e.slots[i]=mat||null; this._remake(e);
+    const p=cellXY(e.cell.c,e.cell.r); this._spawnPop(p.x,p.y); return true; }
+  getMachine(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return null;
+    return { id:e.id, size:machSize(e.sub), dir:e.dir, lvl:e.lvl, slots:e.slots.slice(),
+      product:e.product?{e:e.product.e,n:e.product.n,unknown:!!e.product.unknown}:null }; }
+  _snapBack(e){ const p=cellXY(e.cell.c,e.cell.r); if(e.main){ e.main.x=p.x; e.main.y=p.y; } }
+  getLayout(){ return this.placed.map(e=>{ const o={id:e.id,kind:e.kind,sub:e.sub,lvl:e.lvl,c:e.cell.c,r:e.cell.r};
+    if(e.kind==='machine'){ o.dir=e.dir; o.slots=e.slots.slice(); } return o; }); }
+  /* 旧レイアウトの移行: コンベア/出荷口は廃止したので捨てる。旧4種の製造機(red等)は1マス機に読み替える。 */
+  buildLayout(list){
+    for(const e of this.placed.slice()){ this._detach(e); }
+    this.placed=[]; this._syncOcc();
+    let dropped=0;
+    for(const it of (list||[])){
+      if(it.kind==='belt'||it.kind==='outlet'){ dropped++; continue; }
+      const sub=(it.kind==='machine') ? ('s'+machSize(it.sub)) : it.sub;
+      this.addPlaced(it.kind, sub, {cell:{c:it.c,r:it.r}, lvl:it.lvl, id:it.id, dir:it.dir, slots:it.slots, silent:true});
+    }
+    this._oid=Math.max(0,...this.placed.map(e=>parseInt(String(e.id).replace(/\D/g,''))||0));
+    return dropped; }
+  setMachineLevel(id,lvl){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e)return; e.lvl=lvl; this._remake(e); }
   // 旧API互換（ショップ購入から呼ばれる）
   placeMachine(type){ return this.addPlaced('machine', type); }
-  placeBelt(){ return this.addPlaced('belt', null); }
   placeDeco(type){ return this.addPlaced('deco', type); }
   placeEmojiDeco(emoji){ return this.addPlaced('emoji', emoji); }
   placeProp(name){ if(!this.textures.exists('prop_'+name)) return null; return this.addPlaced('prop', name); }
   placePrize(emoji,color){ return this.addPlaced('prize', {e:emoji,color}); }
-  /* ===== コンベア: 向き(rot)を手動管理、クリックで90°回転。設置時だけ隣接から向きを自動推定。
-     見た目は無地(矢印なし)の手続き描画。rot: 0=直線(縦) 1=直線(横) 2..5=コーナー4向き。 ===== */
-  _nodeAt(c,r){ return this.placed.find(e=>e.cell.c===c&&e.cell.r===r&&(e.kind==='belt'||e.kind==='machine'||e.kind==='outlet')); }
-  _rotDirs(rot){ const R=[[[0,-1],[0,1]],[[1,0],[-1,0]],[[0,-1],[1,0]],[[1,0],[0,1]],[[0,1],[-1,0]],[[-1,0],[0,-1]]]; return R[((rot||0)%6+6)%6]; }
-  _autoRot(cell){ const at=(dc,dr)=>!!this._nodeAt(cell.c+dc,cell.r+dr);
-    const N=at(0,-1),S=at(0,1),E=at(1,0),W=at(-1,0);
-    if(N&&S)return 0; if(E&&W)return 1;
-    if(N&&E)return 2; if(E&&S)return 3; if(S&&W)return 4; if(W&&N)return 5;
-    if(N||S)return 0; if(E||W)return 1; return 1; }
-  computeBelts(){ for(const e of this.placed) if(e.kind==='belt' && e.rot==null) e.rot=this._autoRot(e.cell); this.renderBelts(); this._beltFlow(); }
-  /* 流れ計算: 各ベルトの「次に進むセル(=出荷口へ向かう向き)」を決める。ベルトの rot方向(アーム)が
-     出荷口 or すでに出荷口へ流れる別ベルト を指していれば、そこへ流れる(緩和法で伝播)。
-     供給元(source)=出荷口へ流れる かつ rot方向に製造機があるベルト。製造機の接続判定もここで持つ。 */
-  _beltFlow(){
-    const belts=this.placed.filter(e=>e.kind==='belt');
-    const next=new Map(); let changed=true, guard=0;
-    while(changed && guard++<400){ changed=false;
-      for(const b of belts){ if(next.has(b)) continue;
-        for(const [dc,dr] of this._rotDirs(b.rot)){ const c=b.cell.c+dc, r=b.cell.r+dr; const n=this._nodeAt(c,r); if(!n) continue;
-          if(n.kind==='outlet'){ next.set(b,{c,r}); changed=true; break; }
-          if(n.kind==='belt' && next.has(n)){ next.set(b,{c,r}); changed=true; break; } } }
-    }
-    this.beltNext=next;
-    const linked=new Set();
-    this.beltSources=belts.filter(b=> next.has(b) && this._rotDirs(b.rot).some(([dc,dr])=>{ const n=this._nodeAt(b.cell.c+dc,b.cell.r+dr); if(n&&n.kind==='machine'){ linked.add(n); return true; } return false; }));
-    // rot方向に製造機がある全ベルトで、その機械を「接続済み」とする(source以外=出荷口未接続でも接続自体はする)
-    for(const b of belts) for(const [dc,dr] of this._rotDirs(b.rot)){ const n=this._nodeAt(b.cell.c+dc,b.cell.r+dr); if(n&&n.kind==='machine') linked.add(n); }
-    this.machineLinked=linked;
-    // 接続済み製造機に控えめなリング(beltGfxはrenderBeltsでclear済み。この後に上描き)
-    const g=this.beltGfx; if(g){ for(const m of linked){ const p=cellXY(m.cell.c,m.cell.r); g.lineStyle(3,0x7fe6ff,0.85); g.strokeCircle(p.x,p.y-CELL*0.12,CELL*0.2); } }
-    if(window.__factory) window.__factory.beltStats={ belts:belts.length, toOutlet:next.size, machinesLinked:linked.size, sources:this.beltSources.length };
-  }
-  renderBelts(){ const g=this.beltGfx; if(!g)return; g.clear();
-    const belts=this.placed.filter(e=>e.kind==='belt'); if(!belts.length)return;
-    const W1=Math.max(8,CELL*0.34), W0=W1+6, EDGE=0x14171b, BELT=0x2c3138, RAIL=0x5a626c, ROLL=0x828a94;
-    for(const e of belts){ const p=cellXY(e.cell.c,e.cell.r); const dirs=this._rotDirs(e.rot);
-      g.fillStyle(EDGE,1); g.fillCircle(p.x,p.y,W0/2); g.fillStyle(BELT,1); g.fillCircle(p.x,p.y,W1/2);
-      for(const [dc,dr] of dirs){ const nb=cellXY(e.cell.c+dc,e.cell.r+dr); const mx=(p.x+nb.x)/2,my=(p.y+nb.y)/2;
-        g.lineStyle(W0,EDGE,1); g.lineBetween(p.x,p.y,mx,my);
-        g.lineStyle(W1,BELT,1); g.lineBetween(p.x,p.y,mx,my);
-        const len=Math.hypot(mx-p.x,my-p.y)||1, ux=(mx-p.x)/len, uy=(my-p.y)/len, nx=-uy, ny=ux, off=W1*0.5;
-        g.lineStyle(2,RAIL,1); g.lineBetween(p.x+nx*off,p.y+ny*off,mx+nx*off,my+ny*off); g.lineBetween(p.x-nx*off,p.y-ny*off,mx-nx*off,my-ny*off);
-        g.lineStyle(2,ROLL,0.85); const gap=Math.max(9,CELL*0.15);
-        for(let t=gap*0.6;t<len-1;t+=gap){ const cx=p.x+ux*t,cy=p.y+uy*t; g.lineBetween(cx-nx*(W1*0.44),cy-ny*(W1*0.44),cx+nx*(W1*0.44),cy+ny*(W1*0.44)); }
-      }
+  /* ===== 生産: 素材が揃っている製造機が一定間隔で完成品をポンと出す ===== */
+  _produceUpdate(time){
+    const ms=this.placed.filter(e=>e.kind==='machine' && e.product);
+    if(!ms.length) return;
+    if(this._prodT && time-this._prodT < 2600) return; this._prodT=time;
+    for(const e of ms){
+      const [A,,C]=this._machFootprint(e);
+      const x=(A.x+C.x)/2, y=(A.y+C.y)/2 - MACH_GEO.height*CELL;
+      const t=this.add.text(x,y-CELL*0.4,e.product.e,{fontSize:Math.round(CELL*0.7)+'px'}).setOrigin(0.5,1).setDepth(C.y+3);
+      this.tweens.add({targets:t, y:y-CELL*1.5, alpha:0, duration:1400, onComplete:()=>t.destroy()});
+      this.produced=(this.produced||0)+1;
+      if(window.__onProduce) window.__onProduce(e.product, e.slots.filter(Boolean));
     }
   }
-  rotateBelt(e){ if(!e||e.kind!=='belt')return; e.rot=((e.rot||0)+1)%6; this.renderBelts(); this._beltFlow();
-    if(window.__layoutChanged)window.__layoutChanged(); if(window.__toast)window.__toast('向き: '+(e.rot<2?['直線(縦)','直線(横)'][e.rot]:'コーナー')); }
-  /* 箱フロー: source(製造機隣接で出荷口へ流れるベルト)から一定間隔で箱を出し、beltNext を辿って出荷口へ運ぶ。 */
-  _flowUpdate(time){
-    this.flowBoxes = this.flowBoxes || [];
-    const srcs = this.beltSources || [];
-    if(srcs.length && (!this._flowT || time-this._flowT>1000)){ this._flowT=time;
-      for(const src of srcs){ if(this.flowBoxes.length>=80) break;
-        const p=cellXY(src.cell.c,src.cell.r);
-        const spr=this.add.image(p.x,p.y-CELL*0.26,'item_box').setOrigin(0.5,0.9);
-        spr.setScale(0.42*CELL/spr.height);
-        this.flowBoxes.push({c:src.cell.c, r:src.cell.r, t:0, spr}); }
-    }
-    for(let i=this.flowBoxes.length-1;i>=0;i--){ const b=this.flowBoxes[i];
-      const belt=this._nodeAt(b.c,b.r); const nx=(belt&&belt.kind==='belt'&&this.beltNext)?this.beltNext.get(belt):null;
-      if(!nx){ b.spr.destroy(); this.flowBoxes.splice(i,1); continue; }
-      b.t += 0.02;
-      const a=cellXY(b.c,b.r), c2=cellXY(nx.c,nx.r); const x=a.x+(c2.x-a.x)*b.t, y=a.y+(c2.y-a.y)*b.t;
-      b.spr.setPosition(x, y-CELL*0.26).setDepth(y+CELL*0.5);
-      if(b.t>=1){ const nn=this._nodeAt(nx.c,nx.r);
-        if(!nn || nn.kind==='outlet'){ this._spawnPop(x,y); b.spr.destroy(); this.flowBoxes.splice(i,1); continue; }
-        b.c=nx.c; b.r=nx.r; b.t=0; }
-    }
-  }
-  syncMachines(list){ for(const m of (list||[])) this.addPlaced('machine', m.type, {lvl:m.lvl||1}); }
+  syncMachines(list){ for(const m of (list||[])) this.addPlaced('machine', 's'+machSize(m.type), {lvl:m.lvl||1}); }
   /* 設置時のポップ演出 */
   _spawnPop(x,y){ const g=this.add.circle(x,y-CELL*0.5,CELL*0.6,0xffe9a8,0.5).setDepth(9000).setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({targets:g,scale:1.8,alpha:0,duration:420,onComplete:()=>g.destroy()}); }
   /* ===== 編集モード（グリッド表示・ドラッグ移動・ゴミ箱で撤去） ===== */
   setupEdit(){
     // 床ダイヤ[0,1]²を綺麗な12×12に等分する線だけを表示(中心点は出さない)。オブジェクトは各マスの中央に入る。
-    this.beltGfx=this.add.graphics().setDepth(-2);   // 設置コンベアの共有描画層(床の上・オブジェクトの下)
     this.editGrid=this.add.graphics().setDepth(-998).setVisible(false); this.editGrid.lineStyle(1,0x7fe6ff,0.42);
     const gl=(u0,v0,u1,v1)=>{ const a=uvXY(u0,v0),b=uvXY(u1,v1); this.editGrid.beginPath(); this.editGrid.moveTo(a.x,a.y); this.editGrid.lineTo(b.x,b.y); this.editGrid.strokePath(); };
     // 目地はマス境界(c/GU)に引く(13本) → 各マスの中心=設置点が四角のど真ん中になる
@@ -370,36 +491,49 @@ class Main extends Phaser.Scene {
     this.input.on('pointermove',(po)=>this._drawHover(po));
     this.trash=this.add.container(72,H-52,[ this.add.rectangle(0,0,124,72,0x3a1418,0.85).setStrokeStyle(2,0xe05a4e), this.add.text(0,0,'🗑 ここへ撤去',{fontSize:'13px',color:'#ffd0c8'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     this._trashRect=new Phaser.Geom.Rectangle(10,H-88,124,74);
-    // 空き床クリックで、パレットで選択中のアイテムを設置
+    // 床クリック: 製造機の上なら設定パネル、空きマスならパレットで選択中のアイテムを設置
     this.input.on('pointerdown',(po,over)=>{ if(!this.editMode) return; if(over&&over.length) return;
-      if(!window.__editSel) return; const uv=screenToIso(po.x,po.y);
+      const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
+      const m=this.machineAtCell(c,r);
+      if(m){ this._placedPtr=true; if(window.__openMachine) window.__openMachine(m.id); return; }   // 素材設定/回転/撤去
+      const sel=window.__editSel; if(!sel) return;
+      const opt=(sel.kind==='machine')?{sub:sel.sub,dir:this.placeDir||'u'}:null;
+      if(!this.canPlace(sel.kind,c,r,opt)){ if(window.__toast) window.__toast(
+        sel.kind==='machine' ? `そこには置けません（${machSize(sel.sub)}マスぶんの空きが必要）` : 'そこには置けません'); return; }
       this._placedPtr=true; if(window.__editPlaceAt) window.__editPlaceAt(c,r); });
-    // コンベアをクリック(ドラッグでない)で90°回転: 直線(縦)→直線(横)→コーナー4向き を巡回。
-    this.input.on('pointerup',(po,over)=>{ if(!this.editMode)return; if(this._placedPtr){ this._placedPtr=false; return; }   // 敷設直後は回転しない
-      if(po.getDistance&&po.getDistance()>8)return; if(!over||!over.length)return;
-      const hit=over.find(o=>o._e&&o._e.kind==='belt'); if(hit) this.rotateBelt(hit._e); });
+    // 設置前の向き切替(Rキー)。製造機を選んでいるときだけ効く
+    this.input.keyboard.on('keydown-R',()=>{ if(!this.editMode) return;
+      this.placeDir=(this.placeDir==='v')?'u':'v';
+      if(window.__toast) window.__toast('向き: '+(this.placeDir==='v'?'↙ 手前方向':'↘ 奥方向')); });
     this.input.on('drag',(po,obj,dx,dy)=>{ if(this.editMode&&obj._e){ obj.x=dx; obj.y=dy; } });
     this.input.on('dragend',(po,obj)=>{ if(!this.editMode||!obj._e)return; const e=obj._e;
-      if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){ this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); return; }
+      if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){
+        this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); return; }
       const uv=screenToIso(obj.x,obj.y); let c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
-      if(!this.moveItem(e.id,c,r)) this.moveItem(e.id,e.cell.c,e.cell.r);
+      if(!this.moveItem(e.id,c,r)) this._snapBack(e);
       if(window.__layoutChanged)window.__layoutChanged(); });
   }
-  _enableDrag(e){ if(e.fixed)return; const m=e.main; if(!m)return; m._e=e; m.setInteractive({useHandCursor:true}); this.input.setDraggable(m,true); }
-  _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; }
+  _enableDrag(e){ if(e.kind==='machine') return;   // 複数マス。移動/撤去はクリックで開く設定パネルから
+    const m=e.main; if(!m)return; m._e=e; m.setInteractive({useHandCursor:true}); this.input.setDraggable(m,true); }
+  _disableDrag(e){ const m=e.main; if(!m||e.kind==='machine')return; this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; }
   _diamond(g,c,r){ const p0=uvXY(c/GU,r/GV),p1=uvXY((c+1)/GU,r/GV),p2=uvXY((c+1)/GU,(r+1)/GV),p3=uvXY(c/GU,(r+1)/GV);
     g.beginPath(); g.moveTo(p0.x,p0.y); g.lineTo(p1.x,p1.y); g.lineTo(p2.x,p2.y); g.lineTo(p3.x,p3.y); g.closePath(); }
   _drawHover(po){ const g=this.hoverGfx; if(!g)return;
     if(!this.editMode){ g.clear(); g.setVisible(false); return; }
     g.clear(); g.setVisible(true);
     g.fillStyle(0x7fe6ff,0.10);   // 設置済みマスをうっすら塗る(=各オブジェクトが入っている四角)
-    for(const e of this.placed){ if(e.kind==='outlet')continue; this._diamond(g,e.cell.c,e.cell.r); g.fillPath(); }
-    if(window.__editSel && po){ const uv=screenToIso(po.x,po.y);
+    for(const e of this.placed) for(const q of this.cellsOf(e)){ this._diamond(g,q.c,q.r); g.fillPath(); }
+    const sel=window.__editSel;
+    if(sel && po){ const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1);
-      const free=this.isFree(c,r); const col=free?0x33ffcc:0xe0674e;
-      g.fillStyle(col,0.30); this._diamond(g,c,r); g.fillPath();
-      g.lineStyle(2,col,0.95); this._diamond(g,c,r); g.strokePath(); }
+      const opt=(sel.kind==='machine')?{sub:sel.sub,dir:this.placeDir||'u'}:null;
+      const ok=this.canPlace(sel.kind,c,r,opt), col=ok?0x33ffcc:0xe0674e;
+      // 製造機は占有する全マスをプレビュー(Rキーで向き切替)
+      const cells=(sel.kind==='machine') ? this.cellsOf({kind:'machine',sub:sel.sub,dir:this.placeDir||'u',cell:{c,r}}) : [{c,r}];
+      for(const q of cells){ if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) continue;
+        g.fillStyle(col,0.30); this._diamond(g,q.c,q.r); g.fillPath();
+        g.lineStyle(2,col,0.95); this._diamond(g,q.c,q.r); g.strokePath(); } }
   }
   toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode); this.trash.setVisible(this.editMode); if(this.hoverGfx){ this.hoverGfx.clear(); this.hoverGfx.setVisible(false); }
     for(const e of this.placed){ this.editMode?this._enableDrag(e):this._disableDrag(e); } return this.editMode; }
@@ -407,7 +541,7 @@ class Main extends Phaser.Scene {
      光源(採光の床帯・月/星のマスク)はすべてこの窓定義から導出する。 */
   defineWindows(){
     this.winUp0=0; this.winUp1=248;                  // 床エッジからの立ち上げ(px)。ガラス全体を覆うよう広めに
-    this.windows=[{v0:0.03,v1:0.215},{v0:0.36,v1:0.56},{v0:0.71,v1:0.914}];  // 背景のガラス透過から実測した3枚の窓(左壁沿い v 範囲)
+    this.windows=[{v0:0.050,v1:0.226},{v0:0.364,v1:0.555},{v0:0.697,v1:0.891}];  // 背景のガラス透過から実測した3枚の窓(左壁沿い v 範囲)。ISO を床タイル基準に更新した際に再計算済み
     for(const w of this.windows){
       const b0=uvXY(0,w.v0), b1=uvXY(0,w.v1);
       w.quad=[{x:b0.x,y:b0.y-this.winUp0},{x:b1.x,y:b1.y-this.winUp0},{x:b1.x,y:b1.y-this.winUp1},{x:b0.x,y:b0.y-this.winUp1}];
@@ -503,6 +637,7 @@ class Main extends Phaser.Scene {
   }
   /* テーマ部屋(画像ごと差し替え)。焼き込み済みなので動的な空/採光/床オーバーレイは切る */
   setRoom(key){ const tex=ROOM_TEX[key]; this.themedRoom=!!tex;
+    this.setPartsTheme(tex?key:null);   // 部屋テーマに製造機のスキンを追従させる
     if(this.bgImg){ this.bgImg.setTexture(tex||'bg_room').setDisplaySize(W,H); }
     const vis=!this.themedRoom;
     if(this.skyLayer) this.skyLayer.setVisible(vis);
@@ -616,13 +751,7 @@ class Main extends Phaser.Scene {
   update(time){
     // 星のまたたき(夜)
     if(this.stars && this.lightOn>0){ for(const s of this.stars) s.setAlpha(this.lightOn*(0.35+0.65*Math.abs(Math.sin(time*0.002+s.ph)))); }
-    // コンベアは rot 変化時に renderBelts() が無地描画(毎フレーム不要)
-    // コンベア: 連続ベルトを描画 + 製品を Path に沿って流す
-    if(this.beltDirGfx) this.drawBeltDir(time);
-    if(this.items && this.beltPath){ const v=this._pv;
-      for(const it of this.items){ it.t=(it.t+0.0012)%1; this.beltPath.getPoint(it.t, v);   // 速度30%
-        const uv=screenToIso(v.x, v.y+this.beltH); it.setPosition(v.x, v.y).setDepth(v.y + this.beltH + this.beltLift).setTint(this.tintByLight(uv.u,uv.v)); } }
-    this._flowUpdate(time);   // 製造機→出荷口 へ箱を流すアニメ
+    this._produceUpdate(time);   // 素材が揃っている製造機が完成品をポンと出す
     const SPD=1.7;
     for(const k of Object.keys(this.agents)){
       const a=this.agents[k];

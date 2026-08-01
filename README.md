@@ -83,10 +83,39 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 - コマ数は `game/main.js` の `PROP_SPAN`（1 / 2 / 4）が唯一の定義。表示高 = `1.35 * CELL * √コマ数`
 - 例: 回転レーン・ネタケース・人間大砲・真鍮ボイラー等は 4コマ（2×2相当）、給茶台などは 2コマ
 - `PROP_SPAN` を変えたら `python3 tools/fit_props.py` を実行して素材を焼き直す
+| `tools/cut_machines.py` | 製造機シートを1台ずつ切り出し、表示サイズへ縮小＋スロット位置を実測（`python3 tools/cut_machines.py`） |
+| `tools/test_machines.mjs` | 製造機／設置ロジックの検証（`node tools/test_machines.mjs`。Phaser をスタブして描画なしで走る） |
 | `pixel-factory.html` | 旧・全手描きドット絵版（`http://localhost:4321/classic` で表示） |
 | `index.html` | 初期のシンプル版（カードUI） |
 | `machine-concepts.html` | 工場に足す機械のコンセプトボード |
 | `proposal.html` / `slides.html` / `slides-en.html` / `Claude-Factory.pdf` | 企画書・発表スライド |
+
+### 製造機と素材（コンベアは廃止）
+
+製造機は **2〜5マスを占有する筐体**で、**1マス＝素材スロット1つ**。入っている素材の**組合せ**で作れる物が変わる。
+
+- サイズは `sub`（`s2`〜`s5`）が在庫キー兼マス数（1マス機は廃止）。占有マスの定義は `cellsOf()` が唯一の真実。
+- 向きは `dir`（`'u'`／`'v'`）。設置前は **Rキー**でプレビューの向きを切替、設置後は設定パネルの ↻回転。
+- 編集モードで**製造機をクリックすると設定パネル**が開く（マスごとの素材／回転／撤去）。複数マスなのでドラッグ移動はしない。
+- **レシピは素材の"集合"で判定**（順不同・重複は1つとして数える）。既知の組合せに無ければ **「謎の塊」**。
+- 素材が揃っている機械は一定間隔で完成品をポンと出し、`window.__onProduce(product, mats)` が発火する。
+
+レシピ表は `RECIPES`（`game/main.js`）。`window.__factory.recipes` を差し替えれば外から丸ごと入れ替えられる（組合せロジックは別担当に渡せる）。素材は `MATS`。
+
+旧セーブのコンベア／出荷口は読み込み時に破棄し、旧4種の製造機（抽出機など）と旧1マス機は最小の2マス機に読み替える。
+
+### 製造機のスキン
+
+**スプライト（テーマ別ドット絵）→ 無ければ手続き描画** の順に解決する（`machTex()` / `partsSkin()`）。
+
+| やりたいこと | やること |
+|---|---|
+| 新しいテーマのドット絵を足す | `assets/mach-sheets/<theme>.png`（2x2・マゼンタ背景・左上から2/3/4/5マス）を置いて `python3 tools/cut_machines.py`。`MACH_ART` に `<theme>` を足す |
+| 色だけテーマに合わせる（絵なし） | `PART_SKIN_BY_THEME` に `テーマ名:'wood'` のように1行足す（パレットは `PART_PAL`） |
+
+用意済み: `normal`（既定・ガンメタル）/ `arabia`（テラコッタ＋真鍮＋ターコイズタイル）。パーツのテーマは背景（部屋テーマ）に自動追従し、絵の無いテーマは `normal` にフォールバックする。単体で試すなら `window.__factory.setPartsTheme('arabia')`。
+
+**スロット位置は絵から実測する**。`tools/cut_machines.py` が凹みスロットを検出して `assets/mach-fit.json`（スプライト幅/高さに対する比）に書き出し、描画側はそこへ素材アイコンを載せる。計算で出すと絵の穴からズレるため。
 
 ## 必要環境
 

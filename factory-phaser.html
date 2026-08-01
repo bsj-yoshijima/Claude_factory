@@ -123,10 +123,12 @@ const PRIZES=[
 // ===== 価格・レート（すべて調整可） =====
 const PULL_COST=30;                                  // ガチャ1回 = 製造量(⚙️生産P)
 const SELL={1:60,2:180,3:600,4:2400,5:9000};         // 景品売却額(レア度別)
-const MACH={ red:{e:'🟥',n:'抽出機',price:0}, green:{e:'🟩',n:'成形機',price:2200},
-             blue:{e:'🟦',n:'演算機',price:6500}, yellow:{e:'🟨',n:'選別機',price:15000} };
+// 製造機は「マス数」で選ぶ。1マス=素材スロット1つ。入っている素材の組合せで作れる物が変わる。
+// 製造機は2〜5マス（1マス機は廃止）。最小の2マス機が最初の1台。
+const MACH={ s2:{e:'2️⃣',n:'製造機 2マス',price:0},      s3:{e:'3️⃣',n:'製造機 3マス',price:6500},
+             s4:{e:'4️⃣',n:'製造機 4マス',price:15000},  s5:{e:'5️⃣',n:'製造機 5マス',price:34000} };
+const machSub=(t)=> MACH[t] ? t : 's2';   // 旧4種(red等)・旧1マス機(s1) はすべて2マス機に読み替え
 const lvCost=(lvl)=> Math.round(120*lvl*lvl);        // レベルアップ費用
-const BELT_PRICE=450;
 const DECO={ crate:{e:'📦',n:'木箱',price:150}, drum:{e:'🛢️',n:'ドラム缶',price:200}, plant:{e:'🪴',n:'観葉植物',price:180}, pallet:{e:'🧱',n:'パレット',price:160}, sign:{e:'🚧',n:'標識',price:220} };
 // Stitch製 装飾プロップ(床に置くオブジェクト)。th = 対応テーマ(未指定は汎用)
 const PROP={ vase:{e:'🏺',n:'装飾壺',price:220}, palm:{e:'🌴',n:'ヤシの木',price:240}, rug:{e:'🧶',n:'絨毯',price:200}, flantern:{e:'🪔',n:'燭台ランプ',price:260},
@@ -191,33 +193,38 @@ const SERIES={
   onsen:{n:'♨️ 和風温泉', price:6000, sky:'onsen',floor:'wood', decos:[]},
 };
 
-let G={ pity:0, inv:{}, prodP:90, money:0, machines:[{type:'red',lvl:1}], belts:0, decos:{},
+let G={ pity:0, inv:{}, prodP:90, money:0, machines:[{type:'s2',lvl:1}], decos:{},
         bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[],
-        stock:{machine:{},prop:{},deco:{},belt:0}, lastT:null, produced:0 };
+        stock:{machine:{},prop:{},deco:{}}, lastT:null, produced:0 };
 let saveT=null;
 function saveGame(){ if(saveT)clearTimeout(saveT); saveT=setTimeout(()=>{ const b=JSON.stringify(G);
   try{fetch('/api/save',{method:'POST',body:b});}catch(_){} try{localStorage.setItem('cf-save',b);}catch(_){}} ,400); }
 async function loadGame(){ let s=null; try{ s=await (await fetch('/api/save',{cache:'no-store'})).json(); }catch(_){}
   if(!s||typeof s!=='object'){ try{ s=JSON.parse(localStorage.getItem('cf-save')); }catch(_){} }
   if(s&&typeof s==='object') G=Object.assign(G,s);     // 旧セーブの景品(inv)・pityは引き継ぎ、経済フィールドを補完
-  if(!G.inv)G.inv={}; if(!Array.isArray(G.machines)||!G.machines.length)G.machines=[{type:'red',lvl:1}]; if(!G.decos)G.decos={};
+  if(!G.inv)G.inv={}; if(!Array.isArray(G.machines)||!G.machines.length)G.machines=[{type:'s2',lvl:1}]; if(!G.decos)G.decos={};
+  for(const m of G.machines) m.type=machSub(m.type);
   if(!Array.isArray(G.bgOwned))G.bgOwned=['auto']; if(!Array.isArray(G.floorOwned))G.floorOwned=['wood']; if(!G.bg)G.bg='auto'; if(!G.floor)G.floor='wood';
   if(!G.skins||typeof G.skins!=='object')G.skins={}; if(!Array.isArray(G.seriesOwned))G.seriesOwned=[]; if(!Array.isArray(G.emojiDecos))G.emojiDecos=[]; if(!Array.isArray(G.layout))G.layout=[];
-  ['prodP','money','belts','produced'].forEach(k=>{ if(typeof G[k]!=='number')G[k]=0; });
+  ['prodP','money','produced'].forEach(k=>{ if(typeof G[k]!=='number')G[k]=0; });
   // 在庫(owned)。無ければ現在の配置から復元(既存の設置物は所持扱い)
-  if(!G.stock||typeof G.stock!=='object'){ G.stock={machine:{},prop:{},deco:{},belt:0};
-    for(const e of G.layout){ if(e.kind==='belt') G.stock.belt++; else if(G.stock[e.kind]) G.stock[e.kind][e.sub]=(G.stock[e.kind][e.sub]||0)+1; } }
+  if(!G.stock||typeof G.stock!=='object'){ G.stock={machine:{},prop:{},deco:{}};
+    for(const e of G.layout){ if(G.stock[e.kind]) G.stock[e.kind][e.sub]=(G.stock[e.kind][e.sub]||0)+1; } }
   for(const k of ['machine','prop','deco']) if(!G.stock[k]||typeof G.stock[k]!=='object') G.stock[k]={};
-  if(typeof G.stock.belt!=='number') G.stock.belt=0; }
+  delete G.stock.belt; delete G.belts;                       // コンベアは廃止
+  // 旧セーブの移行: コンベア/出荷口の配置を捨て、旧4種の製造機を1マス機に読み替える
+  G.layout=(G.layout||[]).filter(e=>e.kind!=='belt'&&e.kind!=='outlet');
+  for(const e of G.layout) if(e.kind==='machine') e.sub=machSub(e.sub);
+  const ms={}; for(const t in G.stock.machine) ms[machSub(t)]=(ms[machSub(t)]||0)+G.stock.machine[t];
+  G.stock.machine=ms; }
 // 在庫と配置数
-function ownedN(kind,sub){ return kind==='belt' ? (G.stock.belt||0) : ((G.stock[kind]&&G.stock[kind][sub])||0); }
-function availN(kind,sub){ return Math.max(0, ownedN(kind,sub) - cnt(kind==='belt'?'belt':kind, kind==='belt'?null:sub)); }
-function addStock(kind,sub,n){ n=n||1; if(kind==='belt') G.stock.belt=(G.stock.belt||0)+n; else { if(!G.stock[kind])G.stock[kind]={}; G.stock[kind][sub]=(G.stock[kind][sub]||0)+n; } }
+function ownedN(kind,sub){ return (G.stock[kind]&&G.stock[kind][sub])||0; }
+function availN(kind,sub){ return Math.max(0, ownedN(kind,sub) - cnt(kind,sub)); }
+function addStock(kind,sub,n){ n=n||1; if(!G.stock[kind])G.stock[kind]={}; G.stock[kind][sub]=(G.stock[kind][sub]||0)+n; }
 // 設置済みは必ず所持(在庫)に含める(在庫 >= 設置数 を保証)
-function reconcileStock(){ const need={machine:{},prop:{},deco:{},belt:0};
-  for(const e of (G.layout||[])){ if(e.kind==='belt') need.belt++; else if(need[e.kind]) need[e.kind][e.sub]=(need[e.kind][e.sub]||0)+1; }
-  for(const k of ['machine','prop','deco']){ for(const s in need[k]) if((G.stock[k][s]||0)<need[k][s]) G.stock[k][s]=need[k][s]; }
-  if((G.stock.belt||0)<need.belt) G.stock.belt=need.belt; }
+function reconcileStock(){ const need={machine:{},prop:{},deco:{}};
+  for(const e of (G.layout||[])) if(need[e.kind]) need[e.kind][e.sub]=(need[e.kind][e.sub]||0)+1;
+  for(const k of ['machine','prop','deco']){ for(const s in need[k]) if((G.stock[k][s]||0)<need[k][s]) G.stock[k][s]=need[k][s]; } }
 // 配置レイアウト(位置)の唯一の真実 = G.layout。シーンから同期。
 function snapLayout(){ if(window.__scene) G.layout=window.__scene.getLayout(); }
 window.__layoutChanged=()=>{ snapLayout(); saveGame(); };
@@ -338,10 +345,15 @@ function renderLegend(){
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
   G.inv[id]=have-qty; const gain=SELL[p.r]*qty; G.money+=gain; saveGame(); updateBadge(); toast(`${p.e} ${p.n}×${qty} を売却 (+💰${gain})`); }
 // 購入=在庫(owned)に追加。設置は編集パレットから床クリックで行う
-function buyMachine(type){ const pr=MACH[type].price; if(G.money<pr)return; G.money-=pr; addStock('machine',type); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
+function buyMachine(type){ if(!MACH[type])return; const pr=MACH[type].price; if(G.money<pr)return; G.money-=pr; addStock('machine',type); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
 function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; const c=lvCost(e.lvl); if(G.money<c)return; G.money-=c; e.lvl++;
-  if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${MACH[e.sub].e} ${MACH[e.sub].n} を Lv${e.lvl} に強化！(生産↑)`); }
-function buyBelt(){ if(G.money<BELT_PRICE)return; G.money-=BELT_PRICE; addStock('belt'); saveGame(); updateBadge(); toast('🛗 コンベアを購入（🔧編集で設置）'); }
+  const M=MACH[machSub(e.sub)];
+  if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${M.e} ${M.n} を Lv${e.lvl} に強化！(生産↑)`); }
+// 素材スロットの要約（ショップ一覧用）
+function slotSummary(e){ const F=window.__factory; if(!F) return '';
+  const mats=(e.slots||[]).filter(Boolean); if(!mats.length) return '素材未設定';
+  const icons=mats.map(m=>(F.materials[m]||{}).e||'?').join('');
+  const p=F.recipeFor(e.slots||[]); return `${icons} → ${p?p.e+' '+p.n:'—'}`; }
 function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return; G.money-=pr; addStock('deco',t); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
 function buyProp(t){ const pr=PROP[t].price; if(G.money<pr)return; G.money-=pr; addStock('prop',t); saveGame(); updateBadge(); toast(`${PROP[t].n} を購入（🔧編集で設置）`); }
 function selectBg(k){ if(!G.bgOwned.includes(k)){ const pr=BG[k].price; if(G.money<pr)return; G.money-=pr; G.bgOwned.push(k); toast(`背景「${BG[k].n}」を購入！`); } G.bg=k; if(window.__scene&&window.__scene.setSkyTheme)window.__scene.setSkyTheme(k); saveGame(); updateBadge(); }
@@ -363,20 +375,19 @@ function openShop(tab){ if(tab)_shopTab=tab;
           <button data-sell="${p.id}" data-q="1">1個</button><button data-sell="${p.id}" data-q="all" style="margin-left:5px">全部</button></div>`;
       }).join('') : '<div class="cost" style="padding:12px">売れる景品がありません。🎁ガチャで景品を集めよう。</div>';
     } else if(_shopTab==='mach'){
-      body = '<div class="cost" style="margin:2px 0 6px">設置済みの製造機（Lv↑で生産量が増える）</div>';
+      body = '<div class="cost" style="margin:2px 0 6px">設置済みの製造機（Lv↑で生産量が増える。素材は🔧編集で機械をクリック）</div>';
       const machs=(G.layout||[]).filter(e=>e.kind==='machine');
-      body += (machs.length?machs:[]).map(e=>{ const c=lvCost(e.lvl); return `<div class="rc"><div class="ic">${MACH[e.sub].e}</div>
-        <div class="mid"><div class="nm">${MACH[e.sub].n} <span style="color:#7fe6ff;font-size:11px">Lv${e.lvl}</span></div>
-        <div class="cost">生産 +${e.lvl}/s ・ 次のLv 💰${c.toLocaleString()}</div></div>
+      body += (machs.length?machs:[]).map(e=>{ const c=lvCost(e.lvl), M=MACH[machSub(e.sub)];
+        return `<div class="rc"><div class="ic">${M.e}</div>
+        <div class="mid"><div class="nm">${M.n} <span style="color:#7fe6ff;font-size:11px">Lv${e.lvl}</span></div>
+        <div class="cost">${slotSummary(e)} ・ 次のLv 💰${c.toLocaleString()}</div></div>
         <button data-lv="${e.id}" ${G.money>=c?'':'disabled'}>強化</button></div>`; }).join('') || '<div class="cost" style="padding:6px 2px">未設置。🔧編集で在庫から設置</div>';
-      body += '<div class="cost" style="margin:12px 0 6px">製造機を購入（在庫→🔧編集で設置。設置すると生産＆作業先が増える）</div>';
+      body += '<div class="cost" style="margin:12px 0 6px">製造機を購入（マス数が多いほど素材を多く入れられる＝作れる物が増える）</div>';
       body += Object.keys(MACH).map(t=>`<div class="rc"><div class="ic">${MACH[t].e}</div>
         <div class="mid"><div class="nm">${MACH[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${availN('machine',t)}</span></div><div class="cost">💰${MACH[t].price.toLocaleString()}</div></div>
         <button data-buymach="${t}" ${G.money>=MACH[t].price?'':'disabled'}>購入</button></div>`).join('');
     } else if(_shopTab==='equip'){
       body = '<div class="cost" style="margin:2px 0 8px">購入すると在庫に入ります。設置は 🔧編集 のパレットから床をクリック。</div>';
-      body += `<div class="rc"><div class="ic">🛗</div><div class="mid"><div class="nm">コンベア <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('belt')}</span></div><div class="cost">💰${BELT_PRICE}</div></div>
-        <button data-belt="1" ${G.money>=BELT_PRICE?'':'disabled'}>購入</button></div>`;
       body += '<div class="cost" style="margin:12px 0 6px">装飾プロップ（Stitch製）</div>';
       for(const [th,label] of PROP_GROUPS){
         const ks=Object.keys(PROP).filter(t=>(PROP[t].th||'')===th);
@@ -416,7 +427,6 @@ function openShop(tab){ if(tab)_shopTab=tab;
     panel.querySelectorAll('[data-sell]').forEach(b=>b.onclick=()=>{ const q=b.dataset.q==='all'?(G.inv[b.dataset.sell]||0):1; sellPrize(b.dataset.sell,q); render(); });
     panel.querySelectorAll('[data-lv]').forEach(b=>b.onclick=()=>{ levelUp(b.dataset.lv); render(); });
     panel.querySelectorAll('[data-buymach]').forEach(b=>b.onclick=()=>{ buyMachine(b.dataset.buymach); render(); });
-    panel.querySelectorAll('[data-belt]').forEach(b=>b.onclick=()=>{ buyBelt(); render(); });
     panel.querySelectorAll('[data-deco]').forEach(b=>b.onclick=()=>{ buyDeco(b.dataset.deco); render(); });
     panel.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{ buyProp(b.dataset.prop); render(); });
     panel.querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>{ selectBg(b.dataset.bg); render(); });
@@ -430,10 +440,11 @@ document.getElementById('shopBtn').addEventListener('click',()=>openShop());
 /* ===== 起動: ロード→オフライン生産→シーン待ち→所持品反映→生産tick ===== */
 function waitScene(){ return new Promise(res=>{ (function chk(){ if(window.__scene) res(); else setTimeout(chk,60); })(); }); }
 function applyOwned(){ const s=window.__scene; if(!s)return;
-  if(G.layout&&G.layout.length){ s.buildLayout(G.layout); }        // 保存済みレイアウト(位置)を復元
+  if(G.layout&&G.layout.length){ const dropped=s.buildLayout(G.layout);   // 保存済みレイアウト(位置)を復元
+    snapLayout();
+    if(dropped) setTimeout(()=>toast(`コンベアは廃止されました（${dropped} 個を撤去）。製造機をクリックして素材を設定してください`),900); }
   else {                                                            // 初回: 所持品を配置→レイアウト確定
     s.syncMachines(G.machines);
-    for(let i=0;i<G.belts;i++) s.placeBelt();
     for(const t in G.decos) for(let i=0;i<(G.decos[t]||0);i++) s.placeDeco(t);
     for(const e of (G.emojiDecos||[])) s.placeEmojiDeco(e);
     snapLayout();
@@ -449,7 +460,7 @@ function applyBg(k){ G.bg=k; if(window.__scene){ window.__scene.setSkyTheme(k); 
 const paletteEl=document.getElementById('palette');
 let editCat='bg', editSel=null; window.__editSel=null;
 function renderPalette(){
-  const cats=[['bg','🌏 背景'],['prop','🧰 装飾'],['machine','🏭 製造機'],['belt','🛗 コンベア']];
+  const cats=[['bg','🌏 背景'],['prop','🧰 装飾'],['machine','🏭 製造機']];
   let items='', hint='';
   const cell=(dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
   if(editCat==='bg'){ hint='背景を選ぶと即適用（部屋ごと切替）';
@@ -458,11 +469,9 @@ function renderPalette(){
     const P=Object.keys(PROP).filter(t=>availN('prop',t)>0).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
     const D=Object.keys(DECO).filter(t=>availN('deco',t)>0).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
     items=(P.concat(D).join(''))||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
-  } else if(editCat==='machine'){ hint=(editSel?'床をクリックで設置（生産＆作業先が増える）':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
+  } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）・ 設置済みの製造機をクリックすると素材を設定できます':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です');
     const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.sub===t));
     items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
-  } else { hint=(editSel?'床をクリックで敷設(向きは隣接から自動)':'在庫から選んで床をクリックで敷設')+' ・ 敷設後クリックで90°回転(直線縦→横→コーナー) / ドラッグ移動 / 🗑撤去';
-    const a=availN('belt'); items = a>0? cell(`data-place="belt:"`,'🛗','コンベア',0,a,editSel&&editSel.kind==='belt') : '<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
   }
   paletteEl.innerHTML=`<div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
     <div class="pitems">${items}</div><div class="phint">${hint}</div>`;
@@ -473,12 +482,54 @@ function renderPalette(){
 window.renderPalette=renderPalette;
 window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
   if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
-  const s=window.__scene; const id = s.addPlaced(sel.kind, sel.kind==='belt'?null:sel.sub, {cell:{c,r}});
+  const s=window.__scene; const id = s.addPlaced(sel.kind, sel.sub, {cell:{c,r}, dir:s.placeDir});
   if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
+/* ===== 製造機の設定パネル: マスごとの素材 / 向き / 撤去。編集中に機械をクリックで開く ===== */
+let _matPick=null;   // 素材を選んでいる最中のスロット番号
+window.__openMachine=(id)=>{
+  const F=window.__factory; if(!F) return; _matPick=null;
+  const render=()=>{
+    const m=F.getMachine(id); if(!m){ closeOverlay(); return; }
+    const MT=F.materials;
+    const slots=m.slots.map((mat,i)=>{ const d=mat&&MT[mat];
+      return `<div class="rc" style="cursor:pointer" data-slot="${i}">
+        <div class="ic">${d?d.e:'➕'}</div>
+        <div class="mid"><div class="nm">${i+1}マス目</div>
+        <div class="cost">${d?d.n:'素材を選ぶ'}</div></div>
+        ${d?`<button data-clear="${i}">外す</button>`:''}</div>`; }).join('');
+    const picker = _matPick==null ? '' :
+      `<div class="cost" style="margin:10px 0 6px;color:#7fe6ff">${_matPick+1}マス目に入れる素材</div>`
+      + `<div class="pitems" style="display:flex;flex-wrap:wrap;gap:6px">`
+      + Object.keys(MT).map(k=>`<div class="pitem" data-mat="${k}" style="cursor:pointer">${MT[k].e}<small>${MT[k].n}</small></div>`).join('')
+      + `</div>`;
+    const p=m.product;
+    const prod = p ? `<div class="rc"><div class="ic">${p.e}</div><div class="mid">
+        <div class="nm">${p.n}</div><div class="cost">${p.unknown?'未知の組合せです（謎の塊になります）':'この組合せで作れます'}</div></div></div>`
+      : '<div class="cost" style="padding:6px 2px">素材を入れるとここに作れる物が出ます</div>';
+    openOverlay(`<div class="lgH" style="margin-bottom:8px">🏭 製造機（${m.size}マス）${m.lvl>1?` Lv${m.lvl}`:''}</div>`
+      + `<div class="cost" style="margin:2px 0 8px">1マスにつき素材1つ。入っている素材の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。</div>`
+      + slots + picker
+      + `<div class="cost" style="margin:12px 0 6px">作れる物</div>` + prod
+      + `<div class="rc" style="margin-top:12px"><div class="mid"><div class="nm">配置</div>`
+      + `<div class="cost">向きを変える / この製造機を撤去する</div></div>`
+      + `<button data-rot="1">↻ 回転</button><button data-del="1" style="margin-left:5px">🗑 撤去</button></div>`);
+    panel.querySelectorAll('[data-slot]').forEach(el=>el.onclick=(ev)=>{
+      if(ev.target.dataset && ev.target.dataset.clear!=null) return; _matPick=+el.dataset.slot; render(); });
+    panel.querySelectorAll('[data-clear]').forEach(el=>el.onclick=(ev)=>{
+      ev.stopPropagation(); F.setSlot(id,+el.dataset.clear,null); _matPick=null; window.__layoutChanged(); render(); });
+    panel.querySelectorAll('[data-mat]').forEach(el=>el.onclick=()=>{
+      F.setSlot(id,_matPick,el.dataset.mat); _matPick=null; window.__layoutChanged(); render(); });
+    panel.querySelectorAll('[data-rot]').forEach(el=>el.onclick=()=>{
+      if(!F.rotateMachine(id)){ toast('回した先に空きがありません'); return; } window.__layoutChanged(); render(); });
+    panel.querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{
+      F.removeMachine(id); window.__layoutChanged(); updateBadge(); closeOverlay(); toast('製造機を撤去しました'); });
+  };
+  render();
+};
 document.getElementById('editBtn').addEventListener('click',()=>{ if(!window.__scene)return;
   const on=window.__scene.toggleEdit(); document.getElementById('editBtn').classList.toggle('gacha',on);
   paletteEl.classList.toggle('show',on); if(on) renderPalette(); else { editSel=null; window.__editSel=null; }
-  toast(on?'🔧 編集: 上のパレットで選ぶ→床クリックで設置 / ドラッグで移動 / 左下🗑で撤去':'編集モードを終了'); });
+  toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 製造機をクリックで素材設定':'編集モードを終了'); });
 loadGame().then(async ()=>{
   if(G.lastT){ const dt=Math.min((Date.now()-G.lastT)/1000, 8*3600); const g=prodRate()*dt*0.5; if(g>0){ G.prodP+=g; G.produced+=g; } } // オフライン分(50%/最大8h)
   G.lastT=Date.now(); updateBadge();
@@ -495,7 +546,6 @@ loadGame().then(async ()=>{
     for(const t of Object.keys(MACH)) G.stock.machine[t]=Math.max(3,G.stock.machine[t]||0);
     for(const t of Object.keys(PROP)) G.stock.prop[t]=Math.max(3,G.stock.prop[t]||0);
     for(const t of Object.keys(DECO)) G.stock.deco[t]=Math.max(3,G.stock.deco[t]||0);
-    G.stock.belt=Math.max(5,G.stock.belt||0);
     saveGame(); updateBadge(); toast('✅ 全背景・全アイテムを解放しました（在庫）');
   }
   if(q.get('edit')){ paletteEl.classList.add('show'); document.getElementById('editBtn').classList.add('gacha'); renderPalette(); }
