@@ -51,13 +51,17 @@ def read_consts():
 # シルエットしか見えない物だけをここで持ち上げる(平均輝度が他のスロットに揃う値)。
 BRIGHTEN = {'hal_shelf': 1.5}
 
+# レベル補正(黒点, 白点)。Stitch が「白」を灰色で描いてしまった物を、
+# 暗部を保ったまま白へ持ち上げる(横断歩道ラグの白線が (159,157,168) の灰色だった)。
+LEVELS = {'tky_rug': (45, 162)}
+
 # 左右反転。アイソメでは水平反転が「90度回した向き」に相当する。
 # ソファは全テーマ手前角が右寄りに揃っているので、逆向きに描かれたテーブルだけ
 # 反転させてセットで置いたときに向きが合うようにする(接地線の手前角で判定した)。
 FLIP = {'din_table', 'cab_table', 'hal_table'}
 
 
-def pixelize(im, target_h, block, colors, sharpen, brighten=1.0, flip=False):
+def pixelize(im, target_h, block, colors, sharpen, brighten=1.0, flip=False, levels=None):
     """表示サイズへ落としつつ、ドット絵の「パキッとした」質感に整える。
 
     ただ縮小しただけだと半透明の縁と中間色だらけの「精細なミニチュア」になる。
@@ -70,6 +74,11 @@ def pixelize(im, target_h, block, colors, sharpen, brighten=1.0, flip=False):
     """
     if flip:
         im = im.transpose(Image.FLIP_LEFT_RIGHT)
+    if levels:
+        lo, hi = levels
+        lut = [0 if v <= lo else (255 if v >= hi else round((v - lo) * 255 / (hi - lo))) for v in range(256)]
+        r, g, b, a = im.split()
+        im = Image.merge('RGBA', (r.point(lut), g.point(lut), b.point(lut), a))
     if brighten != 1.0:
         r, g, b, a = im.split()
         rgb = ImageEnhance.Brightness(Image.merge('RGB', (r, g, b))).enhance(brighten)
@@ -101,7 +110,7 @@ def main(ss=1, block=1, colors=24, sharpen=140, out_dir=OUT_DIR):
         span = spans.get(name) or furn.get(name.split('_')[1] if '_' in name else '', 1)
         target_h = round(BASE * math.sqrt(span) * cell * ss)
         im = Image.open(src).convert('RGBA')
-        out = pixelize(im, target_h, block, colors, sharpen, BRIGHTEN.get(name, 1.0), name in FLIP)
+        out = pixelize(im, target_h, block, colors, sharpen, BRIGHTEN.get(name, 1.0), name in FLIP, LEVELS.get(name))
         out.save(os.path.join(out_dir, f'prop_{name}.png'))
         rows.append(f'  {name:18s} {span}コマ  {im.width}x{im.height} → {out.size[0]}x{out.size[1]}')
     print('\n'.join(rows))
