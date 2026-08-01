@@ -174,7 +174,9 @@
   /* 進捗はバーと数値だけを1行に */
   .mrow .wpline{display:flex;align-items:center;gap:9px;margin-top:6px;padding-top:0;border-top:none}
   .mrow .wpline .bar{flex:1;margin-top:0}
-  .mrow .wpline b{font-size:10.5px;color:#cfeee0;font-variant-numeric:tabular-nums;white-space:nowrap}
+  /* 桁数で幅が変わるとバーの長さが行ごとにずれるので、数値欄は固定幅＋等幅数字にする */
+  .mrow .wpline b{flex:none;width:92px;text-align:right;font-size:10.5px;color:#cfeee0;
+                  font-variant-numeric:tabular-nums;white-space:nowrap}
   /* 原材料ピッカー: 小さいチップを折り返して並べる */
   .mpick{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px;
          background:#0c1215;border:1px solid var(--edge);border-radius:8px;padding:6px 7px}
