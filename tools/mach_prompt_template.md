@@ -38,6 +38,14 @@
 4. 向きを直すために上物を削ると**地味になる**。向きの規則は守らせたまま、
    上物は「アーケード筐体並みの密度で」と明示して盛ること。装飾にも同じアイソメ規則を課し、
    置き場を隠さない・横にはみ出さない、とだけ縛る。
+5. **題材を bench / counter / workbench / altar / bath と書くと正面図になる。** 家具なので
+   モデルは家具のカタログ的な正面ビューを描く。しかも「天板の丸い窪み」と合わさって**流し台**に見える。
+   → 題材を **INDUSTRIAL PROCESSING MACHINE** と言い切り、機械の部品（モーター、歯車、
+     ベルト、ピストン、圧力計、排気筒、**製品が出てくるシュート**）を必ず持たせる。
+     テーマは素材と装飾だけを決め、家具に戻さない。
+6. 向きは規則を並べても従わない。**既知のアイソメ作品を参照**させ（Habbo Hotel / SimCity 2000）、
+   失敗形を名指しで禁止する（「天面が細い水平の帯になって前面が大きな長方形になったら、
+   それは正面図であって間違い」「天面は側面と同じくらい目立つ大きな菱形であること」）。
 
 ---
 
@@ -46,69 +54,71 @@
 ```
 Pixel art sprite sheet on a FLAT SOLID PURE MAGENTA (#FF00FF) background.
 No floor, no walls, no cast shadows, no text, no labels, no borders, no grid lines.
-The magenta must be the ONLY background colour — no white, no vignette, no panels behind the machines.
+The magenta must be the ONLY background colour.
 
-FOUR <THEME> machines on ONE sheet. FOUR ROWS, EXACTLY ONE MACHINE PER ROW, stacked in a single
-vertical column with magenta gaps between rows. Never place two machines side by side on a row.
-Every machine starts at the SAME left edge.
+=== WHAT THIS IS ===
+FOUR INDUSTRIAL PROCESSING MACHINES for a factory game, themed as <THEME>.
+These are MACHINES that manufacture things. They are NOT benches, NOT counters, NOT tables,
+NOT altars, NOT baths, NOT furniture. A player must look at one and think "that thing makes
+something". Every one of them therefore has visible machinery: a motor housing, gears and a
+drive belt, pistons, a pressure gauge cluster, valve wheels, riveted plating, an exhaust stack
+venting at the back, and an OUTPUT CHUTE at the front-lower end where the finished product
+drops out. The theme only decides the MATERIALS and DECORATION of that machine — it never
+turns it back into furniture.
+
+=== HOW IT IS DRAWN — READ THIS BEFORE ANYTHING ELSE ===
+Draw it exactly like an isometric game object from Habbo Hotel or SimCity 2000: a single solid
+object sitting on an isometric tile grid, seen from a corner, in true 2:1 isometric projection.
+
+The base of the machine is a PARALLELOGRAM lying on that grid — think of a domino tile lying
+flat on an isometric chessboard, N squares long and 1 square deep.
+- The lowest point of the whole silhouette is a SINGLE CORNER at the bottom.
+- From that bottom corner, one base edge climbs UP-AND-LEFT at a 2:1 slope, and the other
+  climbs UP-AND-RIGHT at a 2:1 slope.
+- Consequently there are NO HORIZONTAL LINES anywhere in the structure. Every structural edge
+  is either vertical, or sloping at 2:1 down-right, or sloping at 2:1 down-left.
+- Exactly TWO faces of the body are visible: the LONG SIDE (facing down-and-LEFT) and the
+  SHORT END (facing down-and-RIGHT). No face is parallel to the image plane.
+
+FAILURE MODE TO AVOID — this is the mistake that keeps happening:
+If the top face comes out as a THIN HORIZONTAL BAND and the machine's long front is a big flat
+rectangle facing the viewer, you have drawn a FRONT ELEVATION, not an isometric object. That is
+wrong. The top face must be a large, obvious RHOMBUS — wide open to the viewer, clearly a
+parallelogram, roughly as visually prominent as the side face.
+
+The long axis runs from the BACK END at the UPPER-LEFT down to the FRONT END at the LOWER-RIGHT.
+Only this one orientation; do not draw a mirrored version.
+
+=== LAYOUT AND SCALE ===
+All four machines on ONE sheet, FOUR ROWS, EXACTLY ONE MACHINE PER ROW, stacked in a single
+vertical column with magenta gaps. Never two machines side by side. All left-aligned.
 Row 1: 2 tiles. Row 2: 3 tiles. Row 3: 4 tiles. Row 4: 5 tiles.
 
-=== SCALE — AS IMPORTANT AS ORIENTATION ===
-All four machines are THE SAME MACHINE at THE SAME SCALE, only different lengths.
-Never resize a machine to fill its row, and never compress a long one to make it fit.
-
-The step from one tile to the next is THE SAME in all four machines, and equals
-1/12 of the image width to the RIGHT, and half that DOWN.
-On a 1024x1024 canvas that is exactly 85 px right and 43 px down per tile.
-
-Measuring between the centres of the first and last ingredient spot:
+All four are THE SAME MACHINE at THE SAME SCALE, only different lengths. Never resize one to
+fill its row, never compress a long one to fit.
+The tile step is identical in all four: 1/12 of the image width to the RIGHT and half that DOWN
+(on a 1024x1024 canvas, 85 px right and 43 px down per tile).
+First spot to last spot:
   2 tiles ->  85 px right,  43 px down      4 tiles -> 255 px right, 128 px down
   3 tiles -> 170 px right,  85 px down      5 tiles -> 340 px right, 170 px down
-So the 5-tile machine has 4x the spot-span of the 2-tile machine, and is roughly twice its
-total width. The 2-tile machine is small; the 5-tile one is big and spans about half the sheet.
-There will be a lot of empty magenta to the right of the 2-tile machine. That is CORRECT.
+The 2-tile machine is small; the 5-tile one is big and spans about half the sheet. Lots of empty
+magenta to the right of the short one is CORRECT.
+Make the tile count countable on the LONG SIDE face: N identical machine bays, one per tile,
+separated by a vertical rib or strut.
 
-=== ORIENTATION — THE MOST IMPORTANT RULE ===
-Each machine is ONE SINGLE CONTINUOUS BOX drawn in true 2:1 isometric projection.
-It is NOT several front-facing boxes chained together. It is one long bench, turned diagonally.
+=== THE INGREDIENT INTAKE ===
+Each tile has ONE intake where a raw material is loaded, centred on its tile, all identical,
+evenly spaced along the diagonal, and left COMPLETELY EMPTY. Because the top face is a rhombus,
+each intake is an ELLIPSE (a circle foreshortened 2:1), never a full circle. They form a
+DESCENDING DIAGONAL LINE and must never be covered by decoration.
+Design each intake as: <SPOT_DESIGN>
 
-Read these five rules as a checklist. If any of them fails, the drawing is wrong:
-1. NO HORIZONTAL LINES. Every structural edge runs at one of exactly two slopes:
-   down-to-the-RIGHT at 2:1, or down-to-the-LEFT at 2:1. The only vertical lines are the
-   corner edges of the body. Nothing is drawn flat or level.
-2. THE TOP FACE IS A LONG RHOMBUS (parallelogram), never a rectangle seen head-on.
-3. EXACTLY TWO FACES ARE VISIBLE: the LONG SIDE face (facing down-and-LEFT) and the SHORT END
-   face (facing down-and-RIGHT), meeting at one vertical corner edge at the near-bottom corner.
-4. NO FACE IS PARALLEL TO THE IMAGE PLANE. There is no flat front-facing panel anywhere.
-   If you can see a panel square-on, it is wrong.
-5. The long axis runs from the BACK END at the UPPER-LEFT down to the FRONT END at the LOWER-RIGHT.
-
-Consequences to draw correctly:
-- The row of ingredient spots forms a DESCENDING DIAGONAL LINE, never a horizontal line.
-- Make the tile count countable on the LONG SIDE face: divide it into N identical panels,
-  one per tile, separated by a thin vertical strip.
-Only this one orientation is needed; do not draw a mirrored version.
-
-=== THE INGREDIENT SPOT ===
-One per tile, centred on its tile, all identical in size, evenly spaced along the diagonal,
-and left COMPLETELY EMPTY so something can be placed there. It must read instantly as
-"put something here" and must never be covered by decoration.
-It is an ELLIPSE (a circle foreshortened 2:1), never a full circle.
-Design the spot as: <SPOT_DESIGN>
-
-=== THE REST OF THE DESIGN — MAKE IT LAVISH ===
-The bare box above is only the chassis. Load it with a rich, eye-catching superstructure so it
-reads as a showpiece machine, not a plain counter: <THEME_DESIGN>
-Aim for the density of an elaborate arcade cabinet — several distinct pieces of apparatus, not
-one lonely accessory. All four carry the same kit at the same size; the longer machines simply
-have room for more of it, so the 5-tile one is the grandest.
-
-Constraints on the decoration (these do not relax the orientation rules):
-- Every added object is ALSO drawn in the same 2:1 isometric projection. No front-facing faces.
-- Decoration sits on the BACK half of the top face, along the back edge, or hangs from posts.
-  It must NEVER cover, overlap or crowd an ingredient spot — those stay clear and readable.
-- It may rise UPWARD as tall as you like, but NOTHING may stick out sideways past the ends of
-  the base — the horizontal silhouette is exactly the base footprint.
+=== DECORATION ===
+Load the machine with a rich themed superstructure so it reads as a showpiece, at the density of
+an elaborate arcade cabinet: <THEME_DESIGN>
+Every added object is ALSO drawn in the same 2:1 isometric projection. Decoration sits on the
+BACK half of the top face, along the back edge, or hangs from posts; it must never cover an
+intake. It may rise UPWARD freely, but nothing may stick out sideways past the ends of the base.
 
 === STYLE ===
 Chunky lo-fi 8-bit Famicom pixel art, extreme high contrast, thick clean black outlines,
