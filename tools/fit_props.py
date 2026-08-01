@@ -21,7 +21,7 @@ import os
 import re
 import sys
 
-from PIL import Image, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAIN_JS = os.path.join(ROOT, 'game', 'main.js')
@@ -40,11 +40,19 @@ def read_consts():
             + math.hypot(float(iso['vx']) * W / GV, float(iso['vy']) * H / GV)) / 2
     span_body = re.search(r'const PROP_SPAN\s*=\s*\{(.*?)\n\};', js, re.S).group(1)
     spans = {k: int(v) for k, v in re.findall(r'(\w+)\s*:\s*(\d+)', span_body)}
+    # 基本家具はスロット(chair/table/...)でコマ数が決まる。main.js の FURN_SPAN と同じ規則を使う
+    furn_body = re.search(r'const FURN_SPAN\s*=\s*\{([^}]*)\}', js).group(1)
+    furn = {k: int(v) for k, v in re.findall(r'(\w+)\s*:\s*(\d+)', furn_body)}
     names = re.findall(r"'([a-z][a-z0-9_]*)'", re.search(r'const PROP_NAMES\s*=\s*\[(.*?)\];', js, re.S).group(1))
-    return cell, spans, names
+    return cell, spans, furn, names
 
 
-def pixelize(im, target_h, block, colors, sharpen):
+# 個別の明るさ補正。Stitch が暗く描いてしまい、暗いテーマの床に置くと沈んで
+# シルエットしか見えない物だけをここで持ち上げる(平均輝度が他のスロットに揃う値)。
+BRIGHTEN = {'hal_shelf': 1.5}
+
+
+def pixelize(im, target_h, block, colors, sharpen, brighten=1.0):
     """表示サイズへ落としつつ、ドット絵の「パキッとした」質感に整える。
 
     ただ縮小しただけだと半透明の縁と中間色だらけの「精細なミニチュア」になる。
@@ -55,6 +63,10 @@ def pixelize(im, target_h, block, colors, sharpen):
       5) NEAREST で block 倍に戻す（block=1 なら等倍のまま）
     block を上げるほど粒は粗くなる。1 で細かくパキッと、2 でドット感が強い。
     """
+    if brighten != 1.0:
+        r, g, b, a = im.split()
+        rgb = ImageEnhance.Brightness(Image.merge('RGB', (r, g, b))).enhance(brighten)
+        im = Image.merge('RGBA', (*rgb.split(), a))
     lh = max(1, round(target_h / block))
     lw = max(1, round(im.width * (target_h / im.height) / block))
     small = im.resize((lw, lh), Image.LANCZOS)
@@ -71,7 +83,7 @@ def pixelize(im, target_h, block, colors, sharpen):
 
 
 def main(ss=1, block=1, colors=24, sharpen=140, out_dir=OUT_DIR):
-    cell, spans, names = read_consts()
+    cell, spans, furn, names = read_consts()
     print(f'CELL={cell:.1f}px  ss={ss}  block={block}px  colors={colors}  sharpen={sharpen}%  out={out_dir}')
     missing, rows = [], []
     for name in names:
@@ -79,10 +91,10 @@ def main(ss=1, block=1, colors=24, sharpen=140, out_dir=OUT_DIR):
         if not os.path.exists(src):
             missing.append(name)
             continue
-        span = spans.get(name, 1)
+        span = spans.get(name) or furn.get(name.split('_')[1] if '_' in name else '', 1)
         target_h = round(BASE * math.sqrt(span) * cell * ss)
         im = Image.open(src).convert('RGBA')
-        out = pixelize(im, target_h, block, colors, sharpen)
+        out = pixelize(im, target_h, block, colors, sharpen, BRIGHTEN.get(name, 1.0))
         out.save(os.path.join(out_dir, f'prop_{name}.png'))
         rows.append(f'  {name:18s} {span}コマ  {im.width}x{im.height} → {out.size[0]}x{out.size[1]}')
     print('\n'.join(rows))

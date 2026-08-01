@@ -162,9 +162,51 @@ const PROP={ vase:{e:'🏺',n:'装飾壺',price:220}, palm:{e:'🌴',n:'ヤシ�
   stm_chair:{e:'🪑',n:'銅管の椅子',price:200,th:'steampunk',fu:1},    stm_table:{e:'🪵',n:'歯車のテーブル',price:280,th:'steampunk',fu:1},
   stm_sofa:{e:'🛋️',n:'革張りのソファ',price:420,th:'steampunk',fu:1}, stm_shelf:{e:'🗄️',n:'鉄フレームの棚',price:320,th:'steampunk',fu:1},
   stm_rug:{e:'🟥',n:'歯車柄のラグ',price:240,th:'steampunk',fu:1},    stm_lamp:{e:'💡',n:'真鍮のフロアランプ',price:260,th:'steampunk',fu:1},
-  stm_plant:{e:'🪴',n:'銅鉢のシダ',price:220,th:'steampunk',fu:1},    stm_helmet:{e:'🤿',n:'潜水ヘルメット台',price:380,th:'steampunk'} };
+  stm_plant:{e:'🪴',n:'銅鉢のシダ',price:220,th:'steampunk',fu:1},    stm_helmet:{e:'🤿',n:'潜水ヘルメット台',price:380,th:'steampunk'},
+  // ⛩️ 日本
+  jpn_chair:{e:'🪑',n:'座椅子',price:200,th:'japan',fu:1},           jpn_table:{e:'🍵',n:'ちゃぶ台',price:280,th:'japan',fu:1},
+  jpn_sofa:{e:'🛋️',n:'縁台ベンチ',price:420,th:'japan',fu:1},         jpn_shelf:{e:'🗄️',n:'和箪笥',price:320,th:'japan',fu:1},
+  jpn_rug:{e:'🟩',n:'畳マット',price:240,th:'japan',fu:1},           jpn_lamp:{e:'🏮',n:'行灯',price:260,th:'japan',fu:1},
+  jpn_plant:{e:'🎋',n:'鉢植えの竹',price:220,th:'japan',fu:1},        jpn_byobu:{e:'🌸',n:'桜の屏風',price:380,th:'japan'},
+  // 🍔 ダイナー
+  din_chair:{e:'🪑',n:'クロームチェア',price:200,th:'diner',fu:1},     din_table:{e:'🍟',n:'ダイナーテーブル',price:280,th:'diner',fu:1},
+  din_sofa:{e:'🛋️',n:'レッドブースソファ',price:420,th:'diner',fu:1},  din_shelf:{e:'🥤',n:'ミルクシェイク棚',price:320,th:'diner',fu:1},
+  din_rug:{e:'🏁',n:'チェッカーマット',price:240,th:'diner',fu:1},     din_lamp:{e:'💡',n:'ストライプランプ',price:260,th:'diner',fu:1},
+  din_plant:{e:'🪴',n:'モンステラの鉢',price:220,th:'diner',fu:1},     din_jukebox:{e:'🎶',n:'ジュークボックス',price:380,th:'diner'},
+  // 🌲 森コテージ
+  cab_chair:{e:'🪑',n:'丸太の椅子',price:200,th:'cabin',fu:1},        cab_table:{e:'🪵',n:'丸太のテーブル',price:280,th:'cabin',fu:1},
+  cab_sofa:{e:'🛋️',n:'ログソファ',price:420,th:'cabin',fu:1},         cab_shelf:{e:'🗄️',n:'山小屋の棚',price:320,th:'cabin',fu:1},
+  cab_rug:{e:'🟫',n:'編み込みラグ',price:240,th:'cabin',fu:1},        cab_lamp:{e:'🏮',n:'吊りランタン',price:260,th:'cabin',fu:1},
+  cab_plant:{e:'🌲',n:'樽植えのモミ',price:220,th:'cabin',fu:1},      cab_hearth:{e:'🔥',n:'石の暖炉',price:380,th:'cabin'},
+  // 🚀 SF宇宙
+  sci_chair:{e:'🪑',n:'操舵席チェア',price:200,th:'scifi',fu:1},      sci_table:{e:'🛸',n:'ホロ投影テーブル',price:280,th:'scifi',fu:1},
+  sci_sofa:{e:'🛋️',n:'クルー用ソファ',price:420,th:'scifi',fu:1},     sci_shelf:{e:'🗄️',n:'補給物資ラック',price:320,th:'scifi',fu:1},
+  sci_rug:{e:'🔷',n:'ヘクスデッキマット',price:240,th:'scifi',fu:1},   sci_lamp:{e:'💡',n:'ケージ型ランプ',price:260,th:'scifi',fu:1},
+  sci_plant:{e:'🪴',n:'水耕培養槽シダ',price:220,th:'scifi',fu:1},     sci_starmap:{e:'🖥️',n:'星図コンソール',price:380,th:'scifi'},
+  // 🧙 ファンタジー
+  fan_chair:{e:'🪑',n:'魔道士の椅子',price:200,th:'fantasy',fu:1},     fan_table:{e:'📖',n:'魔導書の作業机',price:280,th:'fantasy',fu:1},
+  fan_sofa:{e:'🌙',n:'三日月のソファ',price:420,th:'fantasy',fu:1},    fan_shelf:{e:'📚',n:'秘薬と魔導書の棚',price:320,th:'fantasy',fu:1},
+  fan_rug:{e:'🔮',n:'魔法陣のラグ',price:240,th:'fantasy',fu:1},      fan_lamp:{e:'🕯️',n:'錬鉄のランタン灯',price:260,th:'fantasy',fu:1},
+  fan_plant:{e:'🪴',n:'光る魔法草の鉢',price:220,th:'fantasy',fu:1},   fan_cauldron:{e:'🧪',n:'大魔女の大釜',price:380,th:'fantasy'},
+  // 🏴‍☠️ 海賊船
+  pir_chair:{e:'🪑',n:'船長の椅子',price:200,th:'pirate',fu:1},       pir_table:{e:'🗺️',n:'海図テーブル',price:280,th:'pirate',fu:1},
+  pir_sofa:{e:'🛋️',n:'船室のベンチソファ',price:420,th:'pirate',fu:1}, pir_shelf:{e:'🔭',n:'航海道具の棚',price:320,th:'pirate',fu:1},
+  pir_rug:{e:'🧭',n:'羅針盤のラグ',price:240,th:'pirate',fu:1},       pir_lamp:{e:'🏮',n:'真鍮のランタン灯',price:260,th:'pirate',fu:1},
+  pir_plant:{e:'🌴',n:'樽植えのヤシ',price:220,th:'pirate',fu:1},     pir_chest:{e:'💰',n:'財宝の宝箱',price:380,th:'pirate'},
+  // 🎃 ハロウィン
+  hal_chair:{e:'🪑',n:'ゴシックの玉座',price:200,th:'halloween',fu:1}, hal_table:{e:'🕯️',n:'獣脚のロウソク机',price:280,th:'halloween',fu:1},
+  hal_sofa:{e:'💀',n:'紫ベルベットのソファ',price:420,th:'halloween',fu:1}, hal_shelf:{e:'📚',n:'魔導書の棚',price:320,th:'halloween',fu:1},
+  hal_rug:{e:'🕸️',n:'蜘蛛の巣ラグ',price:240,th:'halloween',fu:1},    hal_lamp:{e:'🏮',n:'鉄のランタン灯',price:260,th:'halloween',fu:1},
+  hal_plant:{e:'🪴',n:'枯れいばらの鉢',price:220,th:'halloween',fu:1}, hal_pumpkin:{e:'🎃',n:'大かぼちゃランタン',price:380,th:'halloween'},
+  // 🐚 海底
+  sea_chair:{e:'🪑',n:'ホタテ貝の椅子',price:200,th:'undersea',fu:1},  sea_table:{e:'🫧',n:'シーグラスのテーブル',price:280,th:'undersea',fu:1},
+  sea_sofa:{e:'🐚',n:'シャコ貝のソファ',price:420,th:'undersea',fu:1}, sea_shelf:{e:'🪸',n:'珊瑚の飾り棚',price:320,th:'undersea',fu:1},
+  sea_rug:{e:'🌀',n:'海藻織りのラグ',price:240,th:'undersea',fu:1},    sea_lamp:{e:'🎐',n:'クラゲのランプ',price:260,th:'undersea',fu:1},
+  sea_plant:{e:'🌿',n:'コンブの鉢植え',price:220,th:'undersea',fu:1},  sea_treasure:{e:'💰',n:'沈没船の宝箱',price:380,th:'undersea'} };
 // ショップでプロップをテーマ別に見出し分けする
-const PROP_GROUPS=[['','🧰 汎用'],['circus','🎪 サーカス'],['sushi','🍣 回転寿司'],['western','🤠 西部開拓'],['beehive','🐝 ミツバチの巣'],['steampunk','⚙️ スチームパンク']];
+const PROP_GROUPS=[['','🧰 汎用'],['japan','⛩️ 日本'],['undersea','🐚 海底'],['diner','🍔 ダイナー'],['cabin','🌲 森コテージ'],
+  ['scifi','🚀 SF宇宙'],['fantasy','🧙 ファンタジー'],['pirate','🏴‍☠️ 海賊船'],['halloween','🎃 ハロウィン'],
+  ['circus','🎪 サーカス'],['sushi','🍣 回転寿司'],['western','🤠 西部開拓'],['beehive','🐝 ミツバチの巣'],['steampunk','⚙️ スチームパンク']];
 const BG={ auto:{n:'標準（時刻連動）',price:0}, blue:{n:'快晴',price:1800}, sunset:{n:'夕焼け',price:2200}, night:{n:'星空',price:2600}, space:{n:'宇宙',price:4200}, aurora:{n:'オーロラ',price:5200} };
 const FLOOR={ wood:{n:'木材（標準）',price:0}, cool:{n:'クールグレー',price:1000}, crimson:{n:'レッドタイル',price:1200}, forest:{n:'フォレスト',price:1200}, gold:{n:'ゴールド',price:3200} };
 // テーマシリーズ: 空テーマ(sky)＋床材(floor)＋絵文字装飾セット(decos) をまとめて購入/適用

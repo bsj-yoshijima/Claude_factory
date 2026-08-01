@@ -33,6 +33,22 @@ SHEETS = {
                            'sus_rug', 'sus_lamp', 'sus_plant', 'sus_noren']),
     'steampunk-furn': (4, ['stm_chair', 'stm_table', 'stm_sofa', 'stm_shelf',
                            'stm_rug', 'stm_lamp', 'stm_plant', 'stm_helmet']),
+    'japan-furn':     (4, ['jpn_chair', 'jpn_table', 'jpn_sofa', 'jpn_shelf',
+                           'jpn_rug', 'jpn_lamp', 'jpn_plant', 'jpn_byobu']),
+    'diner-furn':     (4, ['din_chair', 'din_table', 'din_sofa', 'din_shelf',
+                           'din_rug', 'din_lamp', 'din_plant', 'din_jukebox']),
+    'scifi-furn':     (4, ['sci_chair', 'sci_table', 'sci_sofa', 'sci_shelf',
+                           'sci_rug', 'sci_lamp', 'sci_plant', 'sci_starmap']),
+    'fantasy-furn':   (4, ['fan_chair', 'fan_table', 'fan_sofa', 'fan_shelf',
+                           'fan_rug', 'fan_lamp', 'fan_plant', 'fan_cauldron']),
+    'pirate-furn':    (4, ['pir_chair', 'pir_table', 'pir_sofa', 'pir_shelf',
+                           'pir_rug', 'pir_lamp', 'pir_plant', 'pir_chest']),
+    'undersea-furn':  (4, ['sea_chair', 'sea_table', 'sea_sofa', 'sea_shelf',
+                           'sea_rug', 'sea_lamp', 'sea_plant', 'sea_treasure']),
+    'cabin-furn':     (4, ['cab_chair', 'cab_table', 'cab_sofa', 'cab_shelf',
+                           'cab_rug', 'cab_lamp', 'cab_plant', 'cab_hearth']),
+    'halloween-furn': (4, ['hal_chair', 'hal_table', 'hal_sofa', 'hal_shelf',
+                           'hal_rug', 'hal_lamp', 'hal_plant', 'hal_pumpkin']),
 }
 ROWS = 2
 PAD = 3          # 切り出し後に足す余白(px)

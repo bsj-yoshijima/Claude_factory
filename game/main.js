@@ -65,7 +65,15 @@ const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cushion',
   'bee_combtable','bee_honeypots','bee_pollen','bee_candles','bee_throne','bee_frames',               // 🐝 ミツバチの巣
   'stm_boiler','stm_cogs','stm_console','stm_armchair','stm_orrery','stm_coal',                       // ⚙️ スチームパンク
   'sus_chair','sus_table','sus_sofa','sus_shelf','sus_rug','sus_lamp','sus_plant','sus_noren',        // 🍣 家具セット
-  'stm_chair','stm_table','stm_sofa','stm_shelf','stm_rug','stm_lamp','stm_plant','stm_helmet'];      // ⚙️ 家具セット
+  'stm_chair','stm_table','stm_sofa','stm_shelf','stm_rug','stm_lamp','stm_plant','stm_helmet',       // ⚙️ 家具セット
+  'jpn_chair','jpn_table','jpn_sofa','jpn_shelf','jpn_rug','jpn_lamp','jpn_plant','jpn_byobu',        // ⛩️ 日本
+  'din_chair','din_table','din_sofa','din_shelf','din_rug','din_lamp','din_plant','din_jukebox',      // 🍔 ダイナー
+  'cab_chair','cab_table','cab_sofa','cab_shelf','cab_rug','cab_lamp','cab_plant','cab_hearth',       // 🌲 森コテージ
+  'sci_chair','sci_table','sci_sofa','sci_shelf','sci_rug','sci_lamp','sci_plant','sci_starmap',      // 🚀 SF宇宙
+  'fan_chair','fan_table','fan_sofa','fan_shelf','fan_rug','fan_lamp','fan_plant','fan_cauldron',     // 🧙 ファンタジー
+  'pir_chair','pir_table','pir_sofa','pir_shelf','pir_rug','pir_lamp','pir_plant','pir_chest',        // 🏴‍☠️ 海賊船
+  'hal_chair','hal_table','hal_sofa','hal_shelf','hal_rug','hal_lamp','hal_plant','hal_pumpkin',      // 🎃 ハロウィン
+  'sea_chair','sea_table','sea_sofa','sea_shelf','sea_rug','sea_lamp','sea_plant','sea_treasure'];    // 🐚 海底
 // プロップが使う床のコマ数(=見た目の大きさ)。1コマだと潰れて読めない描き込みの多い物を 2/4 に上げる。
 // 表示高 = 1.35*CELL*√コマ数（4コマなら縦横2倍 = 2x2マス相当）。未指定は1コマ。
 // 素材PNGはこの表示サイズに合わせて縮小済み(tools/fit_props.py)。値を変えたら再実行が必要。
@@ -75,11 +83,14 @@ const PROP_SPAN = {
   wes_barreltable:2, wes_horseshoe:2, wes_wheel:2, wes_assay:2,
   bee_combtable:2, bee_honeypots:2, bee_pollen:2, bee_candles:2, bee_frames:2,
   stm_armchair:2, stm_cogs:2, stm_orrery:2,
-  // 基本家具はスロットごとに固定(テーマが変わっても椅子は椅子の大きさ)
-  sus_sofa:2, sus_rug:2, sus_lamp:2, sus_plant:2, sus_noren:2,
-  stm_sofa:2, stm_rug:2, stm_lamp:2, stm_plant:2,
+  // 各テーマの名物(一点物)
+  sus_noren:2, stm_helmet:2, jpn_byobu:2, din_jukebox:2, cab_hearth:2,
+  sci_starmap:2, fan_cauldron:2, pir_chest:2, hal_pumpkin:2, sea_treasure:2,
 };
-const propSpan = (name)=> PROP_SPAN[name] || 1;
+// 基本家具はスロットでコマ数を固定する(テーマが変わっても椅子は椅子の大きさ)。
+// `<テーマ3文字>_<スロット>` の命名なので、末尾から引ける。
+const FURN_SPAN = { chair:1, table:1, shelf:1, sofa:2, rug:2, lamp:2, plant:2 };
+const propSpan = (name)=> PROP_SPAN[name] || FURN_SPAN[String(name).split('_')[1]] || 1;
 window.PROP_SPAN = PROP_SPAN;   // ショップ表示(factory-phaser.html)から参照
 // 収納(=在庫に戻す)の対象。在庫を持つ種類だけ。絵文字装飾やガチャ景品は在庫が無く、
 // 戻すと復元できないので対象外にする。
