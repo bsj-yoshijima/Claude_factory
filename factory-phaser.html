@@ -25,9 +25,9 @@
   /* ===== 今日の労働量（このゲームの主役の数字。製造設定とは分ける） ===== */
   /* 実績ボードと製造設定は横並び。幅が足りなければ上下に折り返す */
   #topwrap{position:absolute;top:10px;left:0;right:0;margin:0 auto;z-index:7;display:flex;gap:10px;
-           flex-wrap:wrap;justify-content:center;align-items:flex-start;
+           flex-wrap:wrap;justify-content:center;align-items:stretch;
            width:fit-content;max-width:min(1040px,calc(100vw - 190px))}
-  #board{display:flex;gap:0;flex:none;
+  #board{display:flex;gap:0;flex:none;align-items:center;
          background:var(--panel);border:1px solid var(--edge);border-radius:12px;overflow:hidden;backdrop-filter:blur(4px)}
   #board .m{padding:8px 22px;text-align:center;min-width:126px}
   #board .m+.m{border-left:1px solid var(--edge)}
@@ -128,9 +128,6 @@
   #craft button{background:var(--gold);color:#243b34;font-weight:700;border:none;white-space:nowrap;
                 border-radius:8px;padding:10px 15px;cursor:pointer;font-family:inherit;font-size:12px}
   #craft button.stop{background:#3a4a45;color:#cfeee0}
-  /* 注意文は横に伸びるとボックスが歪むので、下段に横長で置く */
-  #craft .warn{color:#ff9f7a;font-size:10.5px;flex-basis:100%;text-align:center;
-               border-top:1px solid var(--edge);padding-top:7px;margin-top:1px}
   /* メニューのドロップダウンと重ならないよう右の中央に置く */
   #doneBtn{position:absolute;top:50%;right:12px;transform:translateY(-50%);z-index:8;display:none;cursor:pointer;
            font-size:12px;background:var(--gold);color:#243b34;font-weight:700;padding:9px 14px;border-radius:9px;
@@ -477,12 +474,12 @@ function renderCraft(){
     : `<div class="slot none" title="🔧レイアウト編集で抽出機を設置してください"><span class="e">🟥</span><small>抽出機なし</small></div>`;
   el.innerHTML = `<div class="slots">${slots}</div>
     <div class="prog">
-      <div class="kv"><span>${on?'次の製品まで':'待機中'}</span><b>${Math.floor(wp)} / ${CRAFT_WP} WP</b></div>
+      <div class="kv"><span${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得（サーバ未接続）':(on?'次の製品まで':'待機中')}</span><b>${Math.floor(wp)} / ${CRAFT_WP} WP</b></div>
       <div class="bar"><i style="width:${on?pct.toFixed(1):0}%"></i></div>
     </div>
-    ${mats.length ? `<button class="${on?'stop':''}" id="craftGo">${on?'■ 製造を停止':'▶ 製造開始'}</button>`
-                  : `<div class="warn">抽出機をクリックして原材料をセットすると製造を開始できます</div>`}
-    ${!WPST.ok ? '<div class="warn">WP未取得<br>（サーバ未接続）</div>' : ''}`;
+    ${mats.length ? `<button class="${on?'stop':''}" id="craftGo">${on?'■ 製造を停止':'▶ 製造開始'}</button>` : ''}`;
+  // 案内文はボックスを歪ませるので出さず、ツールチップに逃がす
+  el.title = mats.length ? '' : '🟥抽出機をクリックして原材料をセットすると製造を開始できます';
   for(const s of el.querySelectorAll('.slot[data-mid]')) s.onclick=()=>openMatPicker(s.dataset.mid);
   const go=el.querySelector('#craftGo'); if(go) go.onclick=toggleSession;
   renderBoard();
