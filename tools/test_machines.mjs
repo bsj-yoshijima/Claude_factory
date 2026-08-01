@@ -38,6 +38,12 @@ const document = { createElement:()=>({ getContext:()=>ctx2d, width:0, height:0 
 const location = { search:'' };
 const window = {};
 
+// 素材/レシピの正は factory-phaser.html 側。テストでは最小のスタブを噛ませる
+window.__craft = { preview:(slots)=>{
+  const set=[...new Set(slots.filter(Boolean))].sort().join(',');
+  const T={ 'egg,flour,milk':{e:'🥞',n:'パンケーキ ほか4種'}, 'egg,milk,sugar':{e:'🍮',n:'プリン ほか4種'},
+            'meat,rice':{e:'🍛',n:'カレー ほか4種'}, 'rice,veg':{e:'🍙',n:'おにぎり ほか4種'} };
+  return T[set] || {e:'🪨', n:'謎のカタマリ', unknown:true}; } };
 const sandbox = { Phaser, document, location, window, console, Math, Date, Set, Map, JSON, URLSearchParams,
   Object, Array, String, Number, parseInt, parseFloat, isNaN, fetch:async()=>{ throw new Error('offline'); },
   setTimeout, Proxy };
@@ -114,32 +120,32 @@ ok(s.setSlot(m,0,'nope')===false, '未定義の素材は拒否');
 ok(s.getMachine(m).slots.join()==='milk,egg,flour', 'スロットの内容が保持される');
 
 console.log('\n[5] 組合せで作れる物が変わる（順不同）');
-ok(s.getMachine(m).product.n==='ケーキ', `牛乳+卵+小麦粉 = ケーキ → ${s.getMachine(m).product.n}`);
+ok(s.getMachine(m).product.e==='🥞', `牛乳+卵+小麦粉 → パンケーキ系 (${s.getMachine(m).product.e})`);
 s.setSlot(m,0,'egg'); s.setSlot(m,1,'milk');
-ok(s.getMachine(m).product.n==='ケーキ', '卵+牛乳+小麦粉 も同じケーキ（順不同）');
-s.setSlot(m,2,'gelatin');
-ok(s.getMachine(m).product.n==='謎の塊', `未知の組合せ → 謎の塊 → ${s.getMachine(m).product.n}`);
-s.setSlot(m,0,null); s.setSlot(m,1,'berry'); s.setSlot(m,2,'gelatin');
-ok(s.getMachine(m).product.n==='いちごゼリー', 'いちご+ゼラチン = いちごゼリー（空きスロットは無視）');
-s.setSlot(m,0,'berry');
-ok(s.getMachine(m).product.n==='いちごゼリー', '同じ素材の重複は1つとして数える');
+ok(s.getMachine(m).product.e==='🥞', '卵+牛乳+小麦粉 も同じ結果（順不同）');
+s.setSlot(m,2,'meat');
+ok(s.getMachine(m).product.unknown===true, `未知の組合せ → 謎のカタマリ`);
+s.setSlot(m,0,null); s.setSlot(m,1,'rice'); s.setSlot(m,2,'veg');
+ok(s.getMachine(m).product.e==='🍙', '米+野菜 = おにぎり系（空きスロットは無視）');
+s.setSlot(m,0,'rice');
+ok(s.getMachine(m).product.e==='🍙', '同じ素材の重複は1つとして数える');
 s.setSlot(m,0,null); s.setSlot(m,1,null); s.setSlot(m,2,null);
 ok(s.getMachine(m).product===null, '全部外すと未設定に戻る');
 
 console.log('\n[6] マス数が多いほど作れる物が増える');
 s.buildLayout([]);
 const m5=s.addPlaced('machine','s5',{cell:{c:2,r:8},dir:'u'});
-['rice','fish','nori','egg','gelatin'].forEach((k,i)=>s.setSlot(m5,i,k));
-ok(s.getMachine(m5).product.n==='弁当', `5素材のレシピが成立 → ${s.getMachine(m5).product.n}`);
-ok(F().recipeFor(['coffee','milk']).n==='カフェオレ', 'recipeFor をUIから直接引ける');
+['rice','meat','veg','egg','cheese'].forEach((k,i)=>s.setSlot(m5,i,k));
+ok(s.getMachine(m5).product!==null, '5マスぶんの素材を保持できる');
+ok(s.getMachine(m5).slots.filter(Boolean).length===5, '5スロットすべてに素材が入る');
 
 console.log('\n[7] 保存/復元（素材と向きが残る）');
 const lay=s.getLayout();
 ok(lay[0].slots && lay[0].dir, '保存データに slots と dir が入る');
 s.buildLayout(lay);
 const r5=s.placed.find(e=>e.kind==='machine');
-ok(s.getMachine(r5.id).slots.join()==='rice,fish,nori,egg,gelatin', '復元後も素材が残る');
-ok(s.getMachine(r5.id).product.n==='弁当', '復元後も同じ物が作れる');
+ok(s.getMachine(r5.id).slots.join()==='rice,meat,veg,egg,cheese', '復元後も素材が残る');
+ok(s.getMachine(r5.id).product!==null, '復元後も判定できる');
 console.log('\n[8] 旧セーブの移行');
 const dropped=s.buildLayout([
   {id:'b1',kind:'belt',c:10,r:5},{id:'b2',kind:'belt',c:9,r:5},{id:'o1',kind:'outlet',c:11,r:5},
@@ -167,14 +173,15 @@ s.setPartsTheme('japan'); ok(s.partsSkin().top===0x7a5a38, 'japan → wood パ�
 s.setPartsTheme('scifi'); ok(s.partsSkin().top===0x232a52, 'scifi → neon パレット');
 s.setPartsTheme(null);    ok(s.partsSkin().top===0x39424b, '未設定 → default パレット');
 
-console.log('\n[11] 生産フック');
-s.buildLayout([]);
-const pm=s.addPlaced('machine','s2',{cell:{c:6,r:6},dir:'u'});
-s.setSlot(pm,0,'coffee'); s.setSlot(pm,1,'milk');
-let got=null; window.__onProduce=(p,mats)=>{ got={p,mats}; };
-s._prodT=0; s._produceUpdate(999999);
-ok(got && got.p.n==='カフェオレ', `__onProduce が完成品を通知 → ${got?got.p.n:'なし'}`);
-ok(got && got.mats.join()==='coffee,milk', '使った素材も渡る');
+console.log('\n[11] 製造の進行は上流エンジン(tickCraft)が持つ');
+ok(typeof s._produceUpdate==='undefined', 'main.js 側の二重生産ループは無い');
+ok(typeof s.celebrate==='function', '完成演出 celebrate() を提供する');
+ok(typeof s.machineList==='function', '製造UIへ machineList() を提供する');
+ok(typeof s.refreshMachineBadges==='function', '上流UIが呼ぶ refreshMachineBadges() がある');
+s.buildLayout([]); const mid=s.addPlaced('machine','s3',{cell:{c:5,r:5},dir:'u'}); s.setSlot(mid,0,'rice');
+const ml=s.machineList();
+ok(Array.isArray(ml)&&ml.length===1&&ml[0].slots.length===3, 'machineList() が slots つきで返る');
+ok(ml[0].slots[0]==='rice' && ml[0].id===mid, 'machineList() の中身が正しい');
 
 console.log(fail? `\n${fail} 件 FAIL` : '\nすべて通過');
 process.exit(fail?1:0);

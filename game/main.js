@@ -50,51 +50,19 @@ const MACH_MIN = 2;
 const MACH_ART = ['normal','arabia'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
 const machSize = (sub)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(sub||'').replace(/\D/g,''))||MACH_MIN));
 
-/* ===== 素材とレシピ =====
-   製造機の各マス(スロット)に素材を1つ設定する。1台に入っている素材の「集合」でできる物が変わる。
-   ・順不同（牛乳→卵→小麦粉 と 卵→牛乳→小麦粉 は同じケーキ）。同じ素材の重複は1つとして数える。
-   ・既知レシピに無い組合せ → 「謎の塊」。
-   ・レシピ表は window.__factory.recipes で差し替え可能（組合せロジックは別担当に渡せる）。 */
+/* ===== 素材の見た目 =====
+   素材マスタ・レシピ・製品・図鑑は factory-phaser.html の製造エンジンが正。
+   main.js が持つのは「スロットに何色で何の絵文字を描くか」だけ（idは上流と一致させる）。 */
 const MATS = {
-  milk:   {e:'🥛', n:'牛乳',      c:0xf2f0e6},
-  egg:    {e:'🥚', n:'卵',        c:0xf5e6c8},
-  flour:  {e:'🌾', n:'小麦粉',    c:0xe0c98a},
-  sugar:  {e:'🍬', n:'砂糖',      c:0xf6dce8},
-  berry:  {e:'🍓', n:'いちご',    c:0xe05a6a},
-  cocoa:  {e:'🫘', n:'カカオ',    c:0x7a4a2a},
-  gelatin:{e:'🧊', n:'ゼラチン',  c:0xbfe6ee},
-  coffee: {e:'☕', n:'コーヒー豆', c:0x5a3a24},
-  honey:  {e:'🍯', n:'はちみつ',  c:0xe8b13a},
-  rice:   {e:'🍚', n:'米',        c:0xf0efe8},
-  fish:   {e:'🐟', n:'魚',        c:0x6aa8d0},
-  nori:   {e:'🍃', n:'海苔',      c:0x2f5a3a},
+  milk:  {e:'🥛', c:0xf2f0e6}, flour: {e:'🌾', c:0xe0c98a}, egg:   {e:'🥚', c:0xf5e6c8},
+  butter:{e:'🧈', c:0xf2d27a}, sugar: {e:'🍬', c:0xf6dce8}, choco: {e:'🍫', c:0x7a4a2a},
+  rice:  {e:'🍚', c:0xf0efe8}, noodle:{e:'🍥', c:0xe8d9b0}, cheese:{e:'🧀', c:0xe8c04a},
+  tomato:{e:'🍅', c:0xd9483f}, meat:  {e:'🥩', c:0xc05a5a}, veg:   {e:'🥬', c:0x6aa84f},
 };
-const RECIPES = [
-  {k:['milk','egg','flour'],                    e:'🍰', n:'ケーキ'},
-  {k:['milk','egg','flour','sugar'],            e:'🎂', n:'デコレーションケーキ'},
-  {k:['milk','egg','flour','sugar','berry'],    e:'🥞', n:'ベリーパンケーキ'},
-  {k:['berry','gelatin'],                       e:'🍮', n:'いちごゼリー'},
-  {k:['milk','sugar','gelatin'],                e:'🍨', n:'パンナコッタ'},
-  {k:['flour','sugar','cocoa'],                 e:'🍪', n:'ココアクッキー'},
-  {k:['milk','sugar','cocoa'],                  e:'🍫', n:'ミルクチョコ'},
-  {k:['coffee','milk'],                         e:'🥤', n:'カフェオレ'},
-  {k:['coffee','milk','sugar','cocoa'],         e:'☕', n:'モカ'},
-  {k:['honey','milk'],                          e:'🍼', n:'ハニーミルク'},
-  {k:['honey','flour','egg'],                   e:'🍩', n:'ハニードーナツ'},
-  {k:['rice','egg'],                            e:'🍳', n:'卵かけごはん'},
-  {k:['rice','fish'],                           e:'🍣', n:'寿司'},
-  {k:['rice','fish','nori'],                    e:'🍙', n:'手巻き'},
-  {k:['fish','nori'],                           e:'🍥', n:'なると'},
-  {k:['rice','fish','nori','egg','gelatin'],    e:'🍱', n:'弁当'},
-];
-const UNKNOWN_PRODUCT = {e:'🪨', n:'謎の塊', unknown:true};
-const matKey = (list)=> Array.from(new Set(list.filter(Boolean))).sort().join('+');
-/* スロットの素材配列 → 作れる物。1つも入っていなければ null(未設定)。 */
+/* スロットの素材配列 → 作れる物。判定は上流エンジンに委譲する(window.__craft.preview) */
 function recipeFor(slots){
-  const key=matKey(slots||[]); if(!key) return null;
-  const table=(window.__factory && window.__factory.recipes) || RECIPES;
-  for(const r of table) if(matKey(r.k)===key) return r;
-  return UNKNOWN_PRODUCT;
+  const f=(slots||[]).filter(Boolean); if(!f.length) return null;
+  return (window.__craft && window.__craft.preview) ? window.__craft.preview(f) : null;
 }
 
 const INK = '#3b4643', EYE = '#241713';
@@ -108,6 +76,12 @@ const MTOP = [3,2,1,1,0,0,1,2,3,3,2,1,0,0,1,1,2,3];
 // 被り物テクスチャ hat_<id> を頭頂に載せる較正: 底辺中央を(HAT_CX, HAT_BASE_Y)ドットへ、幅をHAT_W_DOTに正規化。
 const DOTP = 3, HAT_CX = 12.5, HAT_BASE_Y = 10.8, HAT_W_DOT = 19;
 function makeMascot(scene, key, pal, pose){
+  const cv=mascotCanvas(pal,pose);
+  if(scene.textures.exists(key)) scene.textures.remove(key);
+  scene.textures.addCanvas(key, cv);
+}
+// マスコットを描いた canvas を返す。Phaserテクスチャにも HUD用の <img> にも使う
+function mascotCanvas(pal, pose){
   const P=3, w=26, h=28;
   const cv=document.createElement('canvas'); cv.width=w*P; cv.height=h*P;
   const g=cv.getContext('2d');
@@ -124,8 +98,16 @@ function makeMascot(scene, key, pal, pose){
     let c=pal.b; if(i>=bw-5||r>=rows-2) c=pal.s; else if(r===MTOP[i]+1) c=pal.l; px(X,Y,c);
   }
   const ey=topBase+4; px(x0+5,ey,EYE); px(x0+6,ey,EYE); px(x0+11,ey,EYE); px(x0+12,ey,EYE);
-  if(scene.textures.exists(key)) scene.textures.remove(key);
-  scene.textures.addCanvas(key, cv);
+  return cv;
+}
+// HUD用アイコン(稼働=作業ポーズ / 休憩=座りポーズ)。初回だけ描いて data URL を使い回す
+let _mascotIcons=null;
+function mascotIcons(){
+  if(!_mascotIcons) _mascotIcons={
+    work: mascotCanvas(PRESETS[0],'work').toDataURL(),
+    sit:  mascotCanvas(PRESETS[1],'sit').toDataURL(),
+  };
+  return _mascotIcons;
 }
 
 // テーマ専用の部屋画像(Stitch製・壁/床/窓を焼き込み)。ここにあるテーマは背景ごと差し替える
@@ -237,13 +219,12 @@ class Main extends Phaser.Scene {
       skinList:SKINS,
       setPartsTheme:(t)=>this.setPartsTheme(t),   // 製造機のスキン(テーマ)切替
       // 製造機の素材スロット。UI(パレット/設定パネル)はここ越しにシーンを触る
-      materials:MATS, recipes:RECIPES, machSizes:MACH_SIZES,
+      materials:MATS, machSizes:MACH_SIZES,
       getMachine:(id)=>this.getMachine(id),
       setSlot:(id,i,mat)=>this.setSlot(id,i,mat),
       rotateMachine:(id)=>this.rotateMachine(id),
       moveMachine:(id,c,r)=>this.moveItem(id,c,r),
       removeMachine:(id)=>this.removeItem(id),
-      recipeFor:(slots)=>recipeFor(slots),
     };
     this.poll(); this.time.addEvent({delay:1500,loop:true,callback:()=>this.poll()});
   }
@@ -439,6 +420,16 @@ class Main extends Phaser.Scene {
     return { id:e.id, size:machSize(e.sub), dir:e.dir, lvl:e.lvl, slots:e.slots.slice(),
       product:e.product?{e:e.product.e,n:e.product.n,unknown:!!e.product.unknown}:null }; }
   _snapBack(e){ const p=cellXY(e.cell.c,e.cell.r); if(e.main){ e.main.x=p.x; e.main.y=p.y; } }
+  /* ===== 製造UI(factory-phaser.html)との橋渡し ===== */
+  machineList(){ return this.placed.filter(e=>e.kind==='machine').map(e=>this.getMachine(e.id)); }
+  // 素材のセット/解除のあとに見た目を作り直す(上流UIから呼ばれる)
+  refreshMachineBadges(){ for(const e of this.placed.slice()) if(e.kind==='machine') this._remake(e); }
+  // 製造完了の演出。対象の製造機の上で絵文字が浮き上がる
+  celebrate(emoji, id){ const ms=this.placed.filter(e=>e.kind==='machine');
+    const t=(id&&ms.find(e=>e.id===id))||ms[0]; if(!t) return;
+    const p=cellXY(t.cell.c,t.cell.r); this._spawnPop(p.x,p.y);
+    const tx=this.add.text(p.x,p.y-CELL*1.2,emoji,{fontSize:Math.round(CELL*1.1)+'px'}).setOrigin(0.5,1).setDepth(9001);
+    this.tweens.add({targets:tx,y:p.y-CELL*3.2,alpha:0,duration:1500,ease:'Cubic.easeOut',onComplete:()=>tx.destroy()}); }
   getLayout(){ return this.placed.map(e=>{ const o={id:e.id,kind:e.kind,sub:e.sub,lvl:e.lvl,c:e.cell.c,r:e.cell.r};
     if(e.kind==='machine'){ o.dir=e.dir; o.slots=e.slots.slice(); } return o; }); }
   /* 旧レイアウトの移行: コンベア/出荷口は廃止したので捨てる。旧4種の製造機(red等)は1マス機に読み替える。 */
@@ -460,20 +451,6 @@ class Main extends Phaser.Scene {
   placeEmojiDeco(emoji){ return this.addPlaced('emoji', emoji); }
   placeProp(name){ if(!this.textures.exists('prop_'+name)) return null; return this.addPlaced('prop', name); }
   placePrize(emoji,color){ return this.addPlaced('prize', {e:emoji,color}); }
-  /* ===== 生産: 素材が揃っている製造機が一定間隔で完成品をポンと出す ===== */
-  _produceUpdate(time){
-    const ms=this.placed.filter(e=>e.kind==='machine' && e.product);
-    if(!ms.length) return;
-    if(this._prodT && time-this._prodT < 2600) return; this._prodT=time;
-    for(const e of ms){
-      const [A,,C]=this._machFootprint(e);
-      const x=(A.x+C.x)/2, y=(A.y+C.y)/2 - MACH_GEO.height*CELL;
-      const t=this.add.text(x,y-CELL*0.4,e.product.e,{fontSize:Math.round(CELL*0.7)+'px'}).setOrigin(0.5,1).setDepth(C.y+3);
-      this.tweens.add({targets:t, y:y-CELL*1.5, alpha:0, duration:1400, onComplete:()=>t.destroy()});
-      this.produced=(this.produced||0)+1;
-      if(window.__onProduce) window.__onProduce(e.product, e.slots.filter(Boolean));
-    }
-  }
   syncMachines(list){ for(const m of (list||[])) this.addPlaced('machine', 's'+machSize(m.type), {lvl:m.lvl||1}); }
   /* 設置時のポップ演出 */
   _spawnPop(x,y){ const g=this.add.circle(x,y-CELL*0.5,CELL*0.6,0xffe9a8,0.5).setDepth(9000).setBlendMode(Phaser.BlendModes.ADD);
@@ -492,11 +469,13 @@ class Main extends Phaser.Scene {
     this.trash=this.add.container(72,H-52,[ this.add.rectangle(0,0,124,72,0x3a1418,0.85).setStrokeStyle(2,0xe05a4e), this.add.text(0,0,'🗑 ここへ撤去',{fontSize:'13px',color:'#ffd0c8'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     this._trashRect=new Phaser.Geom.Rectangle(10,H-88,124,74);
     // 床クリック: 製造機の上なら設定パネル、空きマスならパレットで選択中のアイテムを設置
-    this.input.on('pointerdown',(po,over)=>{ if(!this.editMode) return; if(over&&over.length) return;
+    this.input.on('pointerdown',(po,over)=>{
       const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       const m=this.machineAtCell(c,r);
-      if(m){ this._placedPtr=true; if(window.__openMachine) window.__openMachine(m.id); return; }   // 素材設定/回転/撤去
+      // 製造機は編集中/通常どちらのクリックでも素材パネルを開く(素材設定がコア機能なので)
+      if(m){ this._placedPtr=true; if(window.__openMachine) window.__openMachine(m.id); return; }
+      if(!this.editMode) return; if(over&&over.length) return;
       const sel=window.__editSel; if(!sel) return;
       const opt=(sel.kind==='machine')?{sub:sel.sub,dir:this.placeDir||'u'}:null;
       if(!this.canPlace(sel.kind,c,r,opt)){ if(window.__toast) window.__toast(
@@ -746,12 +725,15 @@ class Main extends Phaser.Scene {
     });
     for(const k of Object.keys(this.agents)){ if(!present.has(k)){ const a=this.agents[k]; this.clearDeco(a); a.sp.destroy(); if(a.hat)a.hat.destroy(); a.lbl.destroy(); a.shadow.destroy(); delete this.agents[k]; } }
     this.busyCount=busyN;
-    if(this.hud) this.hud.innerHTML=`稼働 <b>${busyN}</b> ・ 休憩 ${idleN} ・ Phaser基盤`;
+    if(this.hud){ const ic=mascotIcons();
+      this.hud.innerHTML=
+        `<span class="st" title="稼働中"><img src="${ic.work}" alt=""><i class="fx">✨</i><b>${busyN}</b></span>`+
+        `<span class="st" title="休憩中"><img src="${ic.sit}" alt=""><i class="fx">☕</i><b class="idle">${idleN}</b></span>`; }
   }
   update(time){
     // 星のまたたき(夜)
     if(this.stars && this.lightOn>0){ for(const s of this.stars) s.setAlpha(this.lightOn*(0.35+0.65*Math.abs(Math.sin(time*0.002+s.ph)))); }
-    this._produceUpdate(time);   // 素材が揃っている製造機が完成品をポンと出す
+    // 製造の進行(WP→製品)は factory-phaser.html の tickCraft が持つ。完成演出は celebrate() 経由。
     const SPD=1.7;
     for(const k of Object.keys(this.agents)){
       const a=this.agents[k];
