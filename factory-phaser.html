@@ -166,6 +166,17 @@
   .mslot .x{position:absolute;top:0;right:5px;font-size:11px;color:#9fb0c0}
   .mslot .x:hover{color:#ff9f7a}
   .wpline{margin-top:14px;border-top:1px solid var(--edge);padding-top:9px}
+  /* 製造ダイアログ: 1台=1行の縦一覧（タブで切り替えず一覧性を優先） */
+  .mrow{background:#10171b;border:1px solid #243036;border-radius:11px;padding:10px 12px;margin:0 0 10px}
+  .mrow.run{border-color:#3f6b58;background:#111d1a}
+  .mrowH{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+  .mrowH b{font-size:13px;color:#eafff4}
+  .mrowH .grow{flex:1}
+  .mtag{font-size:10px;color:#9fb0c0;background:#0e1417;border:1px solid var(--edge);border-radius:99px;padding:1px 8px}
+  .mst{font-size:10px;color:#9fb0c0}
+  .mst.on{color:#8ff0bd}
+  .mrow .wpline{margin-top:10px;padding-top:8px}
+  .mrow .dbtn{padding:7px 13px;font-size:12px}
   .wpline .kv{display:flex;justify-content:space-between;color:#9fb0c0;font-size:11px}
   .wpline .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
   .wpline .bar{height:9px;background:#0d1315;border:1px solid var(--edge);border-radius:5px;overflow:hidden;margin-top:5px}
@@ -582,7 +593,7 @@ function dexBody(){
                : `<div class="pcard miss"><div class="e">❓</div><div class="nm">？？？</div>
                     <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`; }).join('')}</div>
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
-        原材料の組み合わせを変えて未発見の製品を探そう。1製品 = ${CRAFT_WP}WP。
+        原材料の組み合わせを変えて未発見の製品を探そう。1製品 = マス数 × ${WP_PER_SLOT}WP。
         レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。</div>`;
   } else {
     body=`<div class="grid">${PRIZES.map(p=>{ const have=G.inv[p.id]||0,col=RAR[p.r].c;
@@ -609,7 +620,9 @@ document.getElementById('dexBtn').addEventListener('click',openDex);
    WP は /api/otel（OTel実測）の累計を参照する。セッション開始時点の累計を
    startWp として記録し、差分を「現セッションWP」として扱う。
    ========================================================================= */
-const CRAFT_WP = 50;          // 1製品あたりの必要WP（プロトタイプ値）
+// 1製品あたりの必要WP = マス数 × WP_PER_SLOT。今後変わる可能性があるのでここ1箇所で調整する
+const WP_PER_SLOT = 50;
+const needWp = (m)=> Math.max(1, (m && m.size) || 1) * WP_PER_SLOT;
 // 製品の売価（レア度別）。完成品一覧を開いたタイミングで 💰 に加算される
 const PROD_PRICE = {1:60, 2:200, 3:700, 4:2600, 5:9000};
 // 原材料をセットできるマス数 = 製造機のマス数(2〜5)。台ごとに1レシピ。
@@ -716,26 +729,54 @@ function craftState(){
   if(c.activeId===undefined) c.activeId=null;
   if(!Array.isArray(c.made)) c.made=[];
   if(!c.dex||typeof c.dex!=='object') c.dex={};
-  if(c.session&&typeof c.session!=='object') c.session=null;
+  // 製造は機械ごとに独立。mach[id] = {running, wp}
+  if(!c.mach||typeof c.mach!=='object') c.mach={};
+  // 旧セーブ移行: 単一セッション → いま選んでいた機械を稼働中にする
+  if(c.session&&typeof c.session==='object'){
+    const id=c.activeId; if(id){ if(!c.mach[id]) c.mach[id]={running:true,wp:0}; else c.mach[id].running=true; }
+    c.session=null;
+  } else if(c.session) c.session=null;
   return c;
 }
+/* 機械1台ぶんの製造状態。WPは「稼働中に稼いだ分の累積」。
+   稼いだWPは台数で按分せず、稼働中の全機械に同額を加算する。 */
+function machState(id){
+  const c=craftState();
+  if(!c.mach[id]||typeof c.mach[id]!=='object') c.mach[id]={running:false, wp:0};
+  const st=c.mach[id];
+  if(typeof st.wp!=='number'||!isFinite(st.wp)||st.wp<0) st.wp=0;
+  st.running=!!st.running;
+  return st;
+}
+const keyOfSlots = (slots)=>{ const set=[...new Set((slots||[]).filter(Boolean))].sort();
+  return set.length?set.join(','):null; };
+// 一覧はマス数の昇順。番号は設置順で固定しておく（並べ替えても号機名が変わらないように）
+function machinesSorted(){
+  const ms=machines(), no={}; ms.forEach((m,i)=>no[m.id]=i+1);
+  return ms.slice().sort((a,b)=>(a.size-b.size)||(no[a.id]-no[b.id])).map(m=>({...m, no:no[m.id]}));
+}
+function runningCount(){ return machines().filter(m=>machState(m.id).running).length; }
 /* 製造は「1台の製造機」単位。その機械の各マス(2〜5)が原材料スロット。
    activeId = いま製造に使っている機械。未指定なら最初の1台。 */
 function machines(){ const s=window.__scene; return (s&&s.machineList)?s.machineList():[]; }
 function activeMachine(){ const c=craftState(), ms=machines(); if(!ms.length) return null;
   return ms.find(m=>m.id===c.activeId) || ms[0]; }
 function comboMats(){ const m=activeMachine(); return m ? m.slots.filter(Boolean) : []; }
-function comboKey(){ const set=[...new Set(comboMats())].sort(); return set.length?set.join(','):null; }
+function comboKey(){ return keyOfSlots(comboMats()); }
 /* main.js が「この機械で何が作れるか」を描くために引く。レシピの正はこちら側。 */
 window.__craft = {
   mat:(id)=>MAT[id]||null,
-  preview:(slots)=>{ const set=[...new Set((slots||[]).filter(Boolean))].sort();
-    if(!set.length) return null;
-    const pool=poolFor(set.join(','));
-    if(pool[0]===BLOB) return {e:PROD[BLOB].e, n:PROD[BLOB].n, unknown:true};
-    // 既知の組み合わせは5種の中から出る。代表としてレア度が最も高いものを見せる
-    const top=pool.map(id=>PROD[id]).filter(Boolean).sort((a,b)=>b.r-a.r)[0];
-    return top ? {e:top.e, n:`${top.n} ほか${pool.length-1}種`, unknown:false} : null; },
+  // 何が作れるかは伏せる（探す楽しみを残す）。代わりに稼働状態と進捗だけ返す。
+  preview:(slots, id)=>{
+    const set=(slots||[]).filter(Boolean);
+    if(!set.length) return null;                       // 素材未設定 → main.js 側が「素材未設定」を出す
+    const ms=machines(), m=id?ms.find(x=>x.id===id):null;
+    if(!m) return {e:'📦', n:'素材セット済み', unknown:false};
+    const st=machState(m.id), need=needWp(m);
+    return st.running
+      ? {e:'⚙️', n:`製造中 ${Math.floor(st.wp)}/${need}WP`, unknown:false}
+      : {e:'📦', n:'待機中', unknown:true};
+  },
 };
 
 /* --- WP の取得（OTel実測） --- */
@@ -748,23 +789,37 @@ async function pollWp(){
   }catch(_){ WPST.ok=false; }
   tickCraft(); renderCraft();
 }
-const sessionWp = ()=>{ const c=craftState(); return c.session ? Math.max(0, WPST.total - c.session.startWp) : 0; };
-
-/* --- 製造判定。1回のポーリングで複数個できることもある --- */
+/* --- 製造判定 ---
+   ・稼いだWPは按分せず、稼働中の全機械にそれぞれ同額を加算する
+   ・必要WPに達した「その時点」のマスの組み合わせで作られる製品が決まる
+   ・原材料を変えてもWPはリセットしない（溜まった分はそのまま次に使う） */
 function tickCraft(){
-  const c=craftState(); if(!c.session||!WPST.ok) return;
-  const key=comboKey(); if(!key) return;              // 原材料が全部外れたら進めない
-  let made=null, n=0;
-  while(WPST.total - c.session.startWp >= CRAFT_WP && n<20){
-    c.session.startWp += CRAFT_WP;                     // 超過分は次の製品に繰り越す
-    const p=rollProduct(key); if(!p) break;
-    c.made.push({ pid:p.id, at:Date.now(), key, viewed:false });
-    made=p; n++;
+  const c=craftState(); if(!WPST.ok) return;
+  // 初回は基準だけ取る（起動前に稼いだWPを遡って入れない）
+  if(typeof c.wpMark!=='number'){ c.wpMark=WPST.total; saveGame(); return; }
+  const delta=Math.max(0, WPST.total - c.wpMark);
+  c.wpMark=WPST.total;
+  if(delta<=0) return;
+  let last=null, total=0;
+  for(const m of machines()){
+    const st=machState(m.id); if(!st.running) continue;
+    st.wp += delta;
+    const need=needWp(m); let n=0;
+    while(st.wp>=need && n<20){
+      st.wp-=need;                                  // 超過分は次の製品に繰り越す
+      const key=keyOfSlots(m.slots);                // ここで初めて組み合わせを見る
+      const p=key ? rollProduct(key) : PROD[BLOB];  // 空なら「レシピに無い」扱い
+      if(!p) break;
+      c.made.push({ pid:p.id, at:Date.now(), key:key||'', mid:m.id, viewed:false });
+      last=p; total++; n++;
+    }
   }
-  if(made){
-    saveGame(); updateDoneBtn();
-    if(window.__scene&&window.__scene.celebrate) window.__scene.celebrate(made.e);
-    toast(`${made.e} ${made.n} が完成！(💰${(PROD_PRICE[made.r]||0).toLocaleString()})${n>1?` ×${n}個`:''} 🎁完成品で確認`);
+  saveGame();
+  if(total){
+    updateDoneBtn();
+    if(window.__scene&&window.__scene.celebrate) window.__scene.celebrate(last.e);
+    toast(`${last.e} ${last.n} が完成！(💰${(PROD_PRICE[last.r]||0).toLocaleString()})${total>1?` ×${total}個`:''} 🎁完成品で確認`);
+    if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
   }
 }
 
@@ -785,91 +840,94 @@ function renderBoard(){
        ここは「いま何を作っているか + WP」だけを出す導線にする --- */
 function renderCraft(){
   const el=document.getElementById('craft'); if(!el) return;
-  const c=craftState(), am=activeMachine(), on=!!c.session;
-  const wp=sessionWp(), pct=Math.min(100, wp/CRAFT_WP*100);
-  const pv=am?window.__craft.preview(am.slots):null;
-  const face = !am ? {e:'🏭',n:'製造機なし'} : (pv?{e:pv.e,n:pv.n}:{e:'➕',n:'原材料をセット'});
+  const ms=machines(), run=ms.filter(m=>machState(m.id).running);
+  // 何が作れるかは出さない。進捗は「一番先に完成する機械」を代表として見せる
+  let lead=null, leadPct=-1;
+  for(const m of run){ const st=machState(m.id), pct=st.wp/needWp(m); if(pct>leadPct){ leadPct=pct; lead=m; } }
+  const face = !ms.length ? {e:'🏭', n:'製造機なし'}
+             : run.length ? {e:'⚙️', n:`製造中 ${run.length}/${ms.length}台`}
+             : {e:'📦', n:`待機中 ${ms.length}台`};
+  const need=lead?needWp(lead):0, wp=lead?Math.floor(machState(lead.id).wp):0;
   el.innerHTML = `<span class="pe">${face.e}</span>
     <div class="mid"><div class="nm">${face.n}</div>
-      <div class="kv"><span class="${on?'run':''}"${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得':(on?'製造中':'待機中')}</span><b>${Math.floor(wp)} / ${CRAFT_WP} WP</b></div>
-      <div class="bar"><i style="width:${on?pct.toFixed(1):0}%"></i></div></div>
+      <div class="kv"><span class="${run.length?'run':''}"${WPST.ok?'':' style="color:#ff9f7a"'}>${
+        !WPST.ok?'WP未取得':(lead?`${lead.no||''}号機がもうすぐ`:'▶製造開始でカウント')}</span>
+        <b>${lead?`${wp} / ${need} WP`:'—'}</b></div>
+      <div class="bar"><i style="width:${lead?Math.min(100,leadPct*100).toFixed(1):0}%"></i></div></div>
     <span class="go">🏭▸</span>`;
   el.title='クリックで🏭製造（原材料のセット・製造開始）';
   renderBoard();
 }
-function toggleSession(){
-  const c=craftState();
-  if(c.session){ c.session=null; toast('製造を停止しました'); }
-  else { c.session={ startWp:WPST.total, at:Date.now() };
-    toast(`製造開始！ここからのWPをカウントします（${CRAFT_WP}WPで1個）`); }
+/* 機械1台の製造開始/停止。WPはリセットしない（停止中は増えないだけ） */
+function toggleMachine(id){
+  const st=machState(id), ms=machines(), m=ms.find(x=>x.id===id);
+  st.running=!st.running;
+  craftState().activeId=id;
   saveGame(); renderCraft();
+  if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
+  toast(st.running ? `${m?(m.no||''):''}号機の製造を開始（${m?needWp(m):0}WPで1個）` : '製造を停止（溜めたWPは保持）');
 }
 
 /* =========================================================================
-   🏭 製造ダイアログ — 素材のセットをここで完結させる
-     タブ = 製造機の選択（2台目以降があるときだけ出す。選択は craftState().activeId）
-     本文 = 各マスの原材料 → 原材料ピッカー → 作れる物 → WPの進捗
-     操作 = ▶製造開始 / ■停止
-   開いている間は 1秒ごとに再描画してWPに追従する。
+   🏭 製造ダイアログ — 全機械を縦に並べた一覧
+     ・タブで切り替えない（一覧性を優先）。並びはマス数の昇順
+     ・各行でマスのセット / 進捗 / 製造開始・停止が完結する
+     ・作れる物は出さない（組み合わせを探すのがゲームの目的）
+   開いている間は1秒ごとに再描画してWPに追従する。
    ========================================================================= */
-let _craftPick=null;                       // 原材料を選んでいる最中のマス番号(null=閉じている)
-const machTitle=(m,i)=>`${(MACH['s'+m.size]||{}).e||'🏭'} ${i+1}号機`;
+let _craftPick=null;                       // {mid, idx} = いま原材料を選んでいるマス
+const machTitle=(m)=>`${(MACH['s'+m.size]||{}).e||'🏭'} ${m.no}号機`;
 function openCraft(){
   _craftPick=null;
   return openDialog({ title:'🏭 製造',
-    sub:()=>{ const am=activeMachine(); return am?`${am.size}マス${am.lvl>1?` Lv${am.lvl}`:''}`:'製造機がありません'; },
-    tabs:(d)=>{ const ms=machines(), am=activeMachine(); if(am) d.tab=am.id;   // タブの選択は常に実体に合わせる
-      return ms.length>1 ? ms.map((m,i)=>({id:m.id,label:machTitle(m,i)})) : []; },
-    onTab:(id,d)=>{ craftState().activeId=id; _craftPick=null; saveGame(); renderCraft(); d.refresh(); },
+    sub:()=>{ const ms=machines(); return ms.length?`${ms.length}台 / 稼働 ${runningCount()}台`:'製造機がありません'; },
     live:1000,
     body:()=>{
-      const c=craftState(), am=activeMachine();
-      if(!am) return '<div class="cost" style="padding:12px">製造機がありません。🏪ショップで購入 → 🔧レイアウト編集で床に設置してください。</div>';
-      const slots=am.slots.map((mid,i)=>{ const m=MAT[mid];
-        return `<div class="mslot ${m?'set':''} ${_craftPick===i?'pick':''}" data-cslot="${i}" title="クリックで原材料を選ぶ">
-          <span class="e">${m?m.e:'＋'}</span><small>${m?m.n:`${i+1}マス目`}</small>
-          ${m?`<span class="x" data-cclear="${i}" title="外す">✕</span>`:''}</div>`; }).join('');
-      const picker = _craftPick==null ? '' :
-        `<div class="cost" style="margin:11px 0 5px;color:#7fe6ff">${_craftPick+1}マス目に入れる原材料</div>
-         <div class="pgrid">${MATS.map(m=>`<div class="pcard" data-cmat="${m.id}"
-            style="cursor:pointer;${am.slots[_craftPick]===m.id?'border-color:var(--gold)':''}">
-            <div class="e">${m.e}</div><div class="nm">${m.n}</div></div>`).join('')}</div>`;
-      // 作れる物: レシピに載っている組み合わせなら5種の候補、外れていれば🪨
-      const key=comboKey(); let prod;
-      if(!key) prod='<div class="cost" style="padding:6px 2px">原材料を入れると、ここに作れる物が出ます。</div>';
-      else { const pool=poolFor(key);
-        prod = (pool[0]===BLOB)
-          ? `<div class="rc"><div class="ic">${PROD[BLOB].e}</div><div class="mid"><div class="nm">${PROD[BLOB].n}</div>
-               <div class="cost">レシピに無い組み合わせです。原材料を入れ替えて探そう。</div></div></div>`
-          : `<div class="pgrid">${pool.map(id=>{ const p=PROD[id], n=c.dex[p.id]||0;
-              return `<div class="pcard" style="border-color:${RAR[p.r].c}"><div class="e">${p.e}</div>
-                <div class="nm">${p.n}</div><div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
-                ${n?`<div class="qn">×${n}</div>`:''}</div>`; }).join('')}</div>
-             <div class="cost" style="margin-top:6px">この${pool.length}種からランダムで1つできます。</div>`; }
-      const on=!!c.session, wp=sessionWp(), pct=Math.min(100, wp/CRAFT_WP*100);
-      return `<div class="cost" style="margin:2px 0 8px">1マスにつき原材料1つ。入っている原材料の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。1個 = ${CRAFT_WP}WP。</div>`
-        + `<div class="mslots">${slots}</div>` + picker
-        + `<div class="cost" style="margin:13px 0 6px">作れる物</div>` + prod
-        + `<div class="wpline"><div class="kv">
-             <span${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得（サーバ未接続）':(on?'次の製品まで':'待機中 — ▶製造開始でカウント開始')}</span>
-             <b>${Math.floor(wp)} / ${CRAFT_WP} WP</b></div>
-           <div class="bar"><i style="width:${on?pct.toFixed(1):0}%"></i></div></div>`;
-    },
-    actions:()=>{
-      if(!activeMachine()) return [{label:'🏪 ショップへ',kind:'ghost',on:()=>openShop('mach')}];
-      const on=!!craftState().session, has=comboMats().length>0;
-      return [{label:on?'■ 製造を停止':'▶ 製造開始', disabled:!on&&!has,
-               on:(d)=>{ toggleSession(); d.refresh(); }}];
+      const ms=machinesSorted();
+      if(!ms.length) return '<div class="cost" style="padding:12px">製造機がありません。🏪ショップで購入 → 🔧レイアウト編集で床に設置してください。</div>';
+      const head=`<div class="cost" style="margin:2px 0 9px">1マスにつき原材料1つ。入っている原材料の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。
+        必要WPは<b>マス数 × ${WP_PER_SLOT}WP</b>。稼いだWPは稼働中の全機械にそれぞれ加算されます（台数で割りません）。</div>`;
+      return head + ms.map(m=>{
+        const st=machState(m.id), need=needWp(m), pct=Math.min(100, st.wp/need*100);
+        const slots=m.slots.map((mid,i)=>{ const mt=MAT[mid];
+          const on=_craftPick&&_craftPick.mid===m.id&&_craftPick.idx===i;
+          return `<div class="mslot ${mt?'set':''} ${on?'pick':''}" data-cslot="${i}" data-cmid="${m.id}" title="クリックで原材料を選ぶ">
+            <span class="e">${mt?mt.e:'＋'}</span><small>${mt?mt.n:`${i+1}マス目`}</small>
+            ${mt?`<span class="x" data-cclear="${i}" data-cmid="${m.id}" title="外す">✕</span>`:''}</div>`; }).join('');
+        const picker = (_craftPick&&_craftPick.mid===m.id) ? `
+          <div class="cost" style="margin:9px 0 5px;color:#7fe6ff">${_craftPick.idx+1}マス目に入れる原材料</div>
+          <div class="pgrid">${MATS.map(x=>`<div class="pcard" data-cmat="${x.id}" data-cmid="${m.id}"
+             style="cursor:pointer;${m.slots[_craftPick.idx]===x.id?'border-color:var(--gold)':''}">
+             <div class="e">${x.e}</div><div class="nm">${x.n}</div></div>`).join('')}</div>` : '';
+        const nSet=m.slots.filter(Boolean).length;
+        return `<div class="mrow ${st.running?'run':''}">
+          <div class="mrowH">
+            <b>${machTitle(m)}</b>
+            <span class="mtag">${m.size}マス</span>
+            <span class="mtag">必要 ${need}WP</span>
+            <span class="mst ${st.running?'on':''}">${st.running?'⚙️ 製造中':'⏸ 待機中'}</span>
+            <span class="grow"></span>
+            <button class="dbtn ${st.running?'ghost':''}" data-crun="${m.id}"${(!st.running&&!nSet)?' disabled':''}
+              title="${(!st.running&&!nSet)?'原材料を1つ以上セットしてください':''}">${st.running?'■ 停止':'▶ 製造開始'}</button>
+          </div>
+          <div class="mslots">${slots}</div>${picker}
+          <div class="wpline"><div class="kv">
+            <span${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得（サーバ未接続）':(st.running?'次の製品まで':'停止中（溜めたWPは保持）')}</span>
+            <b>${Math.floor(st.wp)} / ${need} WP</b></div>
+            <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div></div>
+        </div>`;
+      }).join('');
     },
     onRender:(p,d)=>{
-      const am=activeMachine(); if(!am) return; const id=am.id;
+      p.querySelectorAll('[data-crun]').forEach(el=>el.onclick=()=>{ toggleMachine(el.dataset.crun); d.refresh(); });
       p.querySelectorAll('[data-cslot]').forEach(el=>el.onclick=(ev)=>{
         if(ev.target.dataset && ev.target.dataset.cclear!=null) return;   // ✕(外す)は別扱い
-        const i=+el.dataset.cslot; _craftPick=(_craftPick===i)?null:i; d.refresh(); });
+        const mid=el.dataset.cmid, i=+el.dataset.cslot;
+        _craftPick=(_craftPick&&_craftPick.mid===mid&&_craftPick.idx===i)?null:{mid,idx:i}; d.refresh(); });
       p.querySelectorAll('[data-cclear]').forEach(el=>el.onclick=(ev)=>{
-        ev.stopPropagation(); setMat(id, +el.dataset.cclear, null); _craftPick=null; d.refresh(); });
+        ev.stopPropagation(); setMat(el.dataset.cmid, +el.dataset.cclear, null); _craftPick=null; d.refresh(); });
       p.querySelectorAll('[data-cmat]').forEach(el=>el.onclick=()=>{
-        setMat(id, _craftPick, el.dataset.cmat); _craftPick=null; d.refresh(); });
+        if(!_craftPick) return; setMat(el.dataset.cmid, _craftPick.idx, el.dataset.cmat); _craftPick=null; d.refresh(); });
     } });
 }
 document.getElementById('craftBtn').addEventListener('click',()=>openCraft());
@@ -894,13 +952,11 @@ function setMat(machineId, slotIdx, matId){
   const c=craftState(), F=window.__factory;
   if(!F||!F.setSlot(machineId, slotIdx, matId||null)) return;   // 素材の実体は機械のマス(レイアウトに保存)
   c.activeId = machineId;
-  // 原材料を変更・解除したら製造は停止する（仕様）。WPは開始時からの差分なので自然に0に戻る
-  const wasRunning = !!c.session;
-  c.session = null;
+  // 原材料を変えても製造は止めず、溜まったWPも保持する。
+  // 何ができるかは「必要WPに達した時点」の組み合わせで決まる（tickCraft）。
   snapLayout(); saveGame();
   renderCraft();
-  const what = matId ? `${MAT[matId].e} ${MAT[matId].n} をセット` : '原材料を外しました';
-  toast(wasRunning ? `${what} — 製造を停止しました（▶製造開始で再開）` : what);
+  toast(matId ? `${MAT[matId].e} ${MAT[matId].n} をセット` : '原材料を外しました');
 }
 // main.js から呼ばれる: 機械の上に出す原材料バッジ / 機械クリック
 window.__matBadge = ()=>'';   // 原材料は機械のマス(スロット)に直接描かれるのでバッジは使わない
@@ -1065,12 +1121,11 @@ function buyMachine(type){ if(!MACH[type])return; const pr=MACH[type].price; if(
 function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; const c=lvCost(e.lvl); if(G.money<c)return; G.money-=c; e.lvl++;
   const M=MACH[machSub(e.sub)];
   if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${M.e} ${M.n} を Lv${e.lvl} に強化！`); }
-// 素材スロットの要約（ショップ一覧用）。レシピ判定は上流の製造エンジン(comboKey/poolFor)に合わせる
+// 素材スロットの要約（ショップ一覧用）。何が作れるかは伏せ、素材と稼働状態だけ出す
 function slotSummary(e){ const mats=[...new Set((e.slots||[]).filter(Boolean))].sort();
   if(!mats.length) return '素材未設定';
   const icons=mats.map(m=>(MAT[m]||{}).e||'?').join('');
-  const pool=poolFor(mats.join(','));
-  return `${icons} → ${pool[0]===BLOB?'🪨 謎のカタマリ':pool.map(id=>PROD[id].e).join('')}`; }
+  return `${icons}${machState(e.id).running?' ・ ⚙️製造中':''}`; }
 function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return; G.money-=pr; addStock('deco',t); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
 function buyProp(t){ const pr=PROP[t].price; if(G.money<pr)return; G.money-=pr; addStock('prop',t); saveGame(); updateBadge(); toast(`${PROP[t].n} を購入（🔧編集で設置）`); }
 function selectBg(k){ if(!G.bgOwned.includes(k)){ const pr=BG[k].price; if(G.money<pr)return; G.money-=pr; G.bgOwned.push(k); toast(`背景「${BG[k].n}」を購入！`); } G.bg=k; if(window.__scene&&window.__scene.setSkyTheme)window.__scene.setSkyTheme(k); saveGame(); updateBadge(); }
@@ -1275,13 +1330,17 @@ window.__openMachine=(id)=>{
       + `<div class="pitems" style="display:flex;flex-wrap:wrap;gap:6px;width:auto;max-height:none">`
       + MATS.map(m2=>`<div class="pitem" data-mat="${m2.id}" style="cursor:pointer">${m2.e}<small>${m2.n}</small></div>`).join('')
       + `</div>`;
-    const p=m.product;
-    const prod = p ? `<div class="rc"><div class="ic">${p.e}</div><div class="mid">
-        <div class="nm">${p.n}</div><div class="cost">${p.unknown?'レシピに無い組み合わせ（🪨 謎のカタマリになります）':'この組み合わせで作れます'}</div></div></div>`
-      : '<div class="cost" style="padding:6px 2px">原材料を入れるとここに作れる物が出ます</div>';
+    const st=machState(id), need=needWp(m), pct=Math.min(100, st.wp/need*100);
+    const nSet=m.slots.filter(Boolean).length;
+    const run = `<div class="wpline" style="margin-top:12px"><div class="kv">
+        <span${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得':(st.running?'次の製品まで':'停止中（溜めたWPは保持）')}</span>
+        <b>${Math.floor(st.wp)} / ${need} WP</b></div>
+        <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div></div>
+      <div class="rc" style="margin-top:8px"><div class="mid"><div class="nm">${st.running?'⚙️ 製造中':'⏸ 待機中'}</div>
+        <div class="cost">必要WP = ${m.size}マス × ${WP_PER_SLOT}WP</div></div>
+        <button data-mrun="1"${(!st.running&&!nSet)?' disabled':''}>${st.running?'■ 停止':'▶ 製造開始'}</button></div>`;
     return `<div class="cost" style="margin:2px 0 8px">1マスにつき素材1つ。入っている素材の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。素材は🏭製造タブでもまとめてセットできます。</div>`
-      + slots + picker
-      + `<div class="cost" style="margin:12px 0 6px">作れる物</div>` + prod
+      + slots + picker + run
       + `<div class="rc" style="margin-top:12px"><div class="mid"><div class="nm">配置</div>`
       + `<div class="cost">向きを変える / 別の場所へ移す（撤去は🗑ゴミ箱へドラッグ）</div></div>`
       + `<button data-rot="1">↻ 回転</button><button data-move="1" style="margin-left:5px">✥ 移動</button></div>`;
@@ -1294,6 +1353,7 @@ window.__openMachine=(id)=>{
       ev.stopPropagation(); setMat(id, +el.dataset.clear, null); _matPick=null; d.refresh(); });
     p.querySelectorAll('[data-mat]').forEach(el=>el.onclick=()=>{
       setMat(id, _matPick, el.dataset.mat); _matPick=null; d.refresh(); });
+    p.querySelectorAll('[data-mrun]').forEach(el=>el.onclick=()=>{ toggleMachine(id); d.refresh(); });
     p.querySelectorAll('[data-rot]').forEach(el=>el.onclick=()=>{
       if(!F.rotateMachine(id)){ toast('回した先に空きがありません'); return; } window.__layoutChanged(); renderCraft(); d.refresh(); });
     // 移動: シーンが「掴んで床クリックで置き直す」モードに入る。

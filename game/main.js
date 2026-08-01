@@ -60,10 +60,11 @@ const MAT_ART = {
   rice:  {e:'🍚', c:0xf0efe8}, noodle:{e:'🍥', c:0xe8d9b0}, cheese:{e:'🧀', c:0xe8c04a},
   tomato:{e:'🍅', c:0xd9483f}, meat:  {e:'🥩', c:0xc05a5a}, veg:   {e:'🥬', c:0x6aa84f},
 };
-/* スロットの素材配列 → 作れる物。判定は上流エンジンに委譲する(window.__craft.preview) */
-function recipeFor(slots){
+/* スロットの素材配列 → 筐体の上に出す表示。何が作れるかは伏せ、稼働状態と進捗を返す。
+   判定は上流エンジンに委譲する(window.__craft.preview) */
+function recipeFor(slots, id){
   const f=(slots||[]).filter(Boolean); if(!f.length) return null;
-  return (window.__craft && window.__craft.preview) ? window.__craft.preview(f) : null;
+  return (window.__craft && window.__craft.preview) ? window.__craft.preview(f, id) : null;
 }
 
 const INK = '#3b4643', EYE = '#241713';
@@ -408,7 +409,7 @@ class Main extends Phaser.Scene {
     });
 
     // 完成品の表示(筐体の上)。素材未設定なら出さない
-    const prod=recipeFor(e.slots); e.product=prod;
+    const prod=recipeFor(e.slots, e.id); e.product=prod;
     const mid={x:(bx0+bx1)/2, y:by0-HG};
     if(prod){
       const badge=this.add.text(mid.x, mid.y-CELL*0.30, prod.e, {fontSize:Math.round(CELL*0.8)+'px'}).setOrigin(0.5,1).setDepth(C.y+2);
@@ -535,6 +536,8 @@ class Main extends Phaser.Scene {
     const p=cellXY(e.cell.c,e.cell.r); if(e.main){ e.main.x=p.x; e.main.y=p.y; } }
   /* ===== 製造UI(factory-phaser.html)との橋渡し ===== */
   machineList(){ return this.placed.filter(e=>e.kind==='machine').map(e=>this.getMachine(e.id)); }
+  // 製造の開始/停止・完成で筐体上の表示(製造中/待機中/進捗)が変わるので作り直す
+  refreshMachines(){ for(const e of this.placed.filter(x=>x.kind==='machine')) this._remake(e); }
   // 素材のセット/解除のあとに見た目を作り直す(上流UIから呼ばれる)
   refreshMachineBadges(){ for(const e of this.placed.slice()) if(e.kind==='machine') this._remake(e); }
   // 製造完了の演出。対象の製造機の上で絵文字が浮き上がる
