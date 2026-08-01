@@ -876,9 +876,7 @@ function openCraft(){
     body:()=>{
       const ms=machinesSorted();
       if(!ms.length) return '<div class="cost" style="padding:12px">製造機がありません。🏪ショップで購入 → 🔧レイアウト編集で床に設置してください。</div>';
-      const head=`<div class="cost" style="margin:2px 0 9px">1マスにつき原材料1つ。入っている原材料の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。
-        必要WPは<b>マス数 × ${WP_PER_SLOT}WP</b>。稼いだWPは稼働中の全機械にそれぞれ加算されます（台数で割りません）。</div>`;
-      return head + ms.map(m=>{
+      return ms.map(m=>{
         const st=machState(m.id), need=needWp(m), pct=Math.min(100, st.wp/need*100);
         const slots=m.slots.map((mid,i)=>{ const mt=MAT[mid];
           const on=_craftPick&&_craftPick.mid===m.id&&_craftPick.idx===i;
