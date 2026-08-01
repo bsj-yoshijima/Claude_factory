@@ -162,17 +162,28 @@
   .mslot .x{position:absolute;top:0;right:5px;font-size:11px;color:#9fb0c0}
   .mslot .x:hover{color:#ff9f7a}
   .wpline{margin-top:14px;border-top:1px solid var(--edge);padding-top:9px}
-  /* 製造ダイアログ: 1台=1行の縦一覧（タブで切り替えず一覧性を優先） */
-  .mrow{background:#10171b;border:1px solid #243036;border-radius:11px;padding:10px 12px;margin:0 0 10px}
+  /* 製造ダイアログ: 1台=1行の縦一覧。1画面に多く入るよう行の高さを詰める
+     （見出し行は持たず、マス列の右端に開始ボタン / 進捗はバーと数値の横並び） */
+  .mrow{background:#10171b;border:1px solid #243036;border-radius:9px;padding:7px 9px;margin:0 0 6px}
   .mrow.run{border-color:#3f6b58;background:#111d1a}
-  .mrowH{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:9px}
-  .mrowH b{font-size:13px;color:#eafff4}
-  .mrowH .grow{flex:1}
-  .mtag{font-size:10px;color:#9fb0c0;background:#0e1417;border:1px solid var(--edge);border-radius:99px;padding:1px 8px}
-  .mst{font-size:10px;color:#9fb0c0}
-  .mst.on{color:#8ff0bd}
-  .mrow .wpline{margin-top:10px;padding-top:8px}
-  .mrow .dbtn{padding:7px 13px;font-size:12px}
+  .mrow .mslots{align-items:center;gap:5px}
+  .mrow .mslot{width:40px;height:40px;border-radius:7px;border-width:1.5px}
+  .mrow .mslot .e{font-size:19px}
+  .mrow .mslot .x{top:-3px;right:1px;font-size:10px}
+  .mrow .dbtn{margin-left:auto;padding:6px 11px;font-size:11px;white-space:nowrap}
+  /* 進捗はバーと数値だけを1行に */
+  .mrow .wpline{display:flex;align-items:center;gap:9px;margin-top:6px;padding-top:0;border-top:none}
+  .mrow .wpline .bar{flex:1;margin-top:0}
+  .mrow .wpline b{font-size:10.5px;color:#cfeee0;font-variant-numeric:tabular-nums;white-space:nowrap}
+  /* 原材料ピッカー: 小さいチップを折り返して並べる */
+  .mpick{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px;
+         background:#0c1215;border:1px solid var(--edge);border-radius:8px;padding:6px 7px}
+  .mpick .lbl{font-size:10px;color:#7fe6ff;margin-right:2px}
+  .mchip{display:inline-flex;align-items:center;gap:3px;font-size:14px;cursor:pointer;
+         background:#141b20;border:1px solid #2c3a38;border-radius:6px;padding:3px 7px}
+  .mchip small{font-size:9.5px;color:#cfeee0}
+  .mchip:hover{border-color:#5f8a80}
+  .mchip.on{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
   .wpline .kv{display:flex;justify-content:space-between;color:#9fb0c0;font-size:11px}
   .wpline .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
   .wpline .bar{height:9px;background:#0d1315;border:1px solid var(--edge);border-radius:5px;overflow:hidden;margin-top:5px}
@@ -880,30 +891,23 @@ function openCraft(){
         const st=machState(m.id), need=needWp(m), pct=Math.min(100, st.wp/need*100);
         const slots=m.slots.map((mid,i)=>{ const mt=MAT[mid];
           const on=_craftPick&&_craftPick.mid===m.id&&_craftPick.idx===i;
-          return `<div class="mslot ${mt?'set':''} ${on?'pick':''}" data-cslot="${i}" data-cmid="${m.id}" title="クリックで原材料を選ぶ">
-            <span class="e">${mt?mt.e:'＋'}</span><small>${mt?mt.n:`${i+1}マス目`}</small>
+          return `<div class="mslot ${mt?'set':''} ${on?'pick':''}" data-cslot="${i}" data-cmid="${m.id}"
+            title="${i+1}マス目${mt?`: ${mt.n}`:''} — クリックで原材料を選ぶ">
+            <span class="e">${mt?mt.e:'＋'}</span>
             ${mt?`<span class="x" data-cclear="${i}" data-cmid="${m.id}" title="外す">✕</span>`:''}</div>`; }).join('');
+        // ピッカーも1行ぶんに収まるよう小さいチップで出す（開いても行が伸びすぎない）
         const picker = (_craftPick&&_craftPick.mid===m.id) ? `
-          <div class="cost" style="margin:9px 0 5px;color:#7fe6ff">${_craftPick.idx+1}マス目に入れる原材料</div>
-          <div class="pgrid">${MATS.map(x=>`<div class="pcard" data-cmat="${x.id}" data-cmid="${m.id}"
-             style="cursor:pointer;${m.slots[_craftPick.idx]===x.id?'border-color:var(--gold)':''}">
-             <div class="e">${x.e}</div><div class="nm">${x.n}</div></div>`).join('')}</div>` : '';
+          <div class="mpick"><span class="lbl">${_craftPick.idx+1}マス目 ▸</span>
+          ${MATS.map(x=>`<span class="mchip ${m.slots[_craftPick.idx]===x.id?'on':''}"
+             data-cmat="${x.id}" data-cmid="${m.id}" title="${x.n}">${x.e}<small>${x.n}</small></span>`).join('')}</div>` : '';
         const nSet=m.slots.filter(Boolean).length;
-        return `<div class="mrow ${st.running?'run':''}">
-          <div class="mrowH">
-            <b>${machTitle(m)}</b>
-            <span class="mtag">${m.size}マス</span>
-            <span class="mtag">必要 ${need}WP</span>
-            <span class="mst ${st.running?'on':''}">${st.running?'⚙️ 製造中':'⏸ 待機中'}</span>
-            <span class="grow"></span>
+        return `<div class="mrow ${st.running?'run':''}" title="${machTitle(m)}（${m.size}マス / 必要 ${need}WP）">
+          <div class="mslots">${slots}
             <button class="dbtn ${st.running?'ghost':''}" data-crun="${m.id}"${(!st.running&&!nSet)?' disabled':''}
               title="${(!st.running&&!nSet)?'原材料を1つ以上セットしてください':''}">${st.running?'■ 停止':'▶ 製造開始'}</button>
-          </div>
-          <div class="mslots">${slots}</div>${picker}
-          <div class="wpline"><div class="kv">
-            <span${WPST.ok?'':' style="color:#ff9f7a"'}>${!WPST.ok?'WP未取得（サーバ未接続）':(st.running?'次の製品まで':'停止中（溜めたWPは保持）')}</span>
-            <b>${Math.floor(st.wp)} / ${need} WP</b></div>
-            <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div></div>
+          </div>${picker}
+          <div class="wpline"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+            <b${WPST.ok?'':' style="color:#ff9f7a"'}>${Math.floor(st.wp)} / ${need} WP</b></div>
         </div>`;
       }).join('');
     },
