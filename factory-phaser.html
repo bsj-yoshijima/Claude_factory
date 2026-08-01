@@ -1377,7 +1377,9 @@ loadGame().then(async ()=>{
   setInterval(syncEditFab, 1000); syncEditFab();   // Eキー・移動モードでの編集ON/OFFに追従
   // 製造: 原材料バッジを反映してからWPの取得を開始（3秒ごと = OTelのログ送信間隔に合わせる）
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
-  updateDoneBtn(); renderCraft(); pollWp(); setInterval(pollWp, 3000);
+  updateDoneBtn(); renderCraft(); pollWp();
+  // ハンドルを公開しておく。テストは実WPが混ざると検証にならないので止められる必要がある
+  window.__pollTimer = setInterval(pollWp, 3000);
   const q=new URLSearchParams(location.search);
   if(q.get('unlockall')){   // 全背景・全アイテムを所持(テスト用)。何度開いても増殖しないよう max で設定
     G.bgOwned=Array.from(new Set([...G.bgOwned,'auto',...SKY_THEMES]));

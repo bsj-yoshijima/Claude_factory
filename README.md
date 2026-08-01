@@ -83,6 +83,16 @@ node server.mjs                       # 再起動
 > 製品・原材料・レシピ・必要WP（`CRAFT_WP`）は `factory-phaser.html` の先頭付近にまとめてある。
 > 将来は工場のジャンルを選べるようにして、原材料と製品のセットを差し替える想定。
 
+### テスト
+
+```bash
+node server.mjs                      # 別のターミナルで起動しておく
+node tools/test_craft_wp.mjs         # 製造機ごとのWP計算（実ブラウザ + CDP・依存ゼロ）
+```
+
+セーブを書き換えるので、開始時にバックアップして終了時（異常終了含む）に必ず戻す。
+実WPのポーリングは `window.__pollTimer` を止めて、注入した値だけで結果が決まるようにしている。
+
 ## 📊 メトリクス（OTel プロトタイプ）
 
 `http://localhost:4321/metrics` — Claude Code から OpenTelemetry で送られてくる実績値を全部そのまま並べ、WP（Work Point）を集計する検証用ページ。
