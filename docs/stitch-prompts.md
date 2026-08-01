@@ -6,7 +6,7 @@ Stitch(project `10683244945413223519`)で **部屋背景** と **オブジェク
 
 - 生成後は `=s0` を付けた downloadUrl で原寸(1376×768)取得 → `assets/room-<key>.png`
 - 新規テーマは main.js の `preload`/`ROOM_TEX`、factory-phaser.html の `SERIES`/`ROOM_THEMES`/`BG_META` の**計5箇所**に登録
-- オブジェクトはマゼンタ(#FF00FF)背景でクロマキー抜き → `assets/prop_<key>_*.png`
+- 装飾プロップは部屋と同じ紺(#1b1b2e)背景で生成 → `tools/cut_props.py` で背景と接地影を抜く → `assets/prop-src/` → `tools/fit_props.py` で表示サイズに縮小 → `assets/prop_<key>.png`
 
 ---
 
@@ -66,22 +66,57 @@ Empty clear floor, same size as reference rooms, dark void margins in corners.
 
 ---
 
-## 2. オブジェクト(小物)テンプレート（prop_<key>_*.png）
+## 2. 装飾プロップテンプレート（prop_<key>.png）
 
-1テーマにつき **4種** をまとめて1枚のシートで出す → マゼンタ抜き → 個別スライス。
-`{{THEME}}` と `{{FOUR_ITEMS}}` を差し替える。
+1テーマにつき **6種** を1枚(3列×2行)で出す → `tools/cut_props.py` で個別スライス。
+`{{THEME}}` `{{PALETTE}}` `{{SIX_ITEMS}}` を差し替える。サーカス/回転寿司/西部開拓/
+ミツバチの巣/スチームパンクの30種はこのテンプレで生成済み(6/6 使えるヒット率)。
+
+背景をマゼンタではなく**部屋と同じ紺 #1b1b2e** にしているのは、Stitch が必ず接地影を
+描いてしまい、マゼンタだと影が黒浮きするため。紺なら影ごと `cut_props.py` が抜ける。
 
 ```
-Sprite sheet of exactly 4 separate {{THEME}} themed decorative objects, isometric pixel-art,
-lo-fi 8-bit Famicom style, chunky pixels, thick clean black outlines, high contrast.
-The 4 items are: {{FOUR_ITEMS}}.
-Arrange them in a single horizontal row, evenly spaced, each fully separated with clear gaps,
-each roughly the same size (fitting about 1-1.5 floor tiles), standing on the ground
-(front view, slight 2:1 isometric 3/4 angle) so they can sit on an isometric floor.
-Solid pure MAGENTA (#FF00FF) flat background, NO shadows touching the magenta,
-NO ground plane, NO text, NO labels, NO UI, NO characters.
-Each object clearly readable as a small game prop.
+A pixel-art game asset sheet — NOT a UI mockup. No buttons, no labels, no text anywhere,
+no panels, no header, no navigation.
+
+Canvas: flat solid dark navy background, exactly #1b1b2e, filling the whole screen.
+Absolutely no gradients, no vignette, no grid lines.
+
+Content: 6 isolated {{THEME}} themed pixel-art floor props, arranged in a clean
+3-column x 2-row grid with generous even spacing, each object free-floating on the navy
+background with a small soft dark elliptical shadow directly under it.
+
+Art direction (must match exactly):
+- 16-bit / SNES-era pixel art, chunky visible square pixels, hard aliased edges,
+  NO anti-aliasing, NO smooth gradients, NO blur, NO glow bloom.
+- Isometric 3/4 view from slightly above, camera angle identical for every object,
+  so each prop sits flat on an imaginary isometric floor.
+- Each object roughly 220 px wide and 260 px tall, bottom-anchored, standing upright.
+- Dark warm outline (deep desaturated brown-purple, near #3a2430) around every silhouette;
+  interior shading in 3-4 flat tones per material — light top face, mid front-left face,
+  dark front-right face.
+- Palette: {{PALETTE}}. Warm, slightly desaturated, cozy — never neon.
+
+The 6 props, left to right, top row then bottom row:
+{{SIX_ITEMS}}
 ```
+
+`{{PALETTE}}` は部屋画像の色に合わせる（例: 回転寿司 = light honey-blond hinoki wood,
+cream white plaster, vermilion red, indigo blue accents, brushed steel）。
+`{{SIX_ITEMS}}` は「1. 〜」の番号付きで、素材・色・載っている小物まで書くと崩れにくい。
+
+### 切り出しと組み込み
+
+```bash
+# 1) downloadUrl に =s0 を付けて原寸取得 → assets/prop-sheets/<theme>.jpg
+# 2) tools/cut_props.py の SHEETS に 6体分の名前を追記(接頭辞はテーマ3文字: cir_/sus_/wes_/bee_/stm_)
+python3 tools/cut_props.py assets/prop-sheets assets/prop-src   # 背景+接地影を抜く(30体で30〜45分)
+python3 tools/fit_props.py                                      # 表示サイズまで縮小
+```
+
+- 登録先は main.js の `PROP_NAMES` と `PROP_SPAN`、factory-phaser.html の `PROP`(価格・絵文字・`th`)の**計3箇所**
+- `PROP_SPAN` は使う床のコマ数(1/2/4)。描き込みが多い物は 2〜4 にしないと 1コマ(42px)で潰れて読めない
+- コマ数を変えたら `fit_props.py` を再実行（表示サイズ = `1.35*CELL*√コマ数` で焼き直すため）
 
 ---
 
@@ -163,21 +198,24 @@ including gaps. NO shadows, NO ground, NO text, NO labels, NO UI.
 
 ---
 
-## 補足: 装飾プロップ 4 items 案（未生成 / これから発注）
+## 補足: 装飾プロップの状況
 
-| key | 4 items |
+### 生成済み（各6種・シートは `assets/prop-sheets/<key>.jpg`）
+
+| key | 6 items |
+|---|---|
+| circus | ポップコーンワゴン / 玉乗り台 / 縞トランク3段 / 輪投げスタンド / 人間大砲 / ベルベットスツール |
+| sushi | 回転レーン / 寿司桶5段 / 給茶台 / 藁巻き酒樽 / 招き猫の台座 / ネタケース |
+| western | 樽テーブル / 蹄鉄投げ / 荷馬車の車輪 / 焚き火とコーヒー / サボテンの鉢 / 金の秤台 |
+| beehive | ハニカム台 / 蜜壺ピラミッド / 花粉のカゴ / 蜜蝋の燭台 / 女王蜂の玉座 / 巣枠ラック |
+| steampunk | 真鍮ボイラー / 歯車の山 / 圧力計コンソール / 銅管チェア / 天球儀 / 石炭バケツ |
+
+### 未生成（発注候補）
+
+| key | items 案 |
 |---|---|
 | diner | jukebox / neon clock / milkshake counter stool / vintage gas pump |
-| steampunk | brass diving helmet / gear contraption / pressure boiler / tesla globe |
-| western | wooden barrel cactus / campfire / wagon wheel / hay bale |
-| sushi | conveyor sushi plate stack / soy sauce & gari set / sake barrel / neko figurine |
-| beehive | honey pot / honeycomb frame / flower cluster / smoker(養蜂器具) |
-| circus | striped pedestal / cannon / stacked balls / hoop stand |
 | carnival | mask stand / cake tower / balloon bunch / drum |
 | undersea | treasure chest / coral / anchor / clam |
 | japan | 石灯籠 / 盆栽 / 手水鉢 / 太鼓 |
-| ...他テーマ | 同様に4種ずつ |
-
-> スライス手順: python で列方向の非マゼンタ塊を検出し矩形で切り出し、
-> 透過PNG化 → placeable prop カタログ(PROP_NAMES 系)に追加。
-```
+| ...他テーマ | 同様に6種ずつ |
