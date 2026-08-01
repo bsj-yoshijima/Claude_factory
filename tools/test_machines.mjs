@@ -183,5 +183,26 @@ const ml=s.machineList();
 ok(Array.isArray(ml)&&ml.length===1&&ml[0].slots.length===3, 'machineList() が slots つきで返る');
 ok(ml[0].slots[0]==='rice' && ml[0].id===mid, 'machineList() の中身が正しい');
 
+console.log('\n[12] グローバル名の衝突（main.js と factory-phaser.html）');
+{ // クラシックスクリプト同士なので同名の const/let/class/function は SyntaxError になり
+  // HTML のスクリプトが丸ごと実行されなくなる（= UIが全部死ぬ）。機械的に検出する。
+  const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
+  const html=fs.readFileSync(new URL('../factory-phaser.html', import.meta.url)).toString();
+  const inline=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const tops=(code)=>{ const out=new Set(); let depth=0;
+    for(const line of code.split('\n')){ const st=line.trim();
+      if(depth===0){ let m;
+        if((m=st.match(/^(?:const|let|var|class)\s+([A-Za-z_$][\w$]*)/))) out.add(m[1]);
+        if((m=st.match(/^function\s+([A-Za-z_$][\w$]*)/))) out.add(m[1]);
+        const d=st.match(/^(?:const|let|var)\s+(.*)$/);
+        if(d) for(const mm of d[1].matchAll(/(?:^|,)\s*([A-Za-z_$][\w$]*)\s*=/g)) out.add(mm[1]);
+      }
+      depth += (line.split('{').length-1)-(line.split('}').length-1);
+    } return out; };
+  const a=tops(src), b=tops(inline);
+  const dup=[...a].filter(x=>b.has(x));
+  ok(dup.length===0, `グローバル名の衝突なし${dup.length?' → '+dup.join(','):''}`);
+}
+
 console.log(fail? `\n${fail} 件 FAIL` : '\nすべて通過');
 process.exit(fail?1:0);

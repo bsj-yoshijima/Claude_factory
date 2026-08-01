@@ -53,7 +53,7 @@ const machSize = (sub)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(sub||'')
 /* ===== 素材の見た目 =====
    素材マスタ・レシピ・製品・図鑑は factory-phaser.html の製造エンジンが正。
    main.js が持つのは「スロットに何色で何の絵文字を描くか」だけ（idは上流と一致させる）。 */
-const MATS = {
+const MAT_ART = {
   milk:  {e:'🥛', c:0xf2f0e6}, flour: {e:'🌾', c:0xe0c98a}, egg:   {e:'🥚', c:0xf5e6c8},
   butter:{e:'🧈', c:0xf2d27a}, sugar: {e:'🍬', c:0xf6dce8}, choco: {e:'🍫', c:0x7a4a2a},
   rice:  {e:'🍚', c:0xf0efe8}, noodle:{e:'🍥', c:0xe8d9b0}, cheese:{e:'🧀', c:0xe8c04a},
@@ -221,7 +221,7 @@ class Main extends Phaser.Scene {
       skinList:SKINS,
       setPartsTheme:(t)=>this.setPartsTheme(t),   // 製造機のスキン(テーマ)切替
       // 製造機の素材スロット。UI(パレット/設定パネル)はここ越しにシーンを触る
-      materials:MATS, machSizes:MACH_SIZES,
+      materials:MAT_ART, machSizes:MACH_SIZES,
       getMachine:(id)=>this.getMachine(id),
       setSlot:(id,i,mat)=>this.setSlot(id,i,mat),
       rotateMachine:(id)=>this.rotateMachine(id),
@@ -326,7 +326,7 @@ class Main extends Phaser.Scene {
     e._slotObjs=[];
     const SL=MACH_GEO.slot;
     this.cellsOf(e).forEach((q,idx)=>{
-      const mat=e.slots[idx], m=mat&&MATS[mat];
+      const mat=e.slots[idx], m=mat&&MAT_ART[mat];
       const ctr = (slotPts && slotPts[idx]) || up(cellXY(q.c,q.r));   // 絵の実測位置 > 計算位置
       if(slotPts){ if(m){ g.fillStyle(m.c,0.5); g.fillEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24);
                           g.lineStyle(1.5,sk.glow,0.85); g.strokeEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24); } }
@@ -421,7 +421,7 @@ class Main extends Phaser.Scene {
   /* スロット i に素材をセット(null でクリア)。作れる物が即座に変わる */
   setSlot(id,i,mat){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return false;
     if(i<0||i>=machSize(e.sub)) return false;
-    if(mat!=null && !MATS[mat]) return false;
+    if(mat!=null && !MAT_ART[mat]) return false;
     e.slots[i]=mat||null; this._remake(e);
     const p=cellXY(e.cell.c,e.cell.r); this._spawnPop(p.x,p.y); return true; }
   getMachine(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return null;

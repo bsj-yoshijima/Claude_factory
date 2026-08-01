@@ -217,6 +217,7 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 - `PROP_SPAN` を変えたら `python3 tools/fit_props.py` を実行して素材を焼き直す
 
 | `tools/cut_machines.py` | 製造機シートを1台ずつ切り出し、表示サイズへ縮小＋スロット位置を実測（`python3 tools/cut_machines.py`） |
+| `tools/test_ui_browser.mjs` | 実ブラウザ(headless Chrome)でUIを操作して確認（`node tools/test_ui_browser.mjs`。サーバ起動が前提）。グローバル名の衝突など「構文は通るが実行時に壊れる」類はこれでしか出ない |
 | `tools/test_machines.mjs` | 製造機／設置ロジックの検証（`node tools/test_machines.mjs`。Phaser をスタブして描画なしで走る） |
 
 ### 製造機と素材（コンベアは廃止）
