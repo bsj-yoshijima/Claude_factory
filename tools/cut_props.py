@@ -51,6 +51,10 @@ SHEETS = {
                            'hal_rug', 'hal_lamp', 'hal_plant', 'hal_pumpkin']),
 }
 ROWS = 2
+# 「囲まれた背景を抜く」処理を無効にするアイテム。
+# 背景と同じ紺で塗られた模様(ダイナーのチェッカー柄の黒マス等)を持つ物は、
+# ポケット除去が模様ごと抜いてしまうので除外する。
+NO_POCKET = {'din_rug'}
 PAD = 3          # 切り出し後に足す余白(px)
 ERODE = 2        # 影判定の収縮半径(px)
 BLOB_MIN = 150   # 収縮後にこれだけ残れば「塊」=影
@@ -366,7 +370,7 @@ def main(src_dir, out_dir):
             y0, y1 = (0, splits[cx]) if cy == 0 else (splits[cx], H)
             cell = Cell(px, x0, y0, x1, y1)
             cell.fill_from_edges(test)
-            pockets = cell.fill_pockets(make_bg_test(bgc, 0.85), 300)
+            pockets = 0 if name in NO_POCKET else cell.fill_pockets(make_bg_test(bgc, 0.85), 300)
             shadows = []
             for _ in range(3):
                 s_ = cell.strip_shadow()
