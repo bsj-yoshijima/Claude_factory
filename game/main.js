@@ -113,6 +113,7 @@ class Main extends Phaser.Scene {
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     this.load.image('belt_seg','assets/belt_seg.png');
     this.load.image('belt_corner','assets/belt_corner.png');   // belt_seg 由来(同一パレット)
+    for(const pc of ['straight','corner','tee','cross']) this.load.image('belt_normal_'+pc, `assets/belt-normal-${pc}.png`);   // スキン=素材セット(接続に応じて配置)
     this.load.image('item_box','assets/obj_crate.png');
   }
   create(){
@@ -216,13 +217,16 @@ class Main extends Phaser.Scene {
       objs.push(sh,img,lbl); main=img; e._lit=img; this.lit.push({sp:img,u,v}); this.machineCells.push({c,r});
     } else if(e.kind==='belt'){
       if(e.mode==null) e.mode='auto';
-      // 見た目は共有 beltGfx が接続に応じて描く。ここは掴む/クリック(接続切替)用の透明ヒット矩形のみ。
-      const hit=this.add.rectangle(p.x,p.y,CELL*0.82,CELL*0.5,0xffffff,0.002).setDepth(p.y);
-      objs.push(hit); main=hit;
+      // 可視スプライト(接続に応じて renderBeltSprites がテクスチャ/反転を差し替え) + 掴む/クリック用の透明ヒット矩形
+      const vis=this.add.image(p.x,p.y,'belt_'+(this.beltSkin||'normal')+'_straight').setOrigin(0.5,0.58).setDepth(p.y).setTint(tint);
+      const hit=this.add.rectangle(p.x,p.y,CELL*0.82,CELL*0.5,0xffffff,0.002).setDepth(p.y+0.1);
+      objs.push(vis,hit); main=hit; e.vis=vis; e._lit=vis; this.lit.push({sp:vis,u,v});
     } else if(e.kind==='outlet'){
-      const base=this.add.rectangle(p.x,p.y,CELL*0.72,CELL*0.42,0x232a30).setDepth(p.y).setStrokeStyle(2,0xffd27a);
-      const t=this.add.text(p.x,p.y-CELL*0.06,'📤',{fontSize:Math.round(CELL*0.66)+'px'}).setOrigin(0.5,0.5).setDepth(p.y+0.1);
-      objs.push(base,t); main=base;
+      // 目立たない出荷口(絵文字なし): 床面の暗いスロット + 細い縁 + 控えめな下向き矢印(投入口の示唆)
+      const slot=this.add.rectangle(p.x,p.y-CELL*0.02,CELL*0.5,CELL*0.28,0x171b1f,0.92).setDepth(p.y-0.2).setStrokeStyle(1,0x5f7a72);
+      const g=this.add.graphics().setDepth(p.y-0.1); g.lineStyle(2,0x7f8f89,0.6);
+      g.beginPath(); g.moveTo(p.x-CELL*0.08,p.y-CELL*0.05); g.lineTo(p.x,p.y+CELL*0.03); g.lineTo(p.x+CELL*0.08,p.y-CELL*0.05); g.strokePath();
+      objs.push(slot,g); main=slot;
     } else if(e.kind==='deco'){
       const img=this.add.image(p.x,p.y,'dec_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.0*CELL/img.height).setTint(tint);
       const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
@@ -300,6 +304,28 @@ class Main extends Phaser.Scene {
     for(const n of nodes){ if(idOf.get(n)>=0)continue; const q=[n]; idOf.set(n,comp);
       while(q.length){ const x=q.pop(); for(const y of adj(x)) if(idOf.get(y)<0){ idOf.set(y,comp); q.push(y); } } comp++; }
     this._beltComp=idOf;
+    this.renderBeltSprites();
+  }
+  // 接続マスク → ピース種別(straight/corner/tee/cross)＋反転。※iso向きの反転はテストで微調整
+  _beltPiece(conn){ let m=0; for(const [dc,dr] of (conn||[])){ if(dc===1)m|=1; else if(dc===-1)m|=2; else if(dr===1)m|=4; else if(dr===-1)m|=8; }
+    const E=1,W=2,S=4,N=8, has=b=>(m&b)===b, cnt=[E,W,S,N].filter(b=>m&b).length;
+    if(cnt>=4) return {piece:'cross',fx:false,fy:false};
+    if(cnt===3){ const miss=!(m&E)?'E':!(m&W)?'W':!(m&S)?'S':'N'; const map={E:{fx:false,fy:false},W:{fx:true,fy:false},S:{fx:false,fy:true},N:{fx:true,fy:true}}; return {piece:'tee',...map[miss]}; }
+    if(cnt===2){
+      if(has(S)&&has(N)) return {piece:'straight',fx:false,fy:false};   // r軸(縦)
+      if(has(E)&&has(W)) return {piece:'straight',fx:true,fy:false};    // c軸(横)
+      if(has(E)&&has(N)) return {piece:'corner',fx:false,fy:false};
+      if(has(W)&&has(N)) return {piece:'corner',fx:true,fy:false};
+      if(has(E)&&has(S)) return {piece:'corner',fx:false,fy:true};
+      if(has(W)&&has(S)) return {piece:'corner',fx:true,fy:true};
+    }
+    if(cnt===1) return (m&(S|N)) ? {piece:'straight',fx:false,fy:false} : {piece:'straight',fx:true,fy:false};
+    return {piece:'straight',fx:false,fy:false};
+  }
+  renderBeltSprites(){ const skin=this.beltSkin||'normal';
+    for(const e of this.placed){ if(e.kind!=='belt'||!e.vis) continue; const {piece,fx,fy}=this._beltPiece(e.conn);
+      const key='belt_'+skin+'_'+piece; if(this.textures.exists(key)) e.vis.setTexture(key);
+      e.vis.setFlipX(fx).setFlipY(fy).setScale((this._beltScale||1.55)*CELL/e.vis.width); }
   }
   _lineColor(i){ const P=[0x7fe6ff,0xffd27a,0x9fdcc6,0xf094bc,0xac86dc,0x7bc78d,0xf2d06a,0x7ba3df]; return P[((i%P.length)+P.length)%P.length]; }
   drawBelts(time){
@@ -575,7 +601,7 @@ class Main extends Phaser.Scene {
   update(time){
     // 星のまたたき(夜)
     if(this.stars && this.lightOn>0){ for(const s of this.stars) s.setAlpha(this.lightOn*(0.35+0.65*Math.abs(Math.sin(time*0.002+s.ph)))); }
-    this.drawBelts(time);   // 設置コンベアの自動接続描画(トレッド流れ)
+    // コンベアは接続変化時に renderBeltSprites() がスプライトを差し替え(毎フレーム描画不要)
     // コンベア: 連続ベルトを描画 + 製品を Path に沿って流す
     if(this.beltDirGfx) this.drawBeltDir(time);
     if(this.items && this.beltPath){ const v=this._pv;
