@@ -181,3 +181,41 @@ including gaps. NO shadows, NO ground, NO text, NO labels, NO UI.
 > スライス手順: python で列方向の非マゼンタ塊を検出し矩形で切り出し、
 > 透過PNG化 → placeable prop カタログ(PROP_NAMES 系)に追加。
 ```
+
+---
+
+## 4. コンベア・スキンテンプレート（belt-<skin>-{straight,corner,tee,cross}.png）
+
+コンベアの見た目を切替可能にする「スキン」。1スキン = **直線/コーナー/T字(分岐)/十字** の4ピース1セット（設置時に接続マスクからピースと反転を選ぶ）。既存 `belt_seg`(直線) `belt_corner`(コーナー) が**デフォルトスキン**の素材。追加スキンをこの型で生成する。
+
+- 規約: **2:1アイソメtrue・チャンキー8bit・太い黒縁・マゼンタ背景**。1ピース=**床1セルに載るサイズ**、ベルト上面が上向き、側面レール＋ローラー、上面にトレッド(進行方向の縞/シェブロン)。全ピース同スケール・同アングル。
+- 反転運用: 直線は片軸だけ描き、もう片軸は flipX。コーナーは1向き描き、他3向きは flipX/flipY。T/十字は対称。
+- スライス: マゼンタ抜き→`assets/belt-<skin>-straight.png` 等。既存 `belt_seg.png`/`belt_corner.png` は skin=`default` として流用。
+
+### 固定プレフィックス（毎回そのまま）
+
+```
+Pixel-art ISOMETRIC conveyor-belt piece SET, true 2:1 isometric, lo-fi 8-bit Famicom, VERY chunky pixels, thick clean black outlines, flat colors. Solid pure MAGENTA (#FF00FF) flat background, NO floor, NO shadow, NO text.
+A 2x2 grid of exactly 4 pieces, all the SAME scale, SAME iso viewing angle, each sized to sit on ONE isometric floor tile, belt top surface facing up with visible tread chevrons showing travel direction, side rails and end rollers:
+1) STRAIGHT segment running along one iso axis.
+2) CORNER / 90° elbow (belt turns).
+3) T-JUNCTION (three-way branch).
+4) CROSS (four-way).
+SKIN STYLE: {{SKIN_STYLE}}
+Consistent chunky pixel style across all 4 pieces. Only the hats/UI-free belt pieces on magenta.
+```
+
+### スキン別の {{SKIN_STYLE}} 例（可変部）
+
+| skin | SKIN_STYLE |
+|---|---|
+| default | dark industrial grey metal, yellow-and-black hazard stripes on the side, steel rollers（＝既存belt_seg系） |
+| neon | sleek white-and-charcoal body with glowing cyan neon tread and edge lights |
+| wood | warm wooden planks with brass fittings and rope side rails |
+| gold | ornate gold-and-royal-purple belt with jeweled rollers（アラビア/宮殿向け） |
+| candy | glossy pink belt with white-and-red striped tread, mint rollers |
+| rust | rusty orange-brown riveted steel, worn hazard paint（スチパン/西部向け） |
+
+### 実装メモ（並行準備）
+- 現状は手続き描画(接続に応じてアーム＋トレッド＋ライン色)。**スプライト方式へ移行**する場合: 接続マスク→ピース種別(直線=2対向/コーナー=2隣接/T=3/十字=4/端=1)＋反転を選び、`belt-<skin>-*` を配置。skin は G に保存して全ベルト差し替え。
+- belt_seg=default straight, belt_corner=default corner。まず default で方式を通し、その後スキンを足す。
