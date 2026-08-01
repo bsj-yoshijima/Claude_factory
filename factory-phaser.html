@@ -239,6 +239,7 @@ function closeOverlay(){ overlay.classList.remove('show'); if(document.getElemen
 function openOverlay(h){ panel._refresh=null; panel.innerHTML='<span class="close">✕</span><div class="pbody">'+h+'</div>'; panel.querySelector('.close').onclick=closeOverlay; overlay.classList.add('show'); }
 overlay.addEventListener('click',e=>{ if(e.target===overlay) closeOverlay(); });
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',1600); }
+window.__toast=toast;   // scene(main.js)から通知を出す用
 function updateBadge(){ const p=document.getElementById('prodN'); if(p)p.textContent='⚙️ '+Math.floor(G.prodP).toLocaleString();
   const r=document.getElementById('rateN'); if(r)r.textContent='+'+prodRate().toFixed(1)+'/s';
   const m=document.getElementById('moneyN'); if(m)m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
@@ -460,7 +461,7 @@ function renderPalette(){
   } else if(editCat==='machine'){ hint=(editSel?'床をクリックで設置（生産＆作業先が増える）':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
     const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.sub===t));
     items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
-  } else { hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')+' ・ 既存はドラッグ移動 / 🗑撤去';
+  } else { hint=(editSel?'床をクリックで敷設。隣接で自動接続(L字→コーナー/3方向→分岐)':'在庫から選んで床をクリックで敷設')+' ・ 敷設後クリックで接続切替(自動→横→縦) / ドラッグ移動 / 🗑撤去 ・ 製造機は間にコンベアが必要';
     const a=availN('belt'); items = a>0? cell(`data-place="belt:"`,'🛗','コンベア',0,a,editSel&&editSel.kind==='belt') : '<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
   }
   paletteEl.innerHTML=`<div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
