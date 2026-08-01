@@ -289,7 +289,29 @@ class Main extends Phaser.Scene {
     if(N&&S)return 0; if(E&&W)return 1;
     if(N&&E)return 2; if(E&&S)return 3; if(S&&W)return 4; if(W&&N)return 5;
     if(N||S)return 0; if(E||W)return 1; return 1; }
-  computeBelts(){ for(const e of this.placed) if(e.kind==='belt' && e.rot==null) e.rot=this._autoRot(e.cell); this.renderBelts(); }
+  computeBelts(){ for(const e of this.placed) if(e.kind==='belt' && e.rot==null) e.rot=this._autoRot(e.cell); this.renderBelts(); this._beltFlow(); }
+  /* 流れ計算: 各ベルトの「次に進むセル(=出荷口へ向かう向き)」を決める。ベルトの rot方向(アーム)が
+     出荷口 or すでに出荷口へ流れる別ベルト を指していれば、そこへ流れる(緩和法で伝播)。
+     供給元(source)=出荷口へ流れる かつ rot方向に製造機があるベルト。製造機の接続判定もここで持つ。 */
+  _beltFlow(){
+    const belts=this.placed.filter(e=>e.kind==='belt');
+    const next=new Map(); let changed=true, guard=0;
+    while(changed && guard++<400){ changed=false;
+      for(const b of belts){ if(next.has(b)) continue;
+        for(const [dc,dr] of this._rotDirs(b.rot)){ const c=b.cell.c+dc, r=b.cell.r+dr; const n=this._nodeAt(c,r); if(!n) continue;
+          if(n.kind==='outlet'){ next.set(b,{c,r}); changed=true; break; }
+          if(n.kind==='belt' && next.has(n)){ next.set(b,{c,r}); changed=true; break; } } }
+    }
+    this.beltNext=next;
+    const linked=new Set();
+    this.beltSources=belts.filter(b=> next.has(b) && this._rotDirs(b.rot).some(([dc,dr])=>{ const n=this._nodeAt(b.cell.c+dc,b.cell.r+dr); if(n&&n.kind==='machine'){ linked.add(n); return true; } return false; }));
+    // rot方向に製造機がある全ベルトで、その機械を「接続済み」とする(source以外=出荷口未接続でも接続自体はする)
+    for(const b of belts) for(const [dc,dr] of this._rotDirs(b.rot)){ const n=this._nodeAt(b.cell.c+dc,b.cell.r+dr); if(n&&n.kind==='machine') linked.add(n); }
+    this.machineLinked=linked;
+    // 接続済み製造機に控えめなリング(beltGfxはrenderBeltsでclear済み。この後に上描き)
+    const g=this.beltGfx; if(g){ for(const m of linked){ const p=cellXY(m.cell.c,m.cell.r); g.lineStyle(3,0x7fe6ff,0.85); g.strokeCircle(p.x,p.y-CELL*0.12,CELL*0.2); } }
+    if(window.__factory) window.__factory.beltStats={ belts:belts.length, toOutlet:next.size, machinesLinked:linked.size, sources:this.beltSources.length };
+  }
   renderBelts(){ const g=this.beltGfx; if(!g)return; g.clear();
     const belts=this.placed.filter(e=>e.kind==='belt'); if(!belts.length)return;
     const W1=Math.max(8,CELL*0.34), W0=W1+6, EDGE=0x14171b, BELT=0x2c3138, RAIL=0x5a626c, ROLL=0x828a94;
@@ -305,8 +327,30 @@ class Main extends Phaser.Scene {
       }
     }
   }
-  rotateBelt(e){ if(!e||e.kind!=='belt')return; e.rot=((e.rot||0)+1)%6; this.renderBelts();
+  rotateBelt(e){ if(!e||e.kind!=='belt')return; e.rot=((e.rot||0)+1)%6; this.renderBelts(); this._beltFlow();
     if(window.__layoutChanged)window.__layoutChanged(); if(window.__toast)window.__toast('向き: '+(e.rot<2?['直線(縦)','直線(横)'][e.rot]:'コーナー')); }
+  /* 箱フロー: source(製造機隣接で出荷口へ流れるベルト)から一定間隔で箱を出し、beltNext を辿って出荷口へ運ぶ。 */
+  _flowUpdate(time){
+    this.flowBoxes = this.flowBoxes || [];
+    const srcs = this.beltSources || [];
+    if(srcs.length && (!this._flowT || time-this._flowT>1000)){ this._flowT=time;
+      for(const src of srcs){ if(this.flowBoxes.length>=80) break;
+        const p=cellXY(src.cell.c,src.cell.r);
+        const spr=this.add.image(p.x,p.y-CELL*0.26,'item_box').setOrigin(0.5,0.9);
+        spr.setScale(0.42*CELL/spr.height);
+        this.flowBoxes.push({c:src.cell.c, r:src.cell.r, t:0, spr}); }
+    }
+    for(let i=this.flowBoxes.length-1;i>=0;i--){ const b=this.flowBoxes[i];
+      const belt=this._nodeAt(b.c,b.r); const nx=(belt&&belt.kind==='belt'&&this.beltNext)?this.beltNext.get(belt):null;
+      if(!nx){ b.spr.destroy(); this.flowBoxes.splice(i,1); continue; }
+      b.t += 0.02;
+      const a=cellXY(b.c,b.r), c2=cellXY(nx.c,nx.r); const x=a.x+(c2.x-a.x)*b.t, y=a.y+(c2.y-a.y)*b.t;
+      b.spr.setPosition(x, y-CELL*0.26).setDepth(y+CELL*0.5);
+      if(b.t>=1){ const nn=this._nodeAt(nx.c,nx.r);
+        if(!nn || nn.kind==='outlet'){ this._spawnPop(x,y); b.spr.destroy(); this.flowBoxes.splice(i,1); continue; }
+        b.c=nx.c; b.r=nx.r; b.t=0; }
+    }
+  }
   syncMachines(list){ for(const m of (list||[])) this.addPlaced('machine', m.type, {lvl:m.lvl||1}); }
   /* 設置時のポップ演出 */
   _spawnPop(x,y){ const g=this.add.circle(x,y-CELL*0.5,CELL*0.6,0xffe9a8,0.5).setDepth(9000).setBlendMode(Phaser.BlendModes.ADD);
@@ -564,6 +608,7 @@ class Main extends Phaser.Scene {
     if(this.items && this.beltPath){ const v=this._pv;
       for(const it of this.items){ it.t=(it.t+0.0012)%1; this.beltPath.getPoint(it.t, v);   // 速度30%
         const uv=screenToIso(v.x, v.y+this.beltH); it.setPosition(v.x, v.y).setDepth(v.y + this.beltH + this.beltLift).setTint(this.tintByLight(uv.u,uv.v)); } }
+    this._flowUpdate(time);   // 製造機→出荷口 へ箱を流すアニメ
     const SPD=1.7;
     for(const k of Object.keys(this.agents)){
       const a=this.agents[k];
