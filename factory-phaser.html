@@ -233,7 +233,7 @@
     <div class="mh">記録</div>
     <div class="mi" id="dexBtn">📖 図鑑</div>
     <div class="mi" id="lbBtn">🏆 リーダーボード</div>
-    <a class="mi" href="/metrics">📊 メトリクス</a>
+    <a class="mi" id="metricsMi" href="/metrics">📊 メトリクス</a>
   </div>
   <div id="topwrap">
     <div id="board"></div>
@@ -251,6 +251,9 @@
 <script>
 'use strict';
 /* ===== ガチャ / コレクション(現行版と共通ロジック・実トークン連動) ===== */
+/* == ECON-DATA-START ==（server/game-data.mjs がこの範囲を切り出す。純データのみ置くこと）
+   レア度・景品・売価・製造機・内装・テーマの唯一の定義。サーバは購入の検証にこれを使う。
+   ここに document / window / fetch を参照するコードを書くとサーバ側の読み込みが壊れる。 */
 const RAR={1:{n:'N',c:'#9fb0c0',w:58},2:{n:'R',c:'#5fa8e0',w:27},3:{n:'SR',c:'#b57be0',w:11},4:{n:'SSR',c:'#f6c04a',w:3.2},5:{n:'UR',c:'#ff5d6c',w:0.8}};
 const PRIZES=[
   {id:'p_bolt',e:'🔩',n:'謎のボルト',r:1},{id:'p_clip',e:'📎',n:'クリップ',r:1},{id:'p_cone',e:'🚧',n:'コーン',r:1},{id:'p_seed',e:'🌱',n:'観葉の芽',r:1},
@@ -493,14 +496,85 @@ const SERIES={
   mushroom:{n:'🍄 森のキノコ', price:6000, sky:'mushroom',floor:'wood', decos:[]},
   onsen:{n:'♨️ 和風温泉', price:6000, sky:'onsen',floor:'wood', decos:[]},
 };
+/* == ECON-DATA-END == */
 
 let G={ pity:0, inv:{}, money:0, machines:[{type:'s2',lvl:1}], decos:{},
         bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[],
         stock:{machine:{},prop:{},deco:{}}, lastT:null };
 let saveT=null;
-function saveGame(){ if(saveT)clearTimeout(saveT); saveT=setTimeout(()=>{ const b=JSON.stringify(G);
+/* =========================================================================
+   NET — データ層。マルチユーザー版サーバ(server/index.mjs)と
+   旧・単一ユーザー版(server.mjs)の両方で同じ画面が動くようにする。
+
+   multi=true のとき:
+     ・💰 / 図鑑 / 在庫 / 製造 はサーバが唯一の真実。G はその写し
+     ・製造判定(tickCraft)はサーバ側。クライアントは結果を受け取るだけ
+     ・購入・強化・素材セットは API を叩き、返ってきた factory で G を上書きする
+   multi=false のとき: 従来どおり /api/save に G を丸ごと保存する
+   ========================================================================= */
+const NET={
+  multi:false, last:null, dexLoaded:false,
+  async probe(){
+    try{
+      const r=await fetch('/api/state',{cache:'no-store'});
+      if(r.status===401){ location.href='/login'; return false; }
+      if(!r.ok) return false;
+      NET.last=await r.json(); NET.multi=true; return true;
+    }catch(_){ return false; }
+  },
+  async call(method,path,body){
+    try{
+      const r=await fetch(path,{method,cache:'no-store',
+        headers:body!==undefined?{'Content-Type':'application/json'}:undefined,
+        body:body!==undefined?JSON.stringify(body):undefined});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok){ toast(j.error||`通信エラー (${r.status})`); return null; }
+      return j;
+    }catch(e){ toast('サーバに繋がりません'); return null; }
+  },
+};
+/* サーバの factory を G に写す。UI 側のコードは G を読むだけなので変更不要 */
+function applyFactory(f){
+  if(!f) return;
+  G.money=f.money; G.bg=f.bg; G.floor=f.floor;
+  G.bgOwned=f.bgOwned||['auto']; G.floorOwned=f.floorOwned||['wood'];
+  G.seriesOwned=f.seriesOwned||[]; G.stock=f.stock||{machine:{},prop:{},deco:{}};
+  G.emojiDecos=f.emojiDecos||[];
+  G.layout=[
+    ...(f.machines||[]).map(m=>({id:m.id,kind:'machine',sub:m.sub,dir:m.dir,c:m.cx,r:m.cy,lvl:m.lvl,slots:m.slots})),
+    ...(f.props||[]),
+  ];
+  const c=craftState(); c.mach={};
+  for(const m of (f.machines||[])) c.mach[m.id]={running:!!m.running, wp:m.wp};
+}
+/* サーバへ配置を送る（在庫を超える設置はサーバが拒否する） */
+let layoutT=null;
+function pushLayout(){
+  if(layoutT) clearTimeout(layoutT);
+  layoutT=setTimeout(async ()=>{
+    snapLayout();
+    const ms=(G.layout||[]).filter(e=>e.kind==='machine')
+      .map(e=>({id:e.id,sub:e.sub,dir:e.dir,cx:e.c,cy:e.r,lvl:e.lvl}));
+    const props=(G.layout||[]).filter(e=>e.kind!=='machine');
+    const r=await NET.call('PUT','/api/layout',{machines:ms,props});
+    if(r&&r.factory) applyFactory(r.factory);
+  },400);
+}
+function saveGame(){
+  if(NET.multi){ pushLayout(); return; }              // サーバ権威。配置だけ同期する
+  if(saveT)clearTimeout(saveT); saveT=setTimeout(()=>{ const b=JSON.stringify(G);
   try{fetch('/api/save',{method:'POST',body:b});}catch(_){} try{localStorage.setItem('cf-save',b);}catch(_){}} ,400); }
-async function loadGame(){ let s=null; try{ s=await (await fetch('/api/save',{cache:'no-store'})).json(); }catch(_){}
+async function loadGame(){
+  if(await NET.probe()){                              // マルチユーザー版サーバに繋がった
+    applyFactory(NET.last.factory);
+    const d=await NET.call('GET','/api/dex');
+    if(d){ const c=craftState();
+      c.dex=Object.fromEntries(Object.entries(d.dex||{}).map(([k,v])=>[k,v.n]));
+      c.dexMeta=d.dex||{}; G.inv=d.inv||{}; NET.dexLoaded=true; }
+    const sk=await NET.call('GET','/api/skins'); if(sk) G.skins=sk.skins||{};
+    return;
+  }
+  let s=null; try{ s=await (await fetch('/api/save',{cache:'no-store'})).json(); }catch(_){}
   if(!s||typeof s!=='object'){ try{ s=JSON.parse(localStorage.getItem('cf-save')); }catch(_){} }
   if(s&&typeof s==='object') G=Object.assign(G,s);     // 旧セーブの景品(inv)・pityは引き継ぎ、経済フィールドを補完
   if(!G.inv)G.inv={}; if(!Array.isArray(G.machines)||!G.machines.length)G.machines=[{type:'s2',lvl:1}]; if(!G.decos)G.decos={};
@@ -531,7 +605,10 @@ function snapLayout(){ if(window.__scene) G.layout=window.__scene.getLayout(); }
 window.__layoutChanged=()=>{ snapLayout(); saveGame(); };
 const cnt=(kind,sub)=> (G.layout||[]).filter(e=>e.kind===kind&&(sub==null||e.sub===sub)).length;
 // エージェント頭アクセ(スキン)の永続化: main.js からクリック巡回時に呼ばれる
-window.__skinChanged=(proj,skinId)=>{ if(!proj)return; if(skinId==='none') delete G.skins[proj]; else G.skins[proj]=skinId; saveGame(); };
+window.__skinChanged=(proj,skinId)=>{ if(!proj)return;
+  if(skinId==='none') delete G.skins[proj]; else G.skins[proj]=skinId;
+  if(NET.multi){ NET.call('PUT','/api/skin',{project:proj,skinId}); return; }
+  saveGame(); };
 const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
 /* =========================================================================
    共通ダイアログ — 見出し / タブ / 本文 / フッターの操作ボタン / 閉じる
@@ -979,9 +1056,25 @@ window.__craft = {
   },
 };
 
-/* --- WP の取得（OTel実測） --- */
+/* --- 状態の取得 ---
+   マルチユーザー版は /api/state の1本にまとめてある。実測するとブラウザのポーリングが
+   テレメトリ受信の30倍のリクエストを生むので、エンドポイントを統合し、
+   タブが見えていないときは止める。 */
 let WPST={ total:0, today:0, ok:false, sc:[] };
+let PENDING=0;
 async function pollWp(){
+  if(NET.multi){
+    if(document.visibilityState==='hidden') return;   // 裏に回っている間は叩かない
+    const d=await NET.call('GET','/api/state');
+    if(!d){ WPST.ok=false; return; }
+    NET.last=d;
+    WPST={ total:d.wp.total, today:d.wp.today, ok:true, sc:WPST.sc };
+    PENDING=d.pending;
+    applyFactory(d.factory);
+    if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
+    updateDoneBtn(); updateBadge(); renderCraft(); renderBoard();
+    return;
+  }
   try{
     const r=await fetch('/api/otel',{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
     const d=await r.json();
@@ -989,11 +1082,14 @@ async function pollWp(){
   }catch(_){ WPST.ok=false; }
   tickCraft(); renderCraft();
 }
+/* main.js の poll() はここからエージェント一覧を受け取る（二重ポーリングを避ける） */
+window.__agentFeed=()=> (NET.multi&&NET.last) ? {workers:NET.last.agents} : null;
 /* --- 製造判定 ---
    ・稼いだWPは按分せず、稼働中の全機械にそれぞれ同額を加算する
    ・必要WPに達した「その時点」のマスの組み合わせで作られる製品が決まる
    ・原材料を変えてもWPはリセットしない（溜まった分はそのまま次に使う） */
 function tickCraft(){
+  if(NET.multi) return;            // 製造判定はサーバ側（server/craft.mjs）
   const c=craftState(); if(!WPST.ok) return;
   // 初回は基準だけ取る（起動前に稼いだWPを遡って入れない）
   if(typeof c.wpMark!=='number'){ c.wpMark=WPST.total; saveGame(); return; }
@@ -1030,8 +1126,9 @@ function tickCraft(){
 const jstDayOf = t => new Date(t + 9*3600*1000).toISOString().slice(0,10);
 // 今日の製造は記録(c.log)から数える。🎁完成品を開いても消えない
 function logToday(){ const d=jstDayOf(Date.now()); return craftState().log.filter(m=>jstDayOf(m.at)===d); }
-const madeToday = ()=>logToday().length;
-const salesToday = ()=>craftState().sales[jstDayOf(Date.now())]||0;
+const madeToday = ()=> NET.multi ? ((NET.last&&NET.last.today.made)||0) : logToday().length;
+const salesToday = ()=> NET.multi ? ((NET.last&&NET.last.today.sales)||0)
+                                  : (craftState().sales[jstDayOf(Date.now())]||0);
 function renderBoard(){
   const el=document.getElementById('board'); if(!el) return;
   el.innerHTML=`
@@ -1095,7 +1192,10 @@ function toggleMachine(id){
   const st=machState(id), ms=machines(), m=ms.find(x=>x.id===id);
   st.running=!st.running;
   craftState().activeId=id;
-  saveGame(); renderCraft();
+  if(NET.multi){ NET.call('PUT','/api/machine/run',{id,running:st.running})
+    .then(r=>{ if(r&&r.factory){ applyFactory(r.factory); renderCraft(); } }); }
+  else saveGame();
+  renderCraft();
   if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
   toast(st.running ? `${m?(m.no||''):''}号機の製造を開始（${m?needWp(m):0}WPで1個）` : '製造を停止（溜めたWPは保持）');
 }
@@ -1171,7 +1271,12 @@ function setMat(machineId, slotIdx, matId){
   c.activeId = machineId;
   // 原材料を変えても製造は止めず、溜まったWPも保持する。
   // 何ができるかは「必要WPに達した時点」の組み合わせで決まる（tickCraft）。
-  snapLayout(); saveGame();
+  snapLayout();
+  if(NET.multi){
+    const m=machines().find(x=>x.id===machineId);
+    NET.call('PUT','/api/machine/slots',{id:machineId,slots:(m&&m.slots)||[]})
+      .then(r=>{ if(r&&r.factory){ applyFactory(r.factory); renderCraft(); } });
+  } else saveGame();
   renderCraft();
   toast(matId ? `${MAT[matId].e} ${MAT[matId].n} をセット` : '原材料を外しました');
 }
@@ -1182,10 +1287,37 @@ window.__machineClick = (machineId)=>{ if(window.__openMachine) window.__openMac
 /* --- 完成品（新着だけを見せる箱。1回開いたら中身は空になる） --- */
 function updateDoneBtn(){
   const c=craftState(), b=document.getElementById('doneBtn'); if(!b) return;
-  b.classList.toggle('show', c.made.length>0);
-  document.getElementById('doneN').textContent = c.made.length || '';
+  const n = NET.multi ? PENDING : c.made.length;
+  b.classList.toggle('show', n>0);
+  document.getElementById('doneN').textContent = n || '';
+}
+/* マルチユーザー版: 回収(図鑑登録 + 売上加算)はサーバの /api/claim が行う。
+   「開いた瞬間に登録・加算」という仕様は旧実装と同じ。 */
+async function openDoneServer(){
+  const r=await NET.call('POST','/api/claim'); if(!r) return;
+  PENDING=0; updateDoneBtn();
+  const st=await NET.call('GET','/api/state'); if(st){ NET.last=st; applyFactory(st.factory); }
+  const d=await NET.call('GET','/api/dex');
+  if(d){ const c=craftState(); c.dex=Object.fromEntries(Object.entries(d.dex||{}).map(([k,v])=>[k,v.n])); c.dexMeta=d.dex||{}; }
+  updateBadge(); renderBoard();
+  const byRar={}; for(const it of r.items) byRar[it.r]=(byRar[it.r]||0)+1;
+  const cards=[...r.items].reverse().slice(0,200).map(p=>`<div class="pcard">${p.isNew?'<span class="new">NEW</span>':''}
+      <div class="e">${p.e}</div><div class="nm">${p.n}</div>
+      <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`).join('');
+  const bd=Object.keys(byRar).sort().map(k=>
+    `<span class="chip"><b style="color:${RAR[k].c}">${RAR[k].n}</b>×${byRar[k]} = 💰${(PROD_PRICE[k]*byRar[k]).toLocaleString()}</span>`).join('');
+  openDialog({ title:'🎁 完成品', sub:`${r.items.length}個`,
+    body:`${r.gain?`<div class="invbar" style="font-size:12px">
+          <span style="color:#9fb0c0">今回の売上</span>
+          <b style="color:#ffd27a;font-size:19px">💰 ${r.gain.toLocaleString()}</b>${bd}</div>`
+        :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">
+        ${r.registered?`${r.registered}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。</div>
+      <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openDex('prod')}] });
 }
 function openDone(){
+  if(NET.multi) return openDoneServer();
   const c=craftState();
   const batch=c.made.slice();                                // 今回見せる分（あとで空にする）
   const had={}; for(const k in c.dex) had[k]=c.dex[k];      // 「初めて」の判定は登録前の図鑑で行う
@@ -1232,6 +1364,8 @@ const LB_AXES=[['efficiency','効率'],['prs','PR数'],['commits','コミット�
                ['skill','Skill利用'],['agent','Agent起動'],['customAgent','自作Agent'],
                ['delegationPct','委譲率'],['activeDays','稼働日数']];
 let _lbKey='efficiency';
+let _lbPeriod='week';       // マルチユーザー版で追加: 日次 / 週次 / 月次 / 全期間
+const LB_PERIODS=[['today','今日'],['week','今週'],['month','今月'],['all','全期間']];
 async function openLb(){
   let sc=null;   // null=読み込み中
   const dlg=openDialog({ title:'🏆 リーダーボード',
@@ -1244,7 +1378,9 @@ async function openLb(){
       if(av==null&&bv==null) return b.lines-a.lines;
       if(av==null) return 1; if(bv==null) return -1; return bv-av;
     });
-    return `<div class="rowline" style="font-size:11px;color:#9fb0c0">
+    return `${NET.multi?`<div class="rowline">${LB_PERIODS.map(([k,l])=>
+        `<span class="sttab ${k===_lbPeriod?'on':''}" data-lbp="${k}" style="border-radius:8px">${l}</span>`).join('')}</div>`:''}
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">
         Claude Code の使い方を軸ごとに並べたもの。単一の合計点は出しません（1つに混ぜると誤った使い方が上位に来るため）。
         上位の人にどう使っているか聞いてみよう。</div>
       <table style="width:100%;border-collapse:collapse;font-size:11px">
@@ -1253,7 +1389,7 @@ async function openLb(){
           <th>効率</th><th>PR</th><th>コミット</th><th>追加行</th><th>Skill</th><th>Agent</th><th>自作</th><th>委譲率</th><th>稼働日</th>
         </tr></thead><tbody>${rows.length?rows.map((u,i)=>`
           <tr style="text-align:right;border-top:1px solid #22322e">
-            <td style="text-align:left">${i+1}</td><td style="text-align:left;color:#eafff4">${u.id}</td>
+            <td style="text-align:left">${i+1}</td><td style="text-align:left;color:#eafff4">${u.name||u.id}</td>
             <td><b style="color:var(--gold)">${u.efficiency==null?'—':u.efficiency}</b></td>
             <td>${u.prs}</td><td>${u.commits}</td><td>${u.linesAdded}</td>
             <td>${u.skill}</td><td>${u.agent}</td><td>${u.customAgent}</td>
@@ -1262,8 +1398,16 @@ async function openLb(){
       <div class="rowline" style="font-size:10px;color:#9fb0c0">
         効率 = (追加行 + 削除行×0.3 + PR×150) ÷ output_tokens × 1000 ／ PR1件・100行以上でランク対象。
         効率は難易度を補正しないので絶対量と併せて見ること。</div>`;
+  },
+  onRender:(p,d)=>{                        // 期間タブ（マルチユーザー版のみ）
+    p.querySelectorAll('[data-lbp]').forEach(el=>el.onclick=async()=>{
+      _lbPeriod=el.dataset.lbp; sc=null; d.refresh();
+      const x=await NET.call('GET',`/api/leaderboard?period=${_lbPeriod}`);
+      sc=(x&&x.scorecard)||[]; d.refresh();
+    });
   } });
-  try{ sc=(await (await fetch('/api/otel',{cache:'no-store'})).json()).scorecard||[]; }catch(_){ sc=[]; }
+  if(NET.multi){ const d=await NET.call('GET',`/api/leaderboard?period=${_lbPeriod}`); sc=(d&&d.scorecard)||[]; }
+  else { try{ sc=(await (await fetch('/api/otel',{cache:'no-store'})).json()).scorecard||[]; }catch(_){ sc=[]; } }
   dlg.refresh();   // 読み込み中に閉じられていれば refresh は何もしない
 }
 document.getElementById('lbBtn').addEventListener('click',openLb);
@@ -1332,11 +1476,27 @@ document.getElementById('hud').addEventListener('click',()=>{ if(!window.__facto
 document.getElementById('hud').title='クリックでエージェント一覧';
 
 /* ===== ショップ（景品の売却＋購入/強化） ===== */
+/* マルチユーザー版では 💰 の増減は必ずサーバが決める（クライアントの申告を信じない） */
+async function apiBuy(kind,id,okMsg){
+  const r=await NET.call('POST','/api/shop/buy',{kind,id});
+  if(!r) return false; applyFactory(r.factory); updateBadge(); if(okMsg) toast(okMsg); return true;
+}
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
+  if(NET.multi){ NET.call('POST','/api/shop/sell',{itemId:id,qty}).then(r=>{ if(!r)return;
+    applyFactory(r.factory); G.inv[id]=Math.max(0,have-qty); updateBadge();
+    toast(`${p.e} ${p.n}×${qty} を売却 (+💰${r.gain})`); }); return; }
   G.inv[id]=have-qty; const gain=SELL[p.r]*qty; G.money+=gain; saveGame(); updateBadge(); toast(`${p.e} ${p.n}×${qty} を売却 (+💰${gain})`); }
 // 購入=在庫(owned)に追加。設置は編集パレットから床クリックで行う
-function buyMachine(type){ if(!MACH[type])return; const pr=MACH[type].price; if(G.money<pr)return; G.money-=pr; addStock('machine',type); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
-function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; const c=lvCost(e.lvl); if(G.money<c)return; G.money-=c; e.lvl++;
+function buyMachine(type){ if(!MACH[type])return; const pr=MACH[type].price; if(G.money<pr)return;
+  if(NET.multi) return void apiBuy('machine',type,`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`);
+  G.money-=pr; addStock('machine',type); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
+function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; const c=lvCost(e.lvl); if(G.money<c)return;
+  if(NET.multi){ NET.call('POST','/api/machine/level',{id}).then(r=>{ if(!r)return;
+    applyFactory(r.factory);
+    const lv=(r.factory.machines.find(x=>x.id===id)||{}).lvl;
+    if(window.__scene&&lv)window.__scene.setMachineLevel(id,lv);
+    updateBadge(); toast(`Lv${lv} に強化！`); }); return; }
+  G.money-=c; e.lvl++;
   const M=MACH[machSub(e.sub)];
   if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${M.e} ${M.n} を Lv${e.lvl} に強化！`); }
 // 素材スロットの要約（ショップ一覧用）。何が作れるかは伏せ、素材と稼働状態だけ出す
@@ -1344,11 +1504,22 @@ function slotSummary(e){ const mats=[...new Set((e.slots||[]).filter(Boolean))].
   if(!mats.length) return '素材未設定';
   const icons=mats.map(m=>(MAT[m]||{}).e||'?').join('');
   return `${icons}${machState(e.id).running?' ・ ⚙️製造中':''}`; }
-function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return; G.money-=pr; addStock('deco',t); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
-function buyProp(t){ const pr=PROP[t].price; if(G.money<pr)return; G.money-=pr; addStock('prop',t); saveGame(); updateBadge(); toast(`${PROP[t].n} を購入（🔧編集で設置）`); }
-function selectBg(k){ if(!G.bgOwned.includes(k)){ const pr=BG[k].price; if(G.money<pr)return; G.money-=pr; G.bgOwned.push(k); toast(`背景「${BG[k].n}」を購入！`); } G.bg=k; if(window.__scene&&window.__scene.setSkyTheme)window.__scene.setSkyTheme(k); saveGame(); updateBadge(); }
-function selectFloor(k){ if(!G.floorOwned.includes(k)){ const pr=FLOOR[k].price; if(G.money<pr)return; G.money-=pr; G.floorOwned.push(k); toast(`床材「${FLOOR[k].n}」を購入！`); } G.floor=k; if(window.__scene&&window.__scene.setFloor)window.__scene.setFloor(k); saveGame(); updateBadge(); }
-function buySeries(k){ const S=SERIES[k]; if(!G.seriesOwned.includes(k)){ if(G.money<S.price)return; G.money-=S.price; G.seriesOwned.push(k);
+function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return;
+  if(NET.multi) return void apiBuy('deco',t,`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`);
+  G.money-=pr; addStock('deco',t); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
+function buyProp(t){ const pr=PROP[t].price; if(G.money<pr)return;
+  if(NET.multi) return void apiBuy('prop',t,`${PROP[t].n} を購入（🔧編集で設置）`);
+  G.money-=pr; addStock('prop',t); saveGame(); updateBadge(); toast(`${PROP[t].n} を購入（🔧編集で設置）`); }
+function selectBg(k){
+  if(NET.multi){ apiBuy('bg',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setSkyTheme) window.__scene.setSkyTheme(k); }); return; }
+  if(!G.bgOwned.includes(k)){ const pr=BG[k].price; if(G.money<pr)return; G.money-=pr; G.bgOwned.push(k); toast(`背景「${BG[k].n}」を購入！`); } G.bg=k; if(window.__scene&&window.__scene.setSkyTheme)window.__scene.setSkyTheme(k); saveGame(); updateBadge(); }
+function selectFloor(k){
+  if(NET.multi){ apiBuy('floor',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setFloor) window.__scene.setFloor(k); }); return; }
+  if(!G.floorOwned.includes(k)){ const pr=FLOOR[k].price; if(G.money<pr)return; G.money-=pr; G.floorOwned.push(k); toast(`床材「${FLOOR[k].n}」を購入！`); } G.floor=k; if(window.__scene&&window.__scene.setFloor)window.__scene.setFloor(k); saveGame(); updateBadge(); }
+function buySeries(k){ const S=SERIES[k];
+  if(NET.multi){ apiBuy('series',k,`${S.n} シリーズを適用`).then(okk=>{ if(okk&&window.__scene){
+    window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } }); return; }
+  if(!G.seriesOwned.includes(k)){ if(G.money<S.price)return; G.money-=S.price; G.seriesOwned.push(k);
     if(window.__scene) for(const e of S.decos) window.__scene.placeEmojiDeco(e); snapLayout(); toast(`${S.n} シリーズを購入！内装と装飾を反映`); }
   G.bg=S.sky; G.floor=S.floor; if(window.__scene){ window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } saveGame(); updateBadge(); }
 
@@ -1570,14 +1741,20 @@ document.getElementById('editFab').addEventListener('click',toggleEditMode);
 document.getElementById('editMenuBtn').addEventListener('click',toggleEditMode);
 loadGame().then(async ()=>{
   G.lastT=Date.now();
+  // /metrics は検証用。マルチユーザー版のサーバは配信しないので導線を消す
+  if(NET.multi){ const mi=document.getElementById('metricsMi'); if(mi) mi.remove(); }
   await waitScene(); applyOwned(); updateBadge();
-  setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
+  if(!NET.multi) setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
   setInterval(syncEditFab, 1000); syncEditFab();   // Eキー・移動モードでの編集ON/OFFに追従
   // 製造: 原材料バッジを反映してからWPの取得を開始（3秒ごと = OTelのログ送信間隔に合わせる）
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
-  updateDoneBtn(); renderCraft(); pollWp(); setInterval(pollWp, 3000);
+  updateDoneBtn(); renderCraft(); pollWp();
+  // マルチユーザー版は2秒。裏に回っている間は pollWp 側で止まる
+  setInterval(pollWp, NET.multi?2000:3000);
+  if(NET.multi) document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollWp(); });
   const q=new URLSearchParams(location.search);
-  if(q.get('unlockall')){   // 全背景・全アイテムを所持(テスト用)。何度開いても増殖しないよう max で設定
+  if(q.get('unlockall') && NET.multi){ toast('マルチユーザー版では ?unlockall は使えません（💰はサーバが管理）'); }
+  else if(q.get('unlockall')){   // 全背景・全アイテムを所持(テスト用)。何度開いても増殖しないよう max で設定
     G.bgOwned=Array.from(new Set([...G.bgOwned,'auto',...SKY_THEMES]));
     G.seriesOwned=Array.from(new Set([...G.seriesOwned,...ROOM_THEMES]));
     G.floorOwned=Array.from(new Set([...G.floorOwned,...Object.keys(FLOOR)]));
