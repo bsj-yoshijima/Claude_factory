@@ -222,13 +222,13 @@ class Main extends Phaser.Scene {
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
     for(const s of SKINS) if(s.id!=='none') this.load.image('hat_'+s.id, `assets/hat-${s.id}.png`);   // 被り物。未生成でもPhaserは欠損扱い→描画側でexistsチェック
-    this.load.text('hatfit','assets/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る(machfitと同じ理由でtext読み)
+    this.load.text('hatfit','assets/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る(load.json は中身が壊れるとローダーごと落ちるので text 読み)
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     // 製造機スプライト(Stitch製)。命名規約 mach_<theme>_s<N>。無いテーマは normal → 手続き描画 の順にフォールバック
     for(const th of MACH_ART) for(const n of MACH_SIZES) this.load.image(`mach_${th}_s${n}`, `assets/mach-${th}-s${n}.png`);
     // 絵から実測したスロット中心(幅/高さ比)。素材アイコンを穴にぴったり載せる。
     // load.json は中身が壊れているとローダーごと例外で落ちる(=create()が走らない)ので text で読んで自前parse
-    this.load.text('machfit','assets/mach-fit.json');
+
   }
   create(){
     this.bgImg=this.add.image(0,0,'bg_room').setOrigin(0,0).setDisplaySize(W,H).setDepth(-1000);
@@ -345,14 +345,6 @@ class Main extends Phaser.Scene {
   hatFit(){ if(this._hatFit) return this._hatFit;
     try{ this._hatFit=JSON.parse(this.cache.text.get('hatfit')||'{}'); }catch(_){ this._hatFit={}; }
     return this._hatFit; }
-  machFit(){ if(this._machFit) return this._machFit;
-    try{ this._machFit=JSON.parse(this.cache.text.get('machfit')||'{}'); }catch(_){ this._machFit={}; }
-    return this._machFit; }
-  machSlotPts(tex, img, flip){
-    const fit=((this.machFit()[tex.theme])||{})[String(tex.n)];
-    if(!fit) return null;
-    const L=img.x-img.displayWidth/2, T=img.y-img.displayHeight;
-    return fit.map(([fx,fy])=>({ x:L+(flip?1-fx:fx)*img.displayWidth, y:T+fy*img.displayHeight })); }
   _makeMachine(e, objs){
     const sk=this.partsSkin();
     const [A,B,C,D]=this._machFootprint(e);
@@ -361,7 +353,7 @@ class Main extends Phaser.Scene {
     const u=(e.cell.c+0.5)/GU, v=(e.cell.r+0.5)/GV, tint=this.tintByLight(u,v);
     const tex=this.machTex(e);
     const g=this.add.graphics().setDepth(C.y+0.1); objs.push(g); e._gfx=g;
-    let HG, slotPts=null;   // 天面の高さ(px) / スロット中心(スプライトのときは絵から実測)
+    let HG;   // 天面の高さ(px)。素材アイコンはこのぶん持ち上げて各マスの真上に置く
     if(tex){
       // 素材の footprint 幅はゲーム側の占有外周と一致するよう焼いてある(tools/cut_machines.py)
       const img=this.add.image((bx0+bx1)/2, by1, tex.key).setOrigin(0.5,1).setDepth(C.y).setTint(tint);
@@ -369,7 +361,6 @@ class Main extends Phaser.Scene {
       if(e.dir==='v') img.setFlipX(true);   // 素材はu方向。v方向は左右反転で角度が合う
       objs.push(img); e._lit=img; this.lit.push({sp:img,u,v});
       HG = Math.max(2, img.displayHeight-(by1-by0));
-      slotPts = this.machSlotPts(tex, img, e.dir==='v');
       const sh=this.add.image((bx0+bx1)/2+3, by1-2, 'shadow').setDepth(C.y-0.5)
         .setDisplaySize((bx1-bx0)*0.95,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);
     } else {
@@ -393,10 +384,11 @@ class Main extends Phaser.Scene {
     const SL=MACH_GEO.slot;
     this.cellsOf(e).forEach((q,idx)=>{
       const mat=e.slots[idx], m=mat&&MAT_ART[mat];
-      const ctr = (slotPts && slotPts[idx]) || up(cellXY(q.c,q.r));   // 絵の実測位置 > 計算位置
-      if(slotPts){ if(m){ g.fillStyle(m.c,0.5); g.fillEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24);
-                          g.lineStyle(1.5,sk.glow,0.85); g.strokeEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24); } }
-      else {   // 手続き描画: 穴そのものを描く
+      const ctr = up(cellXY(q.c,q.r));   // 各マスの中心の真上。筐体高さは4台で揃えてある
+      if(tex){ // スプライトは意匠が自由なので穴は描かない。素材が入っているマスだけ光らせる
+        if(m){ g.fillStyle(m.c,0.5); g.fillEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24);
+               g.lineStyle(1.5,sk.glow,0.85); g.strokeEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24); } }
+      else {   // 手続き描画のときだけ、置き場が分かるよう穴を描く
         const s0=uvXY((q.c+0.5-SL/2)/GU,(q.r+0.5-SL/2)/GV), s1=uvXY((q.c+0.5+SL/2)/GU,(q.r+0.5-SL/2)/GV);
         const s2=uvXY((q.c+0.5+SL/2)/GU,(q.r+0.5+SL/2)/GV), s3=uvXY((q.c+0.5-SL/2)/GU,(q.r+0.5+SL/2)/GV);
         const poly=[s0,s1,s2,s3].map(up);
