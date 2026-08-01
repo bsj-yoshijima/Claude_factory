@@ -2,9 +2,9 @@
 
 `<THEME>` `<THEME_DESIGN>` `<SPOT_DESIGN>` `<PALETTE>` を差し替えて `generate_screen_from_text` に投げる。
 
-**1テーマ2枚に分けて依頼する。** 4台を1枚に詰めるとモデルが長い台を圧縮して比率が壊れる。
-- `assets/mach-sheets/<theme>-a.png` … 2マスと3マス（上下2段）
-- `assets/mach-sheets/<theme>-b.png` … 4マスと5マス（上下2段）
+**必ず1テーマ1枚**（`assets/mach-sheets/<theme>.png`）。2枚に分けると生成が別々になり、
+**同じテーマなのに2枚でデザインが変わってしまう**。1枚に4台入れたうえで、
+送りを「画像幅に対する比」で指定して圧縮を防ぐ。
 
 切り出しは `python3 tools/cut_machines.py`。**1マスの送りを実測し、テーマ全体で1つの倍率**
 （`ゲームの送り 27.65 ÷ 実測の送り`）を全サイズに等倍でかける。サイズごとに違う倍率をかけると
@@ -24,15 +24,17 @@
 **素材は `+u`（右斜め下）方向の1種類だけ作らせる。** もう一方の対角（右斜め上↔左斜め下）は
 ゲーム側が左右反転して使うので生成不要（`game/main.js` の `if(e.dir==='v') img.setFlipX(true)`）。
 
-過去の失敗（2段階）:
+## これまでの失敗と対処
+
 1. 「long axis running from upper-left down-to-the-right」と書くと**マスが横一列**に並ぶ。
    → 1マスあたりのピクセル送りを数字で書いて解決。
 2. 送りを数字で書くと斜めには並ぶが、今度は**正面を向いた箱を斜めに数珠つなぎ**にしてくる
    （各要素に正面パネルがある＝アイソメになっていない）。
    → 「水平線を1本も描くな」「見える面は2つだけ」「天面は菱形」で解決。
 3. 長い台を枠に収めようと**1マスを圧縮**してくる（置き場の間隔が 54→49→43→34px と詰まった）。
-   → 送りを 64/32px と絶対値で指定し、**1テーマ2枚に分割**して枠の圧迫をなくす。
-     切り出し側で縦横別々に引き伸ばして直すのは NG（サイズごとに歪んでデザインが変わる）。
+   → 送りを「画像幅の1/12」と**比で**指定し、first→last の距離もサイズ別に明記する。
+   - 切り出し側で縦横別々に引き伸ばして直すのは **NG**（サイズごとに歪んでデザインが変わる）
+   - 2枚に分けて生成するのも **NG**（2枚でデザインが別物になる）。必ず1枚に4台。
 4. 向きを直すために上物を削ると**地味になる**。向きの規則は守らせたまま、
    上物は「アーケード筐体並みの密度で」と明示して盛ること。装飾にも同じアイソメ規則を課し、
    置き場を隠さない・横にはみ出さない、とだけ縛る。
@@ -46,48 +48,46 @@ Pixel art sprite sheet on a FLAT SOLID PURE MAGENTA (#FF00FF) background.
 No floor, no walls, no cast shadows, no text, no labels, no borders, no grid lines.
 The magenta must be the ONLY background colour — no white, no vignette, no panels behind the machines.
 
-FOUR <THEME> machines. FOUR ROWS, EXACTLY ONE MACHINE PER ROW, stacked in a single vertical
-column with wide magenta gaps between rows. Never place two machines side by side on the same row.
-Every machine starts at the SAME left edge; each is longer than the one above it.
+FOUR <THEME> machines on ONE sheet. FOUR ROWS, EXACTLY ONE MACHINE PER ROW, stacked in a single
+vertical column with magenta gaps between rows. Never place two machines side by side on a row.
+Every machine starts at the SAME left edge.
+Row 1: 2 tiles. Row 2: 3 tiles. Row 3: 4 tiles. Row 4: 5 tiles.
+
+=== SCALE — AS IMPORTANT AS ORIENTATION ===
+All four machines are THE SAME MACHINE at THE SAME SCALE, only different lengths.
+Never resize a machine to fill its row, and never compress a long one to make it fit.
+
+The step from one tile to the next is THE SAME in all four machines, and equals
+1/12 of the image width to the RIGHT, and half that DOWN.
+On a 1024x1024 canvas that is exactly 85 px right and 43 px down per tile.
+
+Measuring between the centres of the first and last ingredient spot:
+  2 tiles ->  85 px right,  43 px down      4 tiles -> 255 px right, 128 px down
+  3 tiles -> 170 px right,  85 px down      5 tiles -> 340 px right, 170 px down
+So the 5-tile machine has 4x the spot-span of the 2-tile machine, and is roughly twice its
+total width. The 2-tile machine is small; the 5-tile one is big and spans about half the sheet.
+There will be a lot of empty magenta to the right of the 2-tile machine. That is CORRECT.
 
 === ORIENTATION — THE MOST IMPORTANT RULE ===
-The machine is ONE SINGLE CONTINUOUS BOX drawn in true 2:1 isometric projection.
+Each machine is ONE SINGLE CONTINUOUS BOX drawn in true 2:1 isometric projection.
 It is NOT several front-facing boxes chained together. It is one long bench, turned diagonally.
 
 Read these five rules as a checklist. If any of them fails, the drawing is wrong:
-
-1. NO HORIZONTAL LINES. Every structural edge of the machine runs at one of exactly two slopes:
-   down-to-the-RIGHT at 2:1 (2 px across for every 1 px down), or down-to-the-LEFT at 2:1.
-   The only vertical lines are the corner edges of the body. Nothing is drawn flat/level.
-2. THE TOP FACE IS A RHOMBUS — a long parallelogram, i.e. a rectangle seen in isometric.
-   It is never a rectangle seen head-on.
-3. EXACTLY TWO FACES ARE VISIBLE: the LONG SIDE face, which faces down-and-to-the-LEFT, and
-   the SHORT END face, which faces down-and-to-the-RIGHT. They meet at one vertical corner
-   edge at the near-bottom corner of the machine.
+1. NO HORIZONTAL LINES. Every structural edge runs at one of exactly two slopes:
+   down-to-the-RIGHT at 2:1, or down-to-the-LEFT at 2:1. The only vertical lines are the
+   corner edges of the body. Nothing is drawn flat or level.
+2. THE TOP FACE IS A LONG RHOMBUS (parallelogram), never a rectangle seen head-on.
+3. EXACTLY TWO FACES ARE VISIBLE: the LONG SIDE face (facing down-and-LEFT) and the SHORT END
+   face (facing down-and-RIGHT), meeting at one vertical corner edge at the near-bottom corner.
 4. NO FACE IS PARALLEL TO THE IMAGE PLANE. There is no flat front-facing panel anywhere.
    If you can see a panel square-on, it is wrong.
-5. The long axis runs from the BACK END at the UPPER-LEFT down to the FRONT END at the
-   LOWER-RIGHT. Tile number k sits offset from tile number 0 by exactly
-   ( k * 32 px to the RIGHT , k * 16 px DOWNWARD ).
+5. The long axis runs from the BACK END at the UPPER-LEFT down to the FRONT END at the LOWER-RIGHT.
 
 Consequences to draw correctly:
 - The row of ingredient spots forms a DESCENDING DIAGONAL LINE, never a horizontal line.
-- Each ingredient spot is an ELLIPSE (a circle foreshortened 2:1), never a full circle.
-- Make the tile count countable on the LONG SIDE face: divide it into N identical panels
-  (arches / doors / vents), one per tile, separated by a thin vertical strip.
+- Make the tile count countable on the LONG SIDE face: divide it into N identical panels,
+  one per tile, separated by a thin vertical strip.
 Only this one orientation is needed; do not draw a mirrored version.
-
-=== SCALE — THE MOST IMPORTANT RULE ===
-The machines on this sheet are THE SAME MACHINE at THE SAME SCALE, only different lengths.
-Do NOT resize any of them to fill the canvas.
-The step from one tile to the next is EXACTLY 64 pixels to the RIGHT and 32 pixels DOWN,
-in EVERY machine on the sheet. Measuring between the centres of the ingredient spots,
-first spot to last spot is:
-  2 tiles →  64 px right,  32 px down      4 tiles → 192 px right,  96 px down
-  3 tiles → 128 px right,  64 px down      5 tiles → 256 px right, 128 px down
-The short machine really is small and the long one really is big. Leaving empty magenta to
-the right of a short machine is CORRECT — never stretch it to fill the space, and never
-compress a long one to make it fit.
 
 === THE INGREDIENT SPOT ===
 One per tile, centred on its tile, all identical in size, evenly spaced along the diagonal,
@@ -100,7 +100,8 @@ Design the spot as: <SPOT_DESIGN>
 The bare box above is only the chassis. Load it with a rich, eye-catching superstructure so it
 reads as a showpiece machine, not a plain counter: <THEME_DESIGN>
 Aim for the density of an elaborate arcade cabinet — several distinct pieces of apparatus, not
-one lonely accessory. The longer machines carry more of it, so the 5-tile one is the grandest.
+one lonely accessory. All four carry the same kit at the same size; the longer machines simply
+have room for more of it, so the 5-tile one is the grandest.
 
 Constraints on the decoration (these do not relax the orientation rules):
 - Every added object is ALSO drawn in the same 2:1 isometric projection. No front-facing faces.
@@ -119,7 +120,7 @@ flat colors, no gradients, no anti-aliasing. Palette: <PALETTE>.
 **水回りに見える語を使わないこと。** `well` / `basin` / `sunk into` / `stainless` /
 `polished steel ring` は、テーマが水でなくても**流し台**を描かせる。実際にダイナーで
 「chrome-rimmed griddle well sunk into the stainless counter」と書いた結果、
-鉄板ではなくシンクのような絵になった（ユーザー指摘）。
+鉄板ではなくシンクのような絵になった。
 
 - 水のテーマ（露天風呂など）→ そのままの語でよい
 - それ以外 → **その素材の言葉で言う**。`set flush into the <素材> top` を使い、
