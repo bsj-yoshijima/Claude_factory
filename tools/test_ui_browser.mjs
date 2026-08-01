@@ -53,13 +53,64 @@ await ev(`(function(){const c=document.querySelector('[data-clear]'); if(c)c.cli
 ok((await ev(`JSON.stringify(window.__factory.getMachine(${JSON.stringify(mid)}).slots)`))===before, '「外す」で元に戻る');
 ok(await ev(`document.getElementById('craft').innerHTML.includes('原材料')||document.getElementById('craft').innerHTML.length>0`), '製造パネルが再描画される');
 
-console.log('\n=== ショップ/図鑑 ===');
-await ev(`document.querySelector('.close').click()`); await sleep(200);
+console.log('\n=== 製造機パネルの「✥ 移動」 ===');
+ok((await ev(`document.querySelectorAll('[data-move]').length`))>0, '配置の行に移動ボタンがある');
+await ev(`document.querySelector('[data-move]').click()`); await sleep(300);
+ok(await ev(`window.__factory.isMoving()===true`), '移動ボタン → 移動モードに入る');
+ok(!(await ev(`document.getElementById('overlay').classList.contains('show')`)), '移動モードに入るとパネルが閉じる（床をクリックできる）');
+ok(await ev(`window.__scene.editMode===true`), '移動モードでは編集モードがONになる');
+ok(await ev(`document.getElementById('editFab').classList.contains('on')`), '🔧ボタンの見た目も編集ONに揃う');
+await ev(`window.__factory.cancelMove()`); await sleep(150);
+await ev(`window.__scene.toggleEdit(false)`); await sleep(200);
+
+console.log('\n=== ショップ/図鑑（共通ダイアログ） ===');
 for(const [fn,label] of [['openShop','ショップ'],['openDex','図鑑']]){
   await ev(`${fn}()`); await sleep(300);
   ok(await ev(`document.getElementById('overlay').classList.contains('show')`), `${label}が開く`);
+  ok(await ev(`!!document.querySelector('#panel .dlgHead h2') && !!document.querySelector('#panel .pbody')`), `${label}が共通ダイアログ（見出し＋本文）で描かれる`);
+  ok((await ev(`document.querySelectorAll('#panel [data-dlgtab]').length`))>1, `${label}のタブが出る`);
   await ev(`closeOverlay()`); await sleep(150);
 }
+// タブ切替（ショップ: 売却 → 製造機）
+await ev(`openShop('sell')`); await sleep(250);
+await ev(`document.querySelector('[data-dlgtab="mach"]').click()`); await sleep(250);
+ok(await ev(`document.querySelector('[data-dlgtab="mach"]').classList.contains('on')`), 'タブをクリックで切り替わる');
+ok(await ev(`document.getElementById('panel').innerHTML.includes('製造機を購入')`), '切り替えた本文が描かれる');
+await ev(`closeOverlay()`); await sleep(150);
+// フッターの操作ボタン（原材料ピッカーの「原材料を外す」）
+await ev(`window.__factory.setSlot(${JSON.stringify(mid)},0,'milk')`); await sleep(150);
+await ev(`openMatPicker(${JSON.stringify(mid)},0)`); await sleep(250);
+ok((await ev(`document.querySelectorAll('#panel .dlgFoot [data-dlgact]').length`))>0, 'フッターに操作ボタンが出る（原材料を外す）');
+await ev(`document.querySelector('#panel .dlgFoot [data-dlgact]').click()`); await sleep(300);
+ok(await ev(`window.__factory.getMachine(${JSON.stringify(mid)}).slots[0]===null`), 'フッターのボタンが機能する（原材料が外れる）');
+
+console.log('\n=== エージェント一覧 → スキン変更 ===');
+ok(!(await ev(`!!document.getElementById('legend')`)), '常時表示のエージェント凡例は無くなっている');
+await ev(`document.getElementById('hud').click()`); await sleep(400);
+ok(await ev(`document.getElementById('overlay').classList.contains('show')`), '稼働/休憩HUDのクリックで一覧が開く');
+ok(await ev(`document.getElementById('panel').innerHTML.includes('エージェント')`), '一覧の見出しが出る');
+const nag=await ev(`document.querySelectorAll('[data-agsel]').length`);
+ok(nag>0, `エージェントの行が出る (${nag}件)`);
+ok(await ev(`/稼働 \\d+ \\/ 休憩 \\d+/.test(document.querySelector('.dlgSub').textContent)`), '見出しに稼働/休憩の内訳が出る');
+await ev(`document.querySelector('[data-agsel]').click()`); await sleep(250);
+const nsk=await ev(`document.querySelectorAll('[data-skin]').length`);
+ok(nsk>1, `行の「🎨 スキン」でスキン一覧が出る (${nsk}種)`);
+const proj=await ev(`decodeURIComponent(document.querySelector('[data-skin]').dataset.proj)`);
+await ev(`document.querySelectorAll('[data-skin]')[3].click()`); await sleep(300);
+const applied=await ev(`(window.__factory.getAgents().find(a=>a.proj===${JSON.stringify(proj)})||{}).skinId`);
+ok(applied&&applied!=='none', `一覧からスキンを変更できる (${proj} → ${applied})`);
+ok(await ev(`window.__scene.skins[${JSON.stringify(proj)}]===${JSON.stringify(applied)}`), 'シーン側にも反映される（永続化フック経由）');
+await ev(`document.querySelectorAll('[data-skin]')[0].click()`); await sleep(300);   // デフォルトへ戻す
+ok((await ev(`(window.__factory.getAgents().find(a=>a.proj===${JSON.stringify(proj)})||{}).skinId`))==='none', 'デフォルトに戻せる');
+await sleep(1200);
+ok(await ev(`document.getElementById('overlay').classList.contains('show')&&document.querySelectorAll('[data-agsel]').length>0`), '開いている間も中身が更新され続ける（1秒ごと）');
+await ev(`closeOverlay()`); await sleep(150);
+
+console.log('\n=== メニューのグルーピング ===');
+ok((await ev(`document.querySelectorAll('#menu .mh').length`))>=3, 'メニューに見出しが3つ以上ある');
+ok((await ev(`document.querySelectorAll('#menu .msep').length`))>=2, 'メニューに区切りがある');
+for(const idn of ['shopBtn','dexBtn','lbBtn','agentsBtn','editMenuBtn'])
+  ok(await ev(`!!document.getElementById('${idn}')`), `メニュー項目 #${idn} がある`);
 console.log('\n=== 実行時例外 ===');
 console.log(errs.length? errs.slice(0,5).join('\n') : '  (なし)');
 if(errs.length) fail++;

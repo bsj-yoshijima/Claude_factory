@@ -58,7 +58,9 @@ const s = new Main();
 s.load = new Proxy({}, { get:()=>()=>{} });
 s.add = new Proxy({}, { get:(t,k)=>()=>obj() });
 s.textures = textures;
-s.input = { on(){}, setDraggable(){}, keyboard:{ on(){} } };
+// 入力ハンドラは登録内容を控える(移動モードの床クリック/キー操作をテストから叩くため)
+s.input = { _h:{}, on(ev,fn){ (this._h[ev]=this._h[ev]||[]).push(fn); }, setDraggable(){}, activePointer:null,
+  keyboard:{ _h:{}, on(ev,fn){ (this._h[ev]=this._h[ev]||[]).push(fn); } } };
 s.time = { addEvent(){} };
 s.tweens = { add(){} };
 s.cache = { json:{ get:()=>({}) }, text:{ get:()=>'{}' } };
@@ -183,7 +185,74 @@ const ml=s.machineList();
 ok(Array.isArray(ml)&&ml.length===1&&ml[0].slots.length===3, 'machineList() が slots つきで返る');
 ok(ml[0].slots[0]==='rice' && ml[0].id===mid, 'machineList() の中身が正しい');
 
-console.log('\n[12] グローバル名の衝突（main.js と factory-phaser.html）');
+console.log('\n[12] 製造機の移動（掴んで置き直す）');
+{
+  const toasts=[]; let layoutN=0, opened=null;
+  window.__toast=(t)=>toasts.push(String(t));
+  window.__layoutChanged=()=>{ layoutN++; };
+  window.__openMachine=(id)=>{ opened=id; };
+  const pt=(c,r)=>sandbox.cellXY(c,r);                                     // マス中心の画面座標
+  const click=(c,r)=>{ for(const fn of (s.input._h['pointerdown']||[])) fn(pt(c,r),[]); };
+  const key=(n)=>{ for(const fn of (s.input.keyboard._h[n]||[])) fn(); };
+  const cellOf=(id)=>{ const e=s.placed.find(x=>x.id===id); return e? e.cell.c+','+e.cell.r : '-'; };
+  const dirOf=(id)=>{ const e=s.placed.find(x=>x.id===id); return e&&e.dir; };
+
+  s.buildLayout([]); s.toggleEdit(false);
+  const mv=s.addPlaced('machine','s3',{cell:{c:1,r:1},dir:'u'});
+  const other=s.addPlaced('machine','s2',{cell:{c:5,r:5},dir:'u'});
+  ok(typeof F().beginMoveMachine==='function' && typeof F().cancelMove==='function', '__factory に beginMoveMachine/cancelMove がある');
+  ok(F().beginMoveMachine('nope')===false, '存在しないidでは移動モードに入らない');
+  ok(F().beginMoveMachine(other+'x')===false, '製造機以外/不正なidも false');
+  ok(F().beginMoveMachine(mv)===true, '移動モードに入る');
+  ok(s.editMode===true, '編集モードでなければ自動でONになる');
+  ok(F().isMoving()===true, '移動モード中である');
+
+  ok(s.canPlace('machine',1,2,{sub:'s3',dir:'u',ignoreId:mv})===true, 'ignoreId で自分自身の占有は無視される');
+  ok(s.canPlace('machine',1,1,{sub:'s3',dir:'u'})===false, 'ignoreId なしなら自分と重なって不可');
+
+  toasts.length=0;
+  click(5,5);   // 他の製造機の上 = 置けない
+  ok(cellOf(mv)==='1,1', '重なる先をクリックしても移動しない');
+  ok(F().isMoving()===true, '置けない先では移動モードを維持する');
+  ok(toasts.some(t=>t.includes('置けません')), '置けないときはトーストで知らせる');
+  ok(opened===null, '移動モード中は製造機をクリックしても設定パネルを開かない');
+
+  const layout0=layoutN;
+  click(8,2);   // 空きマス = 確定
+  ok(cellOf(mv)==='8,2', `空きマスをクリックで移動できる → 実際 ${cellOf(mv)}`);
+  ok(F().isMoving()===false, '確定すると移動モードを抜ける');
+  ok(layoutN===layout0+1, '確定で __layoutChanged() が呼ばれる');
+  ok(s.occ.has('8,2')&&s.occ.has('9,2')&&s.occ.has('10,2')&&!s.occ.has('1,1'), '占有マスが移動先へ移る');
+
+  F().beginMoveMachine(mv); key('keydown-R');
+  ok(dirOf(mv)==='v', '移動モード中の R キーで回転する');
+  ok(s.cellsOf(s.placed.find(x=>x.id===mv)).map(q=>q.r).join()==='2,3,4', '回転後は v 方向に伸びる');
+  key('keydown-R'); ok(dirOf(mv)==='u', 'もう一度 R で元の向きに戻る');
+
+  click(8,2);   // 移動対象そのものをクリック = キャンセル
+  ok(F().isMoving()===false, '対象の製造機をもう一度クリックでキャンセル');
+  ok(cellOf(mv)==='8,2', 'キャンセルしても位置は元のまま');
+
+  F().beginMoveMachine(mv); key('keydown-ESC');
+  ok(F().isMoving()===false, 'Esc でキャンセルできる');
+  ok(cellOf(mv)==='8,2', 'Esc でも位置は元のまま');
+
+  F().beginMoveMachine(mv);
+  ok(F().cancelMove()===true && F().isMoving()===false, 'cancelMove() で抜けられる');
+  ok(F().cancelMove()===false, '移動中でなければ cancelMove() は false');
+
+  F().beginMoveMachine(mv); s.toggleEdit(false);
+  ok(F().isMoving()===false, '編集モードを抜けると移動モードも解除される');
+  F().beginMoveMachine(mv); s.removeItem(mv);
+  ok(F().isMoving()===false, '掴んでいた製造機を撤去したら移動モードも解除される');
+
+  // 移動モードでなければ従来どおり製造機クリックで設定パネルが開く
+  s.toggleEdit(true); opened=null; click(5,5);
+  ok(opened===other, '移動モード外では製造機クリックで設定パネルが開く');
+  s.toggleEdit(false); window.__toast=null; window.__layoutChanged=null; window.__openMachine=null;
+}
+
+console.log('\n[13] グローバル名の衝突（main.js と factory-phaser.html）');
 { // クラシックスクリプト同士なので同名の const/let/class/function は SyntaxError になり
   // HTML のスクリプトが丸ごと実行されなくなる（= UIが全部死ぬ）。機械的に検出する。
   const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();

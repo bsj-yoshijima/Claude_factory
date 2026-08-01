@@ -22,11 +22,14 @@
   #menu.show{display:flex}
   #menu .mi{padding:8px 11px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--ink);text-decoration:none;display:block}
   #menu .mi:hover{background:#1d262c;color:var(--gold)}
+  /* 役割ごとの小見出しと区切り（工場 / 仲間 / 記録） */
+  #menu .mh{font-size:9px;letter-spacing:.14em;color:#7f9a92;text-transform:uppercase;padding:5px 11px 3px}
+  #menu .msep{height:1px;background:var(--edge);margin:5px 6px}
   /* ===== 今日の労働量（このゲームの主役の数字。製造設定とは分ける） ===== */
   /* 実績ボードと製造設定は横並び。幅が足りなければ上下に折り返す */
-  /* 左のエージェント凡例(#legend)と右の☰に被らないよう、左右の余白を非対称に確保して
+  /* 左の #note と右の☰に被らないよう、左右の余白を非対称に確保して
      その内側で中央寄せする。vw から一律に引くと狭い画面で必要以上に縮む。 */
-  #topwrap{position:absolute;top:10px;left:190px;right:70px;margin:0 auto;z-index:7;display:flex;gap:10px;
+  #topwrap{position:absolute;top:10px;left:160px;right:70px;margin:0 auto;z-index:7;display:flex;gap:10px;
            flex-wrap:wrap;justify-content:center;align-items:stretch;
            width:fit-content;max-width:min(1040px,100%)}
   #board{display:flex;gap:0;flex:none;align-items:center;
@@ -42,34 +45,46 @@
            background:var(--panel);border:1px solid var(--edge);border-radius:9px;padding:8px 13px;color:var(--mint);backdrop-filter:blur(3px)}
   #editFab:hover{border-color:var(--mint)}
   #editFab.on{background:#78d0a6;border-color:#78d0a6;color:#17251f;font-weight:700}
-  /* 稼働/休憩は Claude君の絵で示す（稼働=作業ポーズ+火花 / 休憩=座り+☕） */
+  /* 稼働/休憩は Claude君の絵で示す（稼働=作業ポーズ+火花 / 休憩=座り+☕）。
+     常時見えるのはこのコンパクト表示だけ。クリックでエージェント一覧ダイアログを開く。 */
   #hud{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;gap:8px;background:var(--panel);
-       border:1px solid var(--edge);border-radius:10px;padding:5px 9px;backdrop-filter:blur(3px)}
+       border:1px solid var(--edge);border-radius:10px;padding:5px 9px;backdrop-filter:blur(3px);cursor:pointer}
+  #hud:hover{border-color:var(--mint)}
+  #hud::after{content:'👥▸';align-self:center;font-size:10px;color:#9fdcc6;margin-left:1px}
   #hud .st{position:relative;display:flex;align-items:flex-end;gap:2px}
   #hud .st img{width:30px;height:32px;image-rendering:pixelated;display:block}
   #hud .st .fx{position:absolute;top:-2px;right:12px;font-size:12px;font-style:normal;line-height:1}
   #hud b{font-size:15px;color:var(--gold);font-variant-numeric:tabular-nums;line-height:1.6}
   #hud b.idle{color:#9fdcc6}
   #note{position:absolute;top:10px;left:12px;font-size:10px;color:#9fdcc6;background:var(--panel);padding:4px 9px;border-radius:6px;z-index:6}
-  /* 左の凡例(エージェントの見た目＋名前) */
-  #legend{position:absolute;left:12px;top:40px;z-index:6;display:none;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:8px 9px;max-width:196px;max-height:72vh;overflow-y:auto;backdrop-filter:blur(3px)}
-  #legend.show{display:flex}
-  #legend .lgH{font-size:9px;letter-spacing:.14em;color:#9fdcc6;text-transform:uppercase;margin-bottom:1px}
-  .lgRow{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink)}
-  .lgAv{position:relative;width:22px;height:22px;border-radius:6px;flex:none;border:1px solid #0006;overflow:hidden}
+  /* エージェントの顔アイコン(体色＋被り物)。エージェント一覧ダイアログで使う */
+  .lgH{font-size:9px;letter-spacing:.14em;color:#9fdcc6;text-transform:uppercase;margin-bottom:1px}
+  .lgAv{position:relative;width:22px;height:22px;border-radius:6px;flex:none;border:1px solid #0006;overflow:hidden;display:inline-block}
   .lgAv .eye{position:absolute;top:8px;width:3px;height:3px;background:#241713;border-radius:1px}
   .lgAv .eye.l{left:5px} .lgAv .eye.r{right:5px}
   .lgAv img{position:absolute;left:50%;top:-3px;transform:translateX(-50%);width:24px;height:auto;image-rendering:pixelated}
-  .lgNm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .lgSt{width:7px;height:7px;border-radius:50%;flex:none;box-shadow:0 0 4px currentColor}
+  /* 稼働/休憩バッジ */
+  .agSt{display:inline-block;font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid var(--edge);color:#9fdcc6;margin-right:5px}
+  .agSt.on{color:#7fe6ff;border-color:#2f5c6b}
   /* overlay */
   #overlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(6,10,12,.72);backdrop-filter:blur(4px)}
   #overlay.show{display:flex}
-  /* 固定サイズ: 中身が変わっても外枠がガタつかない。内部だけスクロール */
-  #panel{position:relative;background:#12181c;border:1px solid var(--edge);border-radius:12px;padding:16px 20px;width:min(680px,92vw);height:min(72vh,560px);overflow:hidden}
-  .pbody{height:100%;overflow-y:auto;overflow-x:hidden;padding-right:6px}
-  #panel h2{margin:0 0 8px;font-size:16px;color:var(--gold)}
+  /* 固定サイズ: 中身が変わっても外枠がガタつかない。内部(.pbody)だけスクロール。
+     共通ダイアログは 見出し(.dlgHead) / 本文(.pbody) / 操作(.dlgFoot) の縦3段。 */
+  #panel{position:relative;background:#12181c;border:1px solid var(--edge);border-radius:12px;padding:16px 20px;width:min(680px,92vw);height:min(72vh,560px);overflow:hidden;
+         display:flex;flex-direction:column}
+  .pbody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:6px}
+  #panel h2{margin:0 0 8px;font-size:16px;color:var(--gold);padding-right:22px}
   #panel .close{position:absolute;top:8px;right:14px;font-size:20px;color:#9fb0c0;cursor:pointer;z-index:2}
+  #panel .close:hover{color:var(--gold)}
+  .dlgHead{flex:none}
+  .dlgHead .sttabs{margin:6px 0 2px}
+  .dlgSub{font-size:12px;color:#9fb0c0;font-weight:400;margin-left:8px}
+  .dlgFoot{flex:none;display:flex;gap:8px;align-items:center;justify-content:flex-end;
+           border-top:1px solid var(--edge);margin-top:10px;padding-top:10px}
+  .dbtn{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:12px}
+  .dbtn.ghost{background:#3a4a45;color:#cfeee0}
+  .dbtn:disabled{background:#33403c;color:#7f8f89;cursor:not-allowed}
   .rowline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;font-size:12px}
   .btn{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,66px);gap:8px;margin-top:6px}
@@ -163,13 +178,18 @@
 <div id="wrap">
   <div id="game"></div>
   <div id="note">🏭 Claude Factory</div>
-  <div id="legend"></div>
   <div id="menuBtn" title="メニュー">☰</div>
   <div id="menu">
+    <div class="mh">工場</div>
+    <div class="mi" id="shopBtn">🏪 ショップ</div>
+    <div class="mi" id="editMenuBtn">🔧 レイアウト編集</div>
+    <div class="msep"></div>
+    <div class="mh">仲間</div>
+    <div class="mi" id="agentsBtn">🧑‍🏭 エージェント（スキン変更）</div>
+    <div class="msep"></div>
+    <div class="mh">記録</div>
     <div class="mi" id="dexBtn">📖 図鑑</div>
     <div class="mi" id="lbBtn">🏆 リーダーボード</div>
-    <div class="mi" id="shopBtn">🏪 ショップ</div>
-    <div class="mi" id="skinBtn">🎨 スキン</div>
     <a class="mi" href="/metrics">📊 メトリクス</a>
   </div>
   <div id="topwrap">
@@ -307,8 +327,54 @@ const cnt=(kind,sub)=> (G.layout||[]).filter(e=>e.kind===kind&&(sub==null||e.sub
 // エージェント頭アクセ(スキン)の永続化: main.js からクリック巡回時に呼ばれる
 window.__skinChanged=(proj,skinId)=>{ if(!proj)return; if(skinId==='none') delete G.skins[proj]; else G.skins[proj]=skinId; saveGame(); };
 const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
-function closeOverlay(){ overlay.classList.remove('show'); if(document.getElementById('palette').classList.contains('show')&&window.renderPalette) renderPalette(); }
-function openOverlay(h){ panel._refresh=null; panel.innerHTML='<span class="close">✕</span><div class="pbody">'+h+'</div>'; panel.querySelector('.close').onclick=closeOverlay; overlay.classList.add('show'); }
+/* =========================================================================
+   共通ダイアログ — 見出し / タブ / 本文 / フッターの操作ボタン / 閉じる
+   すべてのダイアログ(ショップ・図鑑・エージェント・原材料・製造機…)はこれに載せる。
+     openDialog({
+       title  : 見出し（絵文字込みの文字列）
+       sub    : 見出し右の小さい補足。文字列 or (dlg)=>文字列
+       tabs   : [{id,label}] or (dlg)=>[…]  省略可。タブ付きダイアログ
+       tab    : 初期タブid
+       onTab  : (id,dlg)=>void  タブを押したとき（省略時は dlg.tab を差し替えて再描画）
+       body   : 本文HTML or (dlg)=>HTML   ※refresh のたびに呼ばれる
+       actions: [{label,on,kind:'primary'|'ghost',disabled}] or (dlg)=>[…]  フッターのボタン
+       live   : ミリ秒。開いている間この間隔で再描画する（エージェント一覧など）
+       onRender:(panel,dlg)=>void  本文描画後のイベント結線
+     })
+   戻り値 dlg = { tab, refresh(), setTab(id), close() }
+   ========================================================================= */
+let _dlg=null, _dlgTimer=null;
+function closeOverlay(){ overlay.classList.remove('show');
+  if(_dlgTimer){ clearInterval(_dlgTimer); _dlgTimer=null; } _dlg=null;
+  if(document.getElementById('palette').classList.contains('show')&&window.renderPalette) renderPalette(); }
+function openDialog(o){
+  const val=(v,d)=>(typeof v==='function')?v(d):v;
+  const dlg={ tab:o.tab||null, refresh, setTab, close:closeOverlay };
+  function setTab(id){ dlg.tab=id; if(o.onTab) o.onTab(id,dlg); else refresh(); }
+  function refresh(){
+    if(_dlg!==dlg) return;                                   // 別のダイアログに差し替わっていたら描かない
+    const old=panel.querySelector('.pbody'), sc=old?old.scrollTop:0;   // live更新でスクロール位置を失わない
+    const tabs=val(o.tabs,dlg)||[];
+    const acts=val(o.actions,dlg)||[];
+    const sub=o.sub!=null?val(o.sub,dlg):'';
+    panel.innerHTML='<span class="close" title="閉じる">✕</span>'
+      +`<div class="dlgHead"><h2>${o.title||''}${sub?`<span class="dlgSub">${sub}</span>`:''}</h2>`
+      +(tabs.length?`<div class="sttabs">${tabs.map(t=>`<span class="sttab ${t.id===dlg.tab?'on':''}" data-dlgtab="${t.id}">${t.label}</span>`).join('')}</div>`:'')
+      +'</div>'
+      +`<div class="pbody">${val(o.body,dlg)||''}</div>`
+      +(acts.length?`<div class="dlgFoot">${acts.map((a,i)=>
+          `<button class="dbtn ${a.kind==='ghost'?'ghost':''}" data-dlgact="${i}"${a.disabled?' disabled':''}>${a.label}</button>`).join('')}</div>`:'');
+    panel.querySelector('.close').onclick=closeOverlay;
+    panel.querySelectorAll('[data-dlgtab]').forEach(el=>el.onclick=()=>setTab(el.dataset.dlgtab));
+    panel.querySelectorAll('[data-dlgact]').forEach(el=>el.onclick=()=>{ const a=acts[+el.dataset.dlgact]; if(a&&a.on) a.on(dlg); });
+    const nb=panel.querySelector('.pbody'); if(nb&&sc) nb.scrollTop=sc;
+    if(o.onRender) o.onRender(panel,dlg);
+  }
+  if(_dlgTimer){ clearInterval(_dlgTimer); _dlgTimer=null; }
+  _dlg=dlg; refresh(); overlay.classList.add('show');
+  if(o.live) _dlgTimer=setInterval(()=>{ if(overlay.classList.contains('show')) refresh(); else closeOverlay(); }, o.live);
+  return dlg;
+}
 overlay.addEventListener('click',e=>{ if(e.target===overlay) closeOverlay(); });
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',1600); }
 window.__toast=toast;   // scene(main.js)から通知を出す用
@@ -318,14 +384,14 @@ function updateBadge(){ const m=document.getElementById('shopMoney');
   if(m) m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
 
 let _dexTab='prod';   // 'prod'=製造した製品(ゲームのゴール) / 'prize'=ガチャ景品
-function openDex(tab){
-  if(tab)_dexTab=tab;
+function dexTabs(){
   const c=craftState();
   const pOwned=PRODS.filter(p=>c.dex[p.id]).length;
   const zOwned=PRIZES.filter(p=>G.inv[p.id]).length;
-  const head=`<div class="sttabs">
-      <span class="sttab ${_dexTab==='prod'?'on':''}" data-dex="prod">🍮 製品 ${pOwned}/${PRODS.length}</span>
-      <span class="sttab ${_dexTab==='prize'?'on':''}" data-dex="prize">🎁 景品 ${zOwned}/${PRIZES.length}</span></div>`;
+  return [{id:'prod',label:`🍮 製品 ${pOwned}/${PRODS.length}`},{id:'prize',label:`🎁 景品 ${zOwned}/${PRIZES.length}`}];
+}
+function dexBody(){
+  const c=craftState();
   let body;
   if(_dexTab==='prod'){
     // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
@@ -346,12 +412,17 @@ function openDex(tab){
                  : `<div class="cell" style="opacity:.45">❓<small style="color:#9fb0c0">${RAR[p.r].n}</small></div>`; }).join('')}</div>
       <div class="rowline" style="font-size:11px;color:#9fb0c0">所持アイテムをクリックで部屋に飾る</div>`;
   }
-  openOverlay(`<h2>📖 図鑑</h2>${head}${body}`);
-  for(const el of panel.querySelectorAll('[data-dex]')) el.onclick=()=>openDex(el.dataset.dex);
-  panel.querySelectorAll('.cell.own').forEach(el=>el.onclick=()=>{
-    const p=PRIZES.find(x=>x.id===el.dataset.id);
-    if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(p.e, RAR[p.r].c); snapLayout(); saveGame(); toast(`${p.e} ${p.n} を部屋に飾った！`); closeOverlay(); }
-  });
+  return body;
+}
+function openDex(tab){
+  if(tab)_dexTab=tab;
+  return openDialog({ title:'📖 図鑑', tabs:dexTabs, tab:_dexTab,
+    onTab:(id,d)=>{ _dexTab=id; d.refresh(); },
+    body:dexBody,
+    onRender:(p)=>{ p.querySelectorAll('.cell.own').forEach(el=>el.onclick=()=>{
+        const z=PRIZES.find(x=>x.id===el.dataset.id);
+        if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(z.e, RAR[z.r].c); snapLayout(); saveGame(); toast(`${z.e} ${z.n} を部屋に飾った！`); closeOverlay(); }
+      }); } });
 }
 document.getElementById('dexBtn').addEventListener('click',openDex);
 
@@ -566,16 +637,15 @@ function openMatPicker(machineId, slotIdx){
   const F=window.__factory, mm=F&&F.getMachine(machineId);
   const cur=mm?mm.slots[slotIdx]:null;
   craftState().activeId = machineId;
-  openOverlay(`<h2>🥫 原材料をセット（${(slotIdx|0)+1}マス目）</h2>
-    <div class="rowline" style="font-size:11px;color:#9fb0c0">
-      選んだ組み合わせで作られる製品が変わります。同じ組み合わせでも5種類の中からランダムです。<br>
-      <b style="color:#ff9f7a">変更・解除すると製造が停止し、WPは0に戻ります。</b></div>
-    <div class="pgrid">${MATS.map(m=>`
-      <div class="pcard" data-mat="${m.id}" style="cursor:pointer;${cur===m.id?'border-color:var(--gold)':''}">
-        <div class="e">${m.e}</div><div class="nm">${m.n}</div></div>`).join('')}</div>
-    ${cur?`<div class="rowline"><button id="matClear" style="background:#3a4a45;color:#cfeee0;border:none;border-radius:7px;padding:8px 13px;cursor:pointer;font-family:inherit">原材料を外す</button></div>`:''}`);
-  for(const el of panel.querySelectorAll('[data-mat]')) el.onclick=()=>{ setMat(machineId, slotIdx, el.dataset.mat); closeOverlay(); };
-  const cl=panel.querySelector('#matClear'); if(cl) cl.onclick=()=>{ setMat(machineId, slotIdx, null); closeOverlay(); };
+  openDialog({ title:`🥫 原材料をセット（${(slotIdx|0)+1}マス目）`,
+    body:`<div class="rowline" style="font-size:11px;color:#9fb0c0">
+        選んだ組み合わせで作られる製品が変わります。同じ組み合わせでも5種類の中からランダムです。<br>
+        <b style="color:#ff9f7a">変更・解除すると製造が停止し、WPは0に戻ります。</b></div>
+      <div class="pgrid">${MATS.map(m=>`
+        <div class="pcard" data-mat="${m.id}" style="cursor:pointer;${cur===m.id?'border-color:var(--gold)':''}">
+          <div class="e">${m.e}</div><div class="nm">${m.n}</div></div>`).join('')}</div>`,
+    actions: cur ? [{label:'原材料を外す',kind:'ghost',on:()=>{ setMat(machineId, slotIdx, null); closeOverlay(); }}] : null,
+    onRender:(p)=>{ p.querySelectorAll('[data-mat]').forEach(el=>el.onclick=()=>{ setMat(machineId, slotIdx, el.dataset.mat); closeOverlay(); }); } });
 }
 function setMat(machineId, slotIdx, matId){
   const c=craftState(), F=window.__factory;
@@ -626,16 +696,17 @@ function openDone(){
   saveGame(); updateDoneBtn(); updateBadge();
   const bd=Object.keys(byRar).sort().map(r=>
     `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
-  openOverlay(`<h2>🎁 完成品 <span style="font-size:12px;color:#9fb0c0">${c.made.length}個</span></h2>
-    ${gain?`<div class="invbar" style="font-size:12px">
-        <span style="color:#9fb0c0">今回の売上</span>
-        <b style="color:#ffd27a;font-size:19px">💰 ${gain.toLocaleString()}</b>
-        <span style="color:#9fb0c0">（${reg}個・所持 💰${Math.floor(G.money).toLocaleString()}）</span>
-        ${bd}</div>`
-      :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません（売上は初回表示時に加算されます）。</div>`}
-    <div class="rowline" style="font-size:11px;color:#9fb0c0">
-      ${reg?`${reg}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。図鑑を埋めていこう。</div>
-    <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`);
+  openDialog({ title:'🎁 完成品', sub:`${c.made.length}個`,
+    body:`${gain?`<div class="invbar" style="font-size:12px">
+          <span style="color:#9fb0c0">今回の売上</span>
+          <b style="color:#ffd27a;font-size:19px">💰 ${gain.toLocaleString()}</b>
+          <span style="color:#9fb0c0">（${reg}個・所持 💰${Math.floor(G.money).toLocaleString()}）</span>
+          ${bd}</div>`
+        :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません（売上は初回表示時に加算されます）。</div>`}
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">
+        ${reg?`${reg}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。図鑑を埋めていこう。</div>
+      <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openDex('prod')}] });
 }
 document.getElementById('doneBtn').addEventListener('click',openDone);
 
@@ -645,19 +716,20 @@ const LB_AXES=[['efficiency','効率'],['prs','PR数'],['commits','コミット�
                ['delegationPct','委譲率'],['activeDays','稼働日数']];
 let _lbKey='efficiency';
 async function openLb(){
-  openOverlay('<h2>🏆 リーダーボード</h2><div class="cost">読み込み中…</div>');
-  let sc=[]; try{ sc=(await (await fetch('/api/otel',{cache:'no-store'})).json()).scorecard||[]; }catch(_){}
-  const draw=()=>{
+  let sc=null;   // null=読み込み中
+  const dlg=openDialog({ title:'🏆 リーダーボード',
+    tabs:LB_AXES.map(([k,l])=>({id:k,label:l+'順'})), tab:_lbKey,
+    onTab:(id,d)=>{ _lbKey=id; d.refresh(); },
+    body:()=>{
+    if(!sc) return '<div class="cost">読み込み中…</div>';
     const rows=[...sc].sort((a,b)=>{
       const av=a[_lbKey], bv=b[_lbKey];
       if(av==null&&bv==null) return b.lines-a.lines;
       if(av==null) return 1; if(bv==null) return -1; return bv-av;
     });
-    panel.querySelector('.pbody').innerHTML=`<h2>🏆 リーダーボード</h2>
-      <div class="rowline" style="font-size:11px;color:#9fb0c0">
+    return `<div class="rowline" style="font-size:11px;color:#9fb0c0">
         Claude Code の使い方を軸ごとに並べたもの。単一の合計点は出しません（1つに混ぜると誤った使い方が上位に来るため）。
         上位の人にどう使っているか聞いてみよう。</div>
-      <div class="sttabs">${LB_AXES.map(([k,l])=>`<span class="sttab ${k===_lbKey?'on':''}" data-lb="${k}">${l}順</span>`).join('')}</div>
       <table style="width:100%;border-collapse:collapse;font-size:11px">
         <thead><tr style="color:#9fb0c0;text-align:right">
           <th style="text-align:left">#</th><th style="text-align:left">識別子</th>
@@ -673,9 +745,9 @@ async function openLb(){
       <div class="rowline" style="font-size:10px;color:#9fb0c0">
         効率 = (追加行 + 削除行×0.3 + PR×150) ÷ output_tokens × 1000 ／ PR1件・100行以上でランク対象。
         効率は難易度を補正しないので絶対量と併せて見ること。</div>`;
-    for(const el of panel.querySelectorAll('[data-lb]')) el.onclick=()=>{ _lbKey=el.dataset.lb; draw(); };
-  };
-  draw();
+  } });
+  try{ sc=(await (await fetch('/api/otel',{cache:'no-store'})).json()).scorecard||[]; }catch(_){ sc=[]; }
+  dlg.refresh();   // 読み込み中に閉じられていれば refresh は何もしない
 }
 document.getElementById('lbBtn').addEventListener('click',openLb);
 
@@ -686,65 +758,61 @@ menuBtn.addEventListener('click',e=>{ e.stopPropagation(); menuEl.classList.togg
 for(const mi of menuEl.querySelectorAll('.mi')) mi.addEventListener('click',closeMenu);
 document.addEventListener('click',e=>{ if(!menuEl.contains(e.target)&&e.target!==menuBtn) closeMenu(); });
 
-/* ===== 🎨 スキン: エージェントを選んでテーマ別スキンを丸ごと適用 ===== */
-let _skinSel=null;
-function openSkin(){
-  const render=()=>{
-    const list=(window.__factory&&window.__factory.getAgents())||[];
-    // プロジェクト単位に集約(同名エージェントは稼働数をまとめる)
-    const byProj={};
-    for(const a of list){ const p=byProj[a.proj]||(byProj[a.proj]={proj:a.proj,skinId:'none',n:0,busy:0});
-      p.n++; if(a.working)p.busy++; if(a.skinId&&a.skinId!=='none')p.skinId=a.skinId; }
-    const projs=Object.values(byProj);
-    if(_skinSel && !byProj[_skinSel]) _skinSel=null;
-    if(!_skinSel && projs.length) _skinSel=projs[0].proj;
-    const cur=_skinSel?byProj[_skinSel]:null;
-    const agentRow = projs.length ? projs.map(p=>{ const on=p.proj===_skinSel; const st=p.busy>0?'🟢 稼働':'💤 休憩';
-      return `<div class="pitem ${on?'on':''}" data-proj="${encodeURIComponent(p.proj)}" style="width:auto;min-width:70px;height:auto;padding:6px 10px;font-size:12px">${p.proj||'(無名)'}<span style="font-size:9px;color:#9fdcc6;margin-top:2px">${st}${p.n>1?' ×'+p.n:''}</span></div>`;
-    }).join('') : '<div class="phint" style="padding:8px">稼働中のエージェントがいません。</div>';
-    const skins=(window.__factory&&window.__factory.skinList)||[];
-    const grid = skins.map(s=>{ const applied=cur&&cur.skinId===s.id;
-      const emoji = s.id==='none' ? '🧑‍🏭' : ((BG_META[s.id]&&BG_META[s.id].e)||'🎨');
-      const thumb = s.id==='none'
-        ? `<span style="font-size:28px">${emoji}</span>`
-        : `<img src="assets/hat-${s.id}.png" alt="" style="width:46px;height:46px;object-fit:contain" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${emoji}',style:'font-size:28px'}))">`;
-      return `<div class="cell own" data-skin="${s.id}" style="${applied?'border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset':''}">${thumb}<small style="color:#cfeee0">${s.n}</small>${applied?'<span class="cnt">✓</span>':''}</div>`;
-    }).join('');
-    openOverlay(`<h2>🎨 スキン</h2>
-      <div class="cost" style="margin:2px 0 4px">① エージェントを選ぶ</div>
-      <div class="cardwrap" style="justify-content:flex-start;min-height:0;gap:6px">${agentRow}</div>
-      <div class="cost" style="margin:12px 0 4px">② スキンを選んで適用${cur?`（対象: <b style="color:#eafff4">${cur.proj||'(無名)'}</b>）`:''}</div>
-      <div class="grid">${grid}</div>
-      <div class="rowline" style="font-size:11px;color:#9fb0c0">スキン画像が未生成のものは仮アイコン表示。適用してもアセット到着まではデフォルト見た目のままです。</div>`);
-    panel.querySelectorAll('[data-proj]').forEach(el=>el.onclick=()=>{ _skinSel=decodeURIComponent(el.dataset.proj); render(); });
-    panel.querySelectorAll('[data-skin]').forEach(el=>el.onclick=()=>{
-      if(!cur){ toast('先にエージェントを選んでください'); return; }
-      const s=skins.find(x=>x.id===el.dataset.skin);
-      window.__factory.applySkin(cur.proj, el.dataset.skin);   // scene側で this.skins更新＋window.__skinChangedで永続化
-      toast(`${cur.proj||'(無名)'} → ${s?s.n:el.dataset.skin}`); render();
-    });
-  };
-  render();
-}
-document.getElementById('skinBtn').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openSkin(); });
-
-/* 画面左の凡例: エージェントの見た目(体色＋被り物)と名前。頭上ラベルの代わり。 */
-function renderLegend(){
-  const el=document.getElementById('legend'); if(!el) return;
+/* ===== 🧑‍🏭 エージェント一覧（スキン変更つき）=====
+   常時表示はやめ、左下の稼働/休憩HUD か ☰メニューから開く。開いている間は1秒ごとに更新。 */
+let _agentSel=null;                     // スキン選択を開いているプロジェクト(null=閉じている)
+function agentRows(){                   // プロジェクト単位に集約(同名エージェントは稼働数をまとめる)
   const list=(window.__factory&&window.__factory.getAgents())||[];
-  const seen={}, rows=[];
-  for(const a of list){ if(seen[a.proj]) continue; seen[a.proj]=1; rows.push(a); }   // プロジェクト単位で1行
-  if(!rows.length){ el.classList.remove('show'); el.innerHTML=''; return; }
-  el.classList.add('show');
-  el.innerHTML='<div class="lgH">エージェント</div>'+rows.map(a=>{
-    const hat = (a.skinId&&a.skinId!=='none') ? `<img src="assets/hat-${a.skinId}.png" onerror="this.remove()">` : '';
-    const st = a.working ? '#7fe6ff' : '#5f7a72';
-    const nm = (a.proj||'(no name)').replace(/[<>&]/g,'');
-    return `<div class="lgRow" title="${nm}">`
-      +`<span class="lgAv" style="background:${a.color||'#4f7fc4'}"><span class="eye l"></span><span class="eye r"></span>${hat}</span>`
-      +`<span class="lgNm">${nm}</span><span class="lgSt" style="color:${st};background:${st}"></span></div>`;
-  }).join('');
+  const by={};
+  for(const a of list){ const p=by[a.proj]||(by[a.proj]={proj:a.proj,color:a.color,skinId:'none',n:0,busy:0});
+    p.n++; if(a.working)p.busy++; if(a.skinId&&a.skinId!=='none')p.skinId=a.skinId; }
+  return Object.values(by);
 }
+const skinName=(id)=>{ const s=((window.__factory&&window.__factory.skinList)||[]).find(x=>x.id===id); return s?s.n:'デフォルト'; };
+// スキンの見本。画像(assets/hat-*.png)は未生成のものが多いので onerror で絵文字に差し替える
+function skinThumb(id,px){ const e=(id==='none')?'🧑‍🏭':((BG_META[id]&&BG_META[id].e)||'🎨');
+  return (id==='none') ? `<span style="font-size:${px}px">${e}</span>`
+    : `<img src="assets/hat-${id}.png" alt="" style="width:${px+16}px;height:${px+16}px;object-fit:contain" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${e}',style:'font-size:${px}px'}))">`;
+}
+function openAgents(){
+  const esc=(s)=>String(s||'').replace(/[<>&]/g,'');
+  return openDialog({ title:'🧑‍🏭 エージェント',
+    sub:()=>{ const r=agentRows(), n=r.reduce((s,p)=>s+p.n,0), b=r.reduce((s,p)=>s+p.busy,0);
+      return `稼働 ${b} / 休憩 ${n-b}`; },
+    live:1000,                          // 開いている間は最新の稼働状況に追従
+    body:()=>{
+      const rows=agentRows(); if(!rows.length) return '<div class="cost" style="padding:12px">稼働中のエージェントがいません。</div>';
+      const skins=(window.__factory&&window.__factory.skinList)||[];
+      return rows.map(p=>{
+        const key=encodeURIComponent(p.proj), nm=esc(p.proj)||'(無名)', open=_agentSel===p.proj;
+        const hat=(p.skinId&&p.skinId!=='none')?`<img src="assets/hat-${p.skinId}.png" alt="" onerror="this.remove()">`:'';
+        let h=`<div class="rc">
+          <div class="ic"><span class="lgAv" style="background:${p.color||'#4f7fc4'}"><span class="eye l"></span><span class="eye r"></span>${hat}</span></div>
+          <div class="mid"><div class="nm">${nm}${p.n>1?` <span style="color:#9fb0c0;font-size:10px">×${p.n}</span>`:''}</div>
+            <div class="cost"><span class="agSt ${p.busy?'on':''}">${p.busy?`🟢 稼働 ${p.busy}/${p.n}`:'💤 休憩'}</span>スキン: ${skinName(p.skinId)}</div></div>
+          <button data-agsel="${key}">${open?'閉じる':'🎨 スキン'}</button></div>`;
+        // スキンの一覧は長いので行の直下で折りたたみ表示（他の行が押し出されないよう高さを制限）
+        if(open) h+=`<div class="grid" style="margin:0 0 12px 8px;max-height:196px;overflow-y:auto">${skins.map(s=>{ const on=p.skinId===s.id;
+            return `<div class="cell own" data-skin="${s.id}" data-proj="${key}" title="${s.n}"
+              style="${on?'border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset':''}">${skinThumb(s.id,26)}<small style="color:#cfeee0">${s.n}</small>${on?'<span class="cnt">✓</span>':''}</div>`;
+          }).join('')}</div>`;
+        return h;
+      }).join('')
+      +'<div class="rowline" style="font-size:11px;color:#9fb0c0">「🎨 スキン」から被り物を変更できます。画像が未生成のスキンは仮アイコン表示で、アセット到着までは見た目がデフォルトのままです。</div>';
+    },
+    onRender:(p,d)=>{
+      p.querySelectorAll('[data-agsel]').forEach(el=>el.onclick=()=>{
+        const pj=decodeURIComponent(el.dataset.agsel); _agentSel=(_agentSel===pj)?null:pj; d.refresh(); });
+      p.querySelectorAll('[data-skin]').forEach(el=>el.onclick=()=>{
+        const pj=decodeURIComponent(el.dataset.proj);
+        if(!window.__factory) return;
+        window.__factory.applySkin(pj, el.dataset.skin);   // scene側で this.skins更新＋window.__skinChangedで永続化
+        toast(`${pj||'(無名)'} → ${skinName(el.dataset.skin)}`); d.refresh(); });
+    } });
+}
+document.getElementById('agentsBtn').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openAgents(); });
+document.getElementById('hud').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openAgents(); });
+document.getElementById('hud').title='クリックでエージェント一覧';
 
 /* ===== ショップ（景品の売却＋購入/強化） ===== */
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
@@ -769,9 +837,8 @@ function buySeries(k){ const S=SERIES[k]; if(!G.seriesOwned.includes(k)){ if(G.m
   G.bg=S.sky; G.floor=S.floor; if(window.__scene){ window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } saveGame(); updateBadge(); }
 
 let _shopTab='sell';
-function openShop(tab){ if(tab)_shopTab=tab;
-  const TABS=[['sell','💵 売却'],['mach','🏭 製造機'],['equip','🧰 設備'],['decor','🎨 内装'],['series','🌏 シリーズ']];
-  const render=()=>{
+const SHOP_TABS=[['sell','💵 売却'],['mach','🏭 製造機'],['equip','🧰 設備'],['decor','🎨 内装'],['series','🌏 シリーズ']];
+function shopBody(){
     let body='';
     if(_shopTab==='sell'){
       const owned=PRIZES.filter(p=>G.inv[p.id]>0);
@@ -826,20 +893,25 @@ function openShop(tab){ if(tab)_shopTab=tab;
           <div class="cost">${S.decos.join(' ')} ・ ${own?'所持':'💰'+S.price.toLocaleString()}</div></div>
           <button data-series="${k}" ${((own||G.money>=S.price)&&!cur)?'':'disabled'}>${own?(cur?'---':'適用'):'購入'}</button></div>`; }).join('');
     }
-    openOverlay(`<h2>🏪 ショップ <span id="shopMoney" style="font-size:13px;color:#ffd27a">💰 ${Math.floor(G.money).toLocaleString()}</span></h2>
-      <div class="sttabs">${TABS.map(t=>`<span class="sttab ${t[0]===_shopTab?'on':''}" data-tab="${t[0]}">${t[1]}</span>`).join('')}</div>
-      <div>${body}</div>`);
-    panel.querySelectorAll('.sttab[data-tab]').forEach(el=>el.onclick=()=>{ _shopTab=el.dataset.tab; render(); });
-    panel.querySelectorAll('[data-sell]').forEach(b=>b.onclick=()=>{ const q=b.dataset.q==='all'?(G.inv[b.dataset.sell]||0):1; sellPrize(b.dataset.sell,q); render(); });
-    panel.querySelectorAll('[data-lv]').forEach(b=>b.onclick=()=>{ levelUp(b.dataset.lv); render(); });
-    panel.querySelectorAll('[data-buymach]').forEach(b=>b.onclick=()=>{ buyMachine(b.dataset.buymach); render(); });
-    panel.querySelectorAll('[data-deco]').forEach(b=>b.onclick=()=>{ buyDeco(b.dataset.deco); render(); });
-    panel.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{ buyProp(b.dataset.prop); render(); });
-    panel.querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>{ selectBg(b.dataset.bg); render(); });
-    panel.querySelectorAll('[data-fl]').forEach(b=>b.onclick=()=>{ selectFloor(b.dataset.fl); render(); });
-    panel.querySelectorAll('[data-series]').forEach(b=>b.onclick=()=>{ buySeries(b.dataset.series); render(); });
-  };
-  render();
+    return body;
+}
+function openShop(tab){ if(tab)_shopTab=tab;
+  return openDialog({ title:'🏪 ショップ',
+    sub:()=>`<span id="shopMoney" style="color:#ffd27a;font-size:13px">💰 ${Math.floor(G.money).toLocaleString()}</span>`,
+    tabs:SHOP_TABS.map(t=>({id:t[0],label:t[1]})), tab:_shopTab,
+    onTab:(id,d)=>{ _shopTab=id; d.refresh(); },
+    body:shopBody,
+    onRender:(p,d)=>{
+      const re=()=>d.refresh();
+      p.querySelectorAll('[data-sell]').forEach(b=>b.onclick=()=>{ const q=b.dataset.q==='all'?(G.inv[b.dataset.sell]||0):1; sellPrize(b.dataset.sell,q); re(); });
+      p.querySelectorAll('[data-lv]').forEach(b=>b.onclick=()=>{ levelUp(b.dataset.lv); re(); });
+      p.querySelectorAll('[data-buymach]').forEach(b=>b.onclick=()=>{ buyMachine(b.dataset.buymach); re(); });
+      p.querySelectorAll('[data-deco]').forEach(b=>b.onclick=()=>{ buyDeco(b.dataset.deco); re(); });
+      p.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{ buyProp(b.dataset.prop); re(); });
+      p.querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>{ selectBg(b.dataset.bg); re(); });
+      p.querySelectorAll('[data-fl]').forEach(b=>b.onclick=()=>{ selectFloor(b.dataset.fl); re(); });
+      p.querySelectorAll('[data-series]').forEach(b=>b.onclick=()=>{ buySeries(b.dataset.series); re(); });
+    } });
 }
 document.getElementById('shopBtn').addEventListener('click',()=>openShop());
 
@@ -876,7 +948,8 @@ function renderPalette(){
     const P=Object.keys(PROP).filter(t=>availN('prop',t)>0).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
     const D=Object.keys(DECO).filter(t=>availN('deco',t)>0).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
     items=(P.concat(D).join(''))||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→設備 で購入してください。</div>';
-  } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）・ 設置済みの製造機をクリックすると素材を設定できます':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です');
+  } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です')
+      +'<br>設置済みの製造機はクリックで設定パネル → 素材のセット / ↻回転 / ✥移動（床クリックで置き直し）/ 🗑撤去';
     const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.sub===t));
     items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
   }
@@ -891,12 +964,13 @@ window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
   if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
   const s=window.__scene; const id = s.addPlaced(sel.kind, sel.sub, {cell:{c,r}, dir:s.placeDir});
   if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
-/* ===== 製造機の設定パネル: マスごとの素材 / 向き / 撤去。編集中に機械をクリックで開く ===== */
+/* ===== 製造機の設定パネル: マスごとの素材 / 向き / 移動 / 撤去。編集中に機械をクリックで開く ===== */
 let _matPick=null;   // 素材を選んでいる最中のスロット番号
 window.__openMachine=(id)=>{
   const F=window.__factory; if(!F) return; _matPick=null;
-  const render=()=>{
-    const m=F.getMachine(id); if(!m){ closeOverlay(); return; }
+  const dlg=openDialog({ title:'🏭 製造機', sub:()=>{ const m=F.getMachine(id); return m?`${m.size}マス${m.lvl>1?` Lv${m.lvl}`:''}`:''; },
+    body:()=>{
+    const m=F.getMachine(id); if(!m){ setTimeout(closeOverlay,0); return ''; }
     const slots=m.slots.map((mat,i)=>{ const d=mat&&MAT[mat];
       return `<div class="rc" style="cursor:pointer" data-slot="${i}">
         <div class="ic">${d?d.e:'➕'}</div>
@@ -905,43 +979,55 @@ window.__openMachine=(id)=>{
         ${d?`<button data-clear="${i}">外す</button>`:''}</div>`; }).join('');
     const picker = _matPick==null ? '' :
       `<div class="cost" style="margin:10px 0 6px;color:#7fe6ff">${_matPick+1}マス目に入れる素材</div>`
-      + `<div class="pitems" style="display:flex;flex-wrap:wrap;gap:6px">`
+      + `<div class="pitems" style="display:flex;flex-wrap:wrap;gap:6px;width:auto;max-height:none">`
       + MATS.map(m2=>`<div class="pitem" data-mat="${m2.id}" style="cursor:pointer">${m2.e}<small>${m2.n}</small></div>`).join('')
       + `</div>`;
     const p=m.product;
     const prod = p ? `<div class="rc"><div class="ic">${p.e}</div><div class="mid">
         <div class="nm">${p.n}</div><div class="cost">${p.unknown?'レシピに無い組み合わせ（🪨 謎のカタマリになります）':'この組み合わせで作れます'}</div></div></div>`
       : '<div class="cost" style="padding:6px 2px">原材料を入れるとここに作れる物が出ます</div>';
-    openOverlay(`<div class="lgH" style="margin-bottom:8px">🏭 製造機（${m.size}マス）${m.lvl>1?` Lv${m.lvl}`:''}</div>`
-      + `<div class="cost" style="margin:2px 0 8px">1マスにつき素材1つ。入っている素材の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。</div>`
+    return `<div class="cost" style="margin:2px 0 8px">1マスにつき素材1つ。入っている素材の<b>組合せ</b>で作れる物が変わります（順番は関係なし）。</div>`
       + slots + picker
       + `<div class="cost" style="margin:12px 0 6px">作れる物</div>` + prod
       + `<div class="rc" style="margin-top:12px"><div class="mid"><div class="nm">配置</div>`
-      + `<div class="cost">向きを変える / この製造機を撤去する</div></div>`
-      + `<button data-rot="1">↻ 回転</button><button data-del="1" style="margin-left:5px">🗑 撤去</button></div>`);
-    panel.querySelectorAll('[data-slot]').forEach(el=>el.onclick=(ev)=>{
-      if(ev.target.dataset && ev.target.dataset.clear!=null) return; _matPick=+el.dataset.slot; render(); });
-    panel.querySelectorAll('[data-clear]').forEach(el=>el.onclick=(ev)=>{
-      ev.stopPropagation(); setMat(id, +el.dataset.clear, null); _matPick=null; render(); });
-    panel.querySelectorAll('[data-mat]').forEach(el=>el.onclick=()=>{
-      setMat(id, _matPick, el.dataset.mat); _matPick=null; render(); });
-    panel.querySelectorAll('[data-rot]').forEach(el=>el.onclick=()=>{
-      if(!F.rotateMachine(id)){ toast('回した先に空きがありません'); return; } window.__layoutChanged(); renderCraft(); render(); });
-    panel.querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{
+      + `<div class="cost">向きを変える / 別の場所へ移す / この製造機を撤去する</div></div>`
+      + `<button data-rot="1">↻ 回転</button><button data-move="1" style="margin-left:5px">✥ 移動</button>`
+      + `<button data-del="1" style="margin-left:5px">🗑 撤去</button></div>`;
+  },
+    onRender:(p,d)=>{
+    p.querySelectorAll('[data-slot]').forEach(el=>el.onclick=(ev)=>{
+      if(ev.target.dataset && ev.target.dataset.clear!=null) return; _matPick=+el.dataset.slot; d.refresh(); });
+    p.querySelectorAll('[data-clear]').forEach(el=>el.onclick=(ev)=>{
+      ev.stopPropagation(); setMat(id, +el.dataset.clear, null); _matPick=null; d.refresh(); });
+    p.querySelectorAll('[data-mat]').forEach(el=>el.onclick=()=>{
+      setMat(id, _matPick, el.dataset.mat); _matPick=null; d.refresh(); });
+    p.querySelectorAll('[data-rot]').forEach(el=>el.onclick=()=>{
+      if(!F.rotateMachine(id)){ toast('回した先に空きがありません'); return; } window.__layoutChanged(); renderCraft(); d.refresh(); });
+    // 移動: シーンが「掴んで床クリックで置き直す」モードに入る。
+    // パネルが開いたままだと床をクリックできないので必ず閉じる。保存もシーン側(__layoutChanged)が行う。
+    p.querySelectorAll('[data-move]').forEach(el=>el.onclick=()=>{
+      if(!F.beginMoveMachine(id)){ toast('移動できません'); return; }
+      closeOverlay(); syncEditFab(); });   // 移動は必要なら編集モードをONにするので表示を合わせる
+    p.querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{
       F.removeMachine(id); window.__layoutChanged(); updateBadge(); renderCraft(); closeOverlay(); toast('製造機を撤去しました'); });
-  };
-  render();
+  } });
+  return dlg;
 };
-document.getElementById('editFab').addEventListener('click',()=>{ if(!window.__scene)return;
-  const on=window.__scene.toggleEdit(); document.getElementById('editFab').classList.toggle('on',on);
-
-  paletteEl.classList.toggle('show',on); if(on) renderPalette(); else { editSel=null; window.__editSel=null; }
-  toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 製造機をクリックで素材設定':'編集モードを終了'); });
+/* 編集モードのON/OFF表示をシーンに合わせる。Eキーや「✥移動」でシーン側から切り替わることがある */
+function syncEditFab(){ const on=!!(window.__scene&&window.__scene.editMode), fab=document.getElementById('editFab');
+  if(fab.classList.contains('on')===on) return;              // 変化したときだけ描き直す
+  fab.classList.toggle('on',on); paletteEl.classList.toggle('show',on);
+  if(on) renderPalette(); else { editSel=null; window.__editSel=null; } }
+function toggleEditMode(){ if(!window.__scene){ toast('準備中…'); return; }
+  const on=window.__scene.toggleEdit(); syncEditFab();
+  toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 製造機をクリックで素材設定・移動':'編集モードを終了'); }
+document.getElementById('editFab').addEventListener('click',toggleEditMode);
+document.getElementById('editMenuBtn').addEventListener('click',toggleEditMode);
 loadGame().then(async ()=>{
   G.lastT=Date.now();
   await waitScene(); applyOwned(); updateBadge();
   setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
-  setInterval(renderLegend, 1000); renderLegend();
+  setInterval(syncEditFab, 1000); syncEditFab();   // Eキー・移動モードでの編集ON/OFFに追従
   // 製造: 原材料バッジを反映してからWPの取得を開始（3秒ごと = OTelのログ送信間隔に合わせる）
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
   updateDoneBtn(); renderCraft(); pollWp(); setInterval(pollWp, 3000);

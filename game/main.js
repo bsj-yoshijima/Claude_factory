@@ -197,6 +197,7 @@ class Main extends Phaser.Scene {
 
     this.occ=new Set(); this.machineCells=[]; this.placed=[]; this.editMode=false;
     this.partsTheme=null; this.placeDir='u';   // placeDir = 設置プレビューの向き(Rキーで切替)
+    this.moveId=null;   // 移動モードで掴んでいる製造機のid(null=移動していない)
     for(const o of DEMO) this.addPlaced('deco', o.k.replace('dec_',''), {cell:{c:o.c,r:o.r}, silent:true});
     this.setupEdit();
     this.createNightFx();
@@ -226,6 +227,10 @@ class Main extends Phaser.Scene {
       setSlot:(id,i,mat)=>this.setSlot(id,i,mat),
       rotateMachine:(id)=>this.rotateMachine(id),
       moveMachine:(id,c,r)=>this.moveItem(id,c,r),
+      // 製造機はドラッグできないので「掴んで床をクリックで置き直す」移動モードを提供する
+      beginMoveMachine:(id)=>this.beginMoveMachine(id),
+      cancelMove:()=>this.cancelMove(),
+      isMoving:()=>!!this.moveId,
       removeMachine:(id)=>this.removeItem(id),
     };
     this.poll(); this.time.addEvent({delay:1500,loop:true,callback:()=>this.poll()});
@@ -407,7 +412,9 @@ class Main extends Phaser.Scene {
     if(e.kind==='machine'){ for(const q of this.cellsOf(e)){
       const i=this.machineCells.findIndex(m=>m.c===q.c&&m.r===q.r); if(i>=0)this.machineCells.splice(i,1); } } }
   removeItem(id){ const i=this.placed.findIndex(x=>x.id===id); if(i<0) return false;
-    this._detach(this.placed[i]); this.placed.splice(i,1); this.lastRemoved=1; this._syncOcc(); return true; }
+    this._detach(this.placed[i]); this.placed.splice(i,1); this.lastRemoved=1; this._syncOcc();
+    if(this.moveId===id) this.cancelMove();   // 掴んでいた物が消えたら移動モードも抜ける
+    return true; }
   moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
     if(!this.canPlace(e.kind,c,r,{sub:e.sub,dir:e.dir,ignoreId:id})) return false;
     this._detach(e); e.cell={c,r}; this._makeObjs(e); this._syncOcc();
@@ -418,6 +425,24 @@ class Main extends Phaser.Scene {
     if(!this.canPlace('machine',e.cell.c,e.cell.r,{sub:e.sub,dir:nd,ignoreId:id})) return false;
     this._detach(e); e.dir=nd; this._makeObjs(e); this._syncOcc();
     if(this.editMode) this._enableDrag(e); return true; }
+  /* ===== 製造機の移動(掴んで置き直す) =====
+     複数マスなのでドラッグは無効。設定パネルの「移動」から掴み、床クリックで確定する。
+     移動モード中: カーソルに全マスのプレビューが追従 / R=回転 / Esc・本体クリック=キャンセル */
+  beginMoveMachine(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return false;
+    if(!this.editMode) this.toggleEdit(true);
+    this.moveId=id; if(this.moveTip) this.moveTip.setVisible(true);
+    this._drawHover(this.input&&this.input.activePointer); return true; }
+  cancelMove(){ if(!this.moveId) return false; this.moveId=null;
+    if(this.moveTip) this.moveTip.setVisible(false);
+    this._drawHover(this.input&&this.input.activePointer); return true; }
+  /* 移動モード中の床クリック。自分のマスならキャンセル、置けなければ知らせて移動モードは維持 */
+  _moveDrop(c,r){ const e=this.placed.find(x=>x.id===this.moveId);
+    if(!e){ this.cancelMove(); return false; }
+    if(this.cellsOf(e).some(q=>q.c===c&&q.r===r)){ this.cancelMove();
+      if(window.__toast) window.__toast('移動をやめました'); return false; }
+    if(!this.moveItem(e.id,c,r)){ if(window.__toast) window.__toast('そこには置けません…'); return false; }
+    this.cancelMove(); if(window.__layoutChanged) window.__layoutChanged();
+    if(window.__toast) window.__toast('移動しました'); return true; }
   /* スロット i に素材をセット(null でクリア)。作れる物が即座に変わる */
   setSlot(id,i,mat){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return false;
     if(i<0||i>=machSize(e.sub)) return false;
@@ -476,10 +501,15 @@ class Main extends Phaser.Scene {
     this.input.on('pointermove',(po)=>this._drawHover(po));
     this.trash=this.add.container(72,H-52,[ this.add.rectangle(0,0,124,72,0x3a1418,0.85).setStrokeStyle(2,0xe05a4e), this.add.text(0,0,'🗑 ここへ撤去',{fontSize:'13px',color:'#ffd0c8'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     this._trashRect=new Phaser.Geom.Rectangle(10,H-88,124,74);
+    // 移動モード中の案内(ゴミ箱と同じ要領。画面上部の中央)
+    this.moveTip=this.add.container(W/2,26,[ this.add.rectangle(0,0,336,34,0x123a2e,0.88).setStrokeStyle(2,0x33ffcc),
+      this.add.text(0,0,'↔ 移動先の床をクリック ・ R:回転 ・ Esc:やめる',{fontSize:'13px',color:'#c8fff0'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     // 床クリック: 製造機の上なら設定パネル、空きマスならパレットで選択中のアイテムを設置
     this.input.on('pointerdown',(po,over)=>{
       const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
+      // 移動モード中は設定パネルも新規設置も抑止。床クリック=移動先の確定
+      if(this.moveId){ this._placedPtr=true; this._moveDrop(c,r); return; }
       const m=this.machineAtCell(c,r);
       // 製造機は編集中/通常どちらのクリックでも素材パネルを開く(素材設定がコア機能なので)
       if(m){ this._placedPtr=true; if(window.__openMachine) window.__openMachine(m.id); return; }
@@ -491,8 +521,15 @@ class Main extends Phaser.Scene {
       this._placedPtr=true; if(window.__editPlaceAt) window.__editPlaceAt(c,r); });
     // 設置前の向き切替(Rキー)。製造機を選んでいるときだけ効く
     this.input.keyboard.on('keydown-R',()=>{ if(!this.editMode) return;
+      if(this.moveId){   // 移動モード中は掴んでいる製造機そのものを回す
+        if(!this.rotateMachine(this.moveId)){ if(window.__toast) window.__toast('回した先に空きがありません'); return; }
+        if(window.__layoutChanged) window.__layoutChanged();
+        this._drawHover(this.input.activePointer); return; }
       this.placeDir=(this.placeDir==='v')?'u':'v';
       if(window.__toast) window.__toast('向き: '+(this.placeDir==='v'?'↙ 手前方向':'↘ 奥方向')); });
+    // 移動のキャンセル(Escキー)
+    this.input.keyboard.on('keydown-ESC',()=>{ if(!this.moveId) return;
+      this.cancelMove(); if(window.__toast) window.__toast('移動をやめました'); });
     this.input.on('drag',(po,obj,dx,dy)=>{ if(this.editMode&&obj._e){ obj.x=dx; obj.y=dy; } });
     this.input.on('dragend',(po,obj)=>{ if(!this.editMode||!obj._e)return; const e=obj._e;
       if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){
@@ -511,18 +548,30 @@ class Main extends Phaser.Scene {
     g.clear(); g.setVisible(true);
     g.fillStyle(0x7fe6ff,0.10);   // 設置済みマスをうっすら塗る(=各オブジェクトが入っている四角)
     for(const e of this.placed) for(const q of this.cellsOf(e)){ this._diamond(g,q.c,q.r); g.fillPath(); }
+    // 移動モード中は掴んでいる製造機のサイズ・向きぶんをプレビュー(自分の占有は無視して判定)
+    const mv=this.moveId && this.placed.find(x=>x.id===this.moveId);
+    if(mv){ if(!po) return; const uv=screenToIso(po.x,po.y);
+      const c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1);
+      const ok=this.canPlace('machine',c,r,{sub:mv.sub,dir:mv.dir,ignoreId:mv.id});
+      this._paintCells(this.cellsOf({kind:'machine',sub:mv.sub,dir:mv.dir,cell:{c,r}}), ok?0x33ffcc:0xe0674e);
+      return; }
     const sel=window.__editSel;
     if(sel && po){ const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1);
       const opt=(sel.kind==='machine')?{sub:sel.sub,dir:this.placeDir||'u'}:null;
-      const ok=this.canPlace(sel.kind,c,r,opt), col=ok?0x33ffcc:0xe0674e;
+      const ok=this.canPlace(sel.kind,c,r,opt);
       // 製造機は占有する全マスをプレビュー(Rキーで向き切替)
       const cells=(sel.kind==='machine') ? this.cellsOf({kind:'machine',sub:sel.sub,dir:this.placeDir||'u',cell:{c,r}}) : [{c,r}];
-      for(const q of cells){ if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) continue;
-        g.fillStyle(col,0.30); this._diamond(g,q.c,q.r); g.fillPath();
-        g.lineStyle(2,col,0.95); this._diamond(g,q.c,q.r); g.strokePath(); } }
+      this._paintCells(cells, ok?0x33ffcc:0xe0674e); }
   }
-  toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode); this.trash.setVisible(this.editMode); if(this.hoverGfx){ this.hoverGfx.clear(); this.hoverGfx.setVisible(false); }
+  /* プレビューのマス塗り(置ける=緑/置けない=赤)。設置プレビューと移動プレビューで共用 */
+  _paintCells(cells,col){ const g=this.hoverGfx;
+    for(const q of cells){ if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) continue;
+      g.fillStyle(col,0.30); this._diamond(g,q.c,q.r); g.fillPath();
+      g.lineStyle(2,col,0.95); this._diamond(g,q.c,q.r); g.strokePath(); } }
+  toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode); this.trash.setVisible(this.editMode);
+    if(!this.editMode) this.cancelMove();   // 編集を抜けたら移動モードも解除(元の位置のまま)
+    if(this.hoverGfx){ this.hoverGfx.clear(); this.hoverGfx.setVisible(false); }
     for(const e of this.placed){ this.editMode?this._enableDrag(e):this._disableDrag(e); } return this.editMode; }
   /* 窓オブジェクトを座標で定義(左壁 u=0)。床エッジ uvXY(0,v) を基準に壁の高さ方向へ立ち上げる。
      光源(採光の床帯・月/星のマスク)はすべてこの窓定義から導出する。 */
