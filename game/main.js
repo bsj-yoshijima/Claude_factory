@@ -91,6 +91,9 @@ const PROP_SPAN = {
 // `<テーマ3文字>_<スロット>` の命名なので、末尾から引ける。
 // テーブルはソファとセットで置くので、ソファと同じ2コマにして大きさを揃える
 const FURN_SPAN = { chair:1, table:2, shelf:1, sofa:2, rug:2, lamp:2, plant:2 };
+// ラグは床に敷くだけの平物。セルを占有しないので上に家具を置け、キャラも上を歩ける。
+// 汎用の 'rug' と各テーマの '<pre>_rug' が対象。
+const isFlatProp = (sub)=> /(^|_)rug$/.test(String(sub));
 const propSpan = (name)=> PROP_SPAN[name] || FURN_SPAN[String(name).split('_')[1]] || 1;
 window.PROP_SPAN = PROP_SPAN;   // ショップ表示(factory-phaser.html)から参照
 // 収納(=在庫に戻す)の対象。在庫を持つ種類だけ。絵文字装飾やガチャ景品は在庫が無く、
@@ -243,9 +246,13 @@ class Main extends Phaser.Scene {
       const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
       objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
     } else if(e.kind==='prop'){
-      const img=this.add.image(p.x,p.y,'prop_'+e.sub).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.35*Math.sqrt(propSpan(e.sub))*CELL/img.height).setTint(tint);
-      const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.09,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.0,img.displayWidth*0.46).setAlpha(0.5);
-      objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
+      const flat=isFlatProp(e.sub);                      // ラグ: 床に敷くだけ。影は出さず、同じセルの物より下に描く
+      const img=this.add.image(p.x,p.y,'prop_'+e.sub).setOrigin(0.5,1).setDepth(flat?p.y-1:p.y); img.setScale(1.35*Math.sqrt(propSpan(e.sub))*CELL/img.height).setTint(tint);
+      if(!flat){
+        const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.09,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.0,img.displayWidth*0.46).setAlpha(0.5);
+        objs.push(sh);
+      }
+      objs.push(img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
     } else if(e.kind==='emoji'){
       const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.05,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.72,CELL*0.32).setAlpha(0.42);
       const t=this.add.text(p.x,p.y-CELL*0.12,e.sub,{fontSize:Math.round(CELL*1.05)+'px'}).setOrigin(0.5,1).setDepth(p.y);
@@ -262,9 +269,12 @@ class Main extends Phaser.Scene {
   }
   addPlaced(kind, sub, extra){ extra=extra||{};
     if(kind==='deco' && !this.textures.exists('dec_'+sub)) return null;
-    const cell=(extra.cell && this.isFree(extra.cell.c,extra.cell.r)) ? extra.cell : this.freeCell();
+    // ラグはセルを占有しないので、埋まっているセルにも敷けるし、上に物も置ける
+    const flat = kind==='prop' && isFlatProp(sub);
+    const cell = flat ? (extra.cell || this.freeCell())
+                      : ((extra.cell && this.isFree(extra.cell.c,extra.cell.r)) ? extra.cell : this.freeCell());
     const e={ id: extra.id||('o'+(this._oid=(this._oid||0)+1)), kind, sub, lvl:extra.lvl||1, cell };
-    this._makeObjs(e); this.occ.add(K(cell.c,cell.r)); this.placed.push(e);
+    this._makeObjs(e); if(!flat) this.occ.add(K(cell.c,cell.r)); this.placed.push(e);
     if(this.editMode) this._enableDrag(e);
     if(!extra.silent){ const p=cellXY(cell.c,cell.r); this._spawnPop(p.x,p.y); }
     return e.id;
@@ -272,13 +282,16 @@ class Main extends Phaser.Scene {
   _detach(e){ for(const o of e.objs) o.destroy();
     if(e._lit){ const i=this.lit.findIndex(x=>x.sp===e._lit); if(i>=0)this.lit.splice(i,1); }
     if(e.kind==='machine'){ const i=this.machineCells.findIndex(m=>m.c===e.cell.c&&m.r===e.cell.r); if(i>=0)this.machineCells.splice(i,1); } }
+  // ラグは占有していないので、撤去や移動のときに同じセルの物の占有を消さないよう分岐する
+  isFlat(e){ return e.kind==='prop' && isFlatProp(e.sub); }
   removeItem(id){ const i=this.placed.findIndex(e=>e.id===id); if(i<0)return false; const e=this.placed[i];
     if(this.sel) this.sel.delete(id);
-    this._detach(e); this.occ.delete(K(e.cell.c,e.cell.r)); this.placed.splice(i,1); return true; }
+    this._detach(e); if(!this.isFlat(e)) this.occ.delete(K(e.cell.c,e.cell.r)); this.placed.splice(i,1); return true; }
   moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
-    const same=(e.cell.c===c&&e.cell.r===r); if(!same && !this.isFree(c,r)) return false;
-    this._detach(e); this.occ.delete(K(e.cell.c,e.cell.r));
-    e.cell={c,r}; this._makeObjs(e); this.occ.add(K(c,r));
+    const flat=this.isFlat(e), same=(e.cell.c===c&&e.cell.r===r);
+    if(!flat && !same && !this.isFree(c,r)) return false;
+    this._detach(e); if(!flat) this.occ.delete(K(e.cell.c,e.cell.r));
+    e.cell={c,r}; this._makeObjs(e); if(!flat) this.occ.add(K(c,r));
     if(this.editMode) this._enableDrag(e); return true; }
   getLayout(){ return this.placed.map(e=>({id:e.id,kind:e.kind,sub:e.sub,lvl:e.lvl,c:e.cell.c,r:e.cell.r})); }
   buildLayout(list){ for(const e of this.placed.slice()) this.removeItem(e.id);
