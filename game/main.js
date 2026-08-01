@@ -363,6 +363,9 @@ class Main extends Phaser.Scene {
     const gl=(u0,v0,u1,v1)=>{ const a=uvXY(u0,v0),b=uvXY(u1,v1); this.editGrid.beginPath(); this.editGrid.moveTo(a.x,a.y); this.editGrid.lineTo(b.x,b.y); this.editGrid.strokePath(); };
     for(let c=0;c<=GU;c++) gl(c/GU,0,c/GU,1);   // 縦の目地(13本)
     for(let r=0;r<=GV;r++) gl(0,r/GV,1,r/GV);   // 横の目地(13本)
+    // マスハイライト(設置先=緑/赤・設置済み=占有マス)。床の上・オブジェクトの下。オブジェクトが四角の中に入るのが見える。
+    this.hoverGfx=this.add.graphics().setDepth(-1).setVisible(false);
+    this.input.on('pointermove',(po)=>this._drawHover(po));
     this.trash=this.add.container(72,H-52,[ this.add.rectangle(0,0,124,72,0x3a1418,0.85).setStrokeStyle(2,0xe05a4e), this.add.text(0,0,'🗑 ここへ撤去',{fontSize:'13px',color:'#ffd0c8'}).setOrigin(0.5) ]).setDepth(8600).setVisible(false);
     this._trashRect=new Phaser.Geom.Rectangle(10,H-88,124,74);
     // 空き床クリックで、パレットで選択中のアイテムを設置
@@ -383,7 +386,20 @@ class Main extends Phaser.Scene {
   }
   _enableDrag(e){ if(e.fixed)return; const m=e.main; if(!m)return; m._e=e; m.setInteractive({useHandCursor:true}); this.input.setDraggable(m,true); }
   _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; }
-  toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode); this.trash.setVisible(this.editMode);
+  _diamond(g,c,r){ const p0=uvXY(c/GU,r/GV),p1=uvXY((c+1)/GU,r/GV),p2=uvXY((c+1)/GU,(r+1)/GV),p3=uvXY(c/GU,(r+1)/GV);
+    g.beginPath(); g.moveTo(p0.x,p0.y); g.lineTo(p1.x,p1.y); g.lineTo(p2.x,p2.y); g.lineTo(p3.x,p3.y); g.closePath(); }
+  _drawHover(po){ const g=this.hoverGfx; if(!g)return;
+    if(!this.editMode){ g.clear(); g.setVisible(false); return; }
+    g.clear(); g.setVisible(true);
+    g.fillStyle(0x7fe6ff,0.10);   // 設置済みマスをうっすら塗る(=各オブジェクトが入っている四角)
+    for(const e of this.placed){ if(e.kind==='outlet')continue; this._diamond(g,e.cell.c,e.cell.r); g.fillPath(); }
+    if(window.__editSel && po){ const uv=screenToIso(po.x,po.y);
+      const c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1);
+      const free=this.isFree(c,r); const col=free?0x33ffcc:0xe0674e;
+      g.fillStyle(col,0.30); this._diamond(g,c,r); g.fillPath();
+      g.lineStyle(2,col,0.95); this._diamond(g,c,r); g.strokePath(); }
+  }
+  toggleEdit(on){ this.editMode=(on==null)?!this.editMode:!!on; this.editGrid.setVisible(this.editMode); this.trash.setVisible(this.editMode); if(this.hoverGfx){ this.hoverGfx.clear(); this.hoverGfx.setVisible(false); }
     for(const e of this.placed){ this.editMode?this._enableDrag(e):this._disableDrag(e); } return this.editMode; }
   /* 窓オブジェクトを座標で定義(左壁 u=0)。床エッジ uvXY(0,v) を基準に壁の高さ方向へ立ち上げる。
      光源(採光の床帯・月/星のマスク)はすべてこの窓定義から導出する。 */
