@@ -90,6 +90,7 @@ class Main extends Phaser.Scene {
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
     for(const s of SKINS) if(s.id!=='none') this.load.image('hat_'+s.id, `assets/hat-${s.id}.png`);   // 被り物。未生成でもPhaserは欠損扱い→描画側でexistsチェック
+    this.load.json('hatfit','assets/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る
     for(const m of MACHINES) this.load.image(m, `assets/obj_${m}_d0.png`);
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     this.load.image('belt_seg','assets/belt_seg.png');
@@ -442,8 +443,10 @@ class Main extends Phaser.Scene {
     a.hatBaseY = HAT_BASE_Y + (pose==='sit'?1:0);
     const has = a.skinId && a.skinId!=='none' && this.textures.exists('hat_'+a.skinId);
     if(has){
-      if(!a.hat){ a.hat=this.add.sprite(a.sp.x,a.sp.y,'hat_'+a.skinId).setOrigin(0.5,1); }
+      if(!a.hat){ a.hat=this.add.sprite(a.sp.x,a.sp.y,'hat_'+a.skinId); }
       else if(a.hat.texture.key!=='hat_'+a.skinId){ a.hat.setTexture('hat_'+a.skinId); }
+      const hf=(this.cache.json.get('hatfit')||{})[a.skinId];
+      a.hat.setOrigin(hf&&typeof hf.cx==='number'?hf.cx:0.5, 1);   // ツバ中心=頭に載る中心。飾りが非対称でも中央に被る
       const nw=a.hat.texture.getSourceImage().width;
       a.hat.setScale((HAT_W_DOT*DOTP*a.scl)/nw).setVisible(true);
     } else if(a.hat){ a.hat.setVisible(false); }
