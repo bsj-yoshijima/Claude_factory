@@ -24,6 +24,7 @@ const ev=async x=>{const r=await send('Runtime.evaluate',{expression:x,returnByV
 const mouse=(type,x,y)=>send('Input.dispatchMouseEvent',{type,x,y,button:'none',buttons:0});
 let fail=0; const ok=(c,m)=>{console.log((c?'  ok  ':'FAIL  ')+m); if(!c)fail++;};
 
+const window0=JSON.parse(await ev(`JSON.stringify({w:innerWidth,h:innerHeight})`));
 console.log('=== ボタン操作 ===');
 await ev(`document.getElementById('menuBtn').click()`); await sleep(200);
 ok(await ev(`document.getElementById('menu').classList.contains('show')`), 'メニューボタン → メニューが開く');
@@ -34,41 +35,36 @@ await ev(`document.getElementById('editFab').click()`); await sleep(400);
 ok(await ev(`window.__scene.editMode===true`), 'レイアウト編集ボタン → 編集モードON');
 ok(await ev(`document.getElementById('palette').classList.contains('show')`), '編集パレットが出る');
 
-console.log('\n=== #palette がキャンバスのドラッグを塞がない ===');
-// パレットは盤面の下1/4に重なる。枠・余白・アイテムの隙間が mousemove を吸うと Phaser の
-// ポインタが更新されず、その領域でドラッグが固まる（既存バグ）。
+console.log('\n=== 編集中は工場が右へ寄り、左にパレットが出る ===');
+// 以前はパレットを盤面に重ねていて、枠や余白が mousemove を吸うとドラッグが固まった。
+// いまは左のサイドバーなので「盤面と一切重ならない」ことを直接確かめる。
 const geo=JSON.parse(await ev(`(()=>{const p=document.getElementById('palette').getBoundingClientRect(),
   c=document.querySelector('#game canvas').getBoundingClientRect();
-  return JSON.stringify({pl:p.left,pt:p.top,pw:p.width,ph:p.height,cl:c.left,ct:c.top,cw:c.width,ch:c.height});})()`));
+  return JSON.stringify({pl:p.left,pt:p.top,pr:p.right,pw:p.width,ph:p.height,
+    cl:c.left,ct:c.top,cr:c.right,cw:c.width,ch:c.height,vw:innerWidth});})()`));
 ok(geo.pw>0&&geo.ph>0, `パレットの領域を取得 (${Math.round(geo.pw)}×${Math.round(geo.ph)})`);
-// パレット∩キャンバスを格子状に叩いて、素通りしない要素が「押せるUI」だけか調べる
-const probe=await ev(`(()=>{const p=document.getElementById('palette').getBoundingClientRect(),
-  cv=document.querySelector('#game canvas'), c=cv.getBoundingClientRect(); let hit=0; const bad=[];
+ok(Math.round(geo.pl)===0 && geo.ph>=window0.h*0.9, `パレットは画面左に張り付いた縦パネル (left=${Math.round(geo.pl)}, h=${Math.round(geo.ph)})`);
+ok(geo.cl>=geo.pr-1, `工場はパレットの右へ寄っている (canvas.left=${Math.round(geo.cl)} ≧ palette.right=${Math.round(geo.pr)})`);
+ok(geo.cr<=geo.vw+1, `寄せても工場が画面からはみ出さない (canvas.right=${Math.round(geo.cr)} ≦ ${geo.vw})`);
+// パレット領域を格子状に叩いて、キャンバスと重なる点が1つも無いこと
+const over=+await ev(`(()=>{const p=document.getElementById('palette').getBoundingClientRect(),
+  c=document.querySelector('#game canvas').getBoundingClientRect(); let n=0;
   for(let i=1;i<12;i++) for(let j=1;j<12;j++){
-    const x=Math.round(p.left+p.width*i/12), y=Math.round(p.top+p.height*j/12);
-    if(x<c.left||x>c.right||y<c.top||y>c.bottom) continue;
-    const el=document.elementFromPoint(x,y); if(!el) continue;
-    if(el===cv){ hit++; continue; }
-    if(el.closest('.pitem')||el.closest('.pcat .c')) continue;
-    bad.push(el.className||el.id||el.tagName); }
-  return JSON.stringify({hit,bad:bad.slice(0,4)});})()`);
-const pr=JSON.parse(probe);
-ok(pr.hit>0, `パレットの下でもキャンバスに届く点がある (${pr.hit}点)`);
-ok(pr.bad.length===0, `塞いでいるのは押せるUIだけ${pr.bad.length?' → '+pr.bad.join(','):''}`);
-// 実際にマウスを動かして Phaser のポインタが追従するか（本命）
-const gapX=Math.round(geo.pl+3), gapY=Math.round(geo.pt+geo.ph*0.5);   // パレットの左余白＝素通りすべき所
-await mouse('mouseMoved',Math.round(geo.cl+40),Math.round(geo.ct+40)); await sleep(120);
-const p0=await ev(`Math.round(window.__scene.input.activePointer.x)`);
-await mouse('mouseMoved',gapX,gapY); await sleep(120);
-const p1=await ev(`Math.round(window.__scene.input.activePointer.x)+','+Math.round(window.__scene.input.activePointer.y)`);
-const wantX=Math.round((gapX-geo.cl)*(await ev(`window.__scene.scale.width`))/geo.cw);
-ok(String(p1).split(',')[0]!==String(p0) && Math.abs(+String(p1).split(',')[0]-wantX)<6,
-   `パレットの上でも Phaser のポインタが更新される (x ${p0} → ${p1} / 期待 x≈${wantX})`);
-// 非表示のときはそもそも当たらない
-await ev(`document.getElementById('editFab').click()`); await sleep(300);
+    const x=p.left+p.width*i/12, y=p.top+p.height*j/12;
+    if(x>=c.left&&x<=c.right&&y>=c.top&&y<=c.bottom) n++; }
+  return n;})()`);
+ok(over===0, `パレットと盤面が重ならない (重なり ${over}点)`);
+// 寄せたあとも Phaser の当たり判定が付いてくるか（transform で動かしているので本命）
+const midX=Math.round((geo.cl+geo.cr)/2), midY=Math.round(geo.ct+geo.ch*0.4);
+await mouse('mouseMoved',midX,midY); await sleep(200);
+const got=String(await ev(`Math.round(window.__scene.input.activePointer.x)`));
+const wantX=Math.round((midX-geo.cl)*(await ev(`window.__scene.scale.width`))/geo.cw);
+ok(Math.abs(+got-wantX)<8, `寄せたあともポインタ座標が合う (x ${got} / 期待 ≈${wantX})`);
+// 閉じると元の位置に戻る
+await ev(`document.getElementById('editFab').click()`); await sleep(700);
 ok(await ev(`window.__scene.editMode===false`), 'もう一度押すと編集モードOFF');
-ok(await ev(`(()=>{const cv=document.querySelector('#game canvas');
-  return document.elementFromPoint(${gapX},${gapY})===cv;})()`), 'パレット非表示のときも同じ点がキャンバスに届く');
+ok(await ev(`document.getElementById('palette').getBoundingClientRect().right<=1`), 'パレットは左へ引っ込む');
+ok(await ev(`!document.getElementById('game').style.transform`), '工場の寄せも戻る');
 
 console.log('\n=== 製造機クリック → 設定パネル（中身は🏭製造の一覧と同じ行 + 配置） ===');
 const mid=await ev(`window.__scene.placed.find(x=>x.kind==='machine').id`);

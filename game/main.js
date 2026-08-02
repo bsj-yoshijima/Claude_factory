@@ -48,7 +48,7 @@ const MACH_GEO = { inset:0.10, height:0.42, slot:0.52 };
 const MACH_SIZES = [2,3,4,5];
 const KINDS = ['machine','deco','prop','emoji','prize'];   // 設置できる種類（belt/outlet は廃止）
 const MACH_MIN = 2;
-const MACH_ART = ['normal','arabia','diner','halloween','scifi'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
+const MACH_ART = ['normal','arabia','diner','halloween','scifi','egypt','western'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
 const machSize = (variant)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(variant||'').replace(/\D/g,''))||MACH_MIN));
 
 /* ===== 素材の見た目 =====
@@ -1076,7 +1076,9 @@ class Main extends Phaser.Scene {
   }
 }
 
-new Phaser.Game({
+// HTML側が #game を CSS transform で動かす(編集モードの寄せ)。transform はレイアウトを
+// 変えないので Phaser は気づけない。境界を取り直せるよう Game を公開しておく。
+window.__game = new Phaser.Game({
   type: Phaser.AUTO, parent:'game', width:W, height:H, backgroundColor:'#0c1014', pixelArt:true,
   scale:{ mode:Phaser.Scale.FIT, autoCenter:Phaser.Scale.CENTER_BOTH }, scene:[Main],
 });

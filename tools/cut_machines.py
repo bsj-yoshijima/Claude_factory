@@ -53,9 +53,13 @@ MIN_AREA = 2000               # これ未満の連結成分はゴミとして捨
 SPOT_TEST = {
     'halloween': lambda p: p[3] > 128 and max(p[:3]) < 60,                                                    # ホッパーの暗い口
     'scifi':     lambda p: p[3] > 128 and max(p[:3]) < 70,                                                    # 吸気リングの暗い口
-    'onsen':     lambda p: p[3] > 128 and p[1] > 140 and p[2] > 140 and p[0] < 170 and p[1]-p[0] > 25,        # 湯(ターコイズ)
+    'egypt':     lambda p: p[3] > 128 and 190 < p[0] < 232 and 118 < p[1] < 158 and p[2] < 45,                 # 漏斗の内側(琥珀)
+    'western':   lambda p: p[3] > 128 and max(p[:3]) < 45,                                                    # 漏斗の黒い口(影と繋がるので暗めに)
 }
 SPOT_MIN_AREA = 120
+
+# 投入口は必ず筐体の上側にある。下部の影を誤検出しないよう、bboxの上から何割までを見るか。
+SPOT_TOP = {'western': 0.62}
 
 
 def main_js_consts():
@@ -307,17 +311,22 @@ def clean_bay(sp, D, bad, mid_x):
     return Image.fromarray(out, 'RGBA')
 
 
-def compose(sp, cln, org, D, n):
-    """Nマス機を合成する。画面上の縦線 x=cx で切り、幅Dxの縦帯を N-2 回はさむ。
+def compose(sp, cln, org, D, n, m=2):
+    """Mマス機の絵からNマス機を合成する。画面上の縦線 x=cx で切り、幅Dxの縦帯を N-M 回はさむ
+    (N<M なら逆に |N-M| 本のベイを飛ばして詰める)。
     領域kは元絵の (k*Dx, k*Dy) 平行移動そのもの(整数)なので、補間は一切起きない。"""
     Dx, Dy = D
     a = np.asarray(sp.convert('RGBA'))
     b = np.asarray(cln.convert('RGBA'))
     h, w, _ = a.shape
-    W2, H2 = w + (n - 2) * Dx, h + (n - 2) * Dy
+    rep = n - m
+    # ベイを詰める(rep<0)ときは手前側が上へ寄るだけで、奥側は元の高さのまま残る。
+    # H2 まで縮めると奥側の下端を切り落としてしまうので、縮めるのは横だけ。
+    W2, H2 = w + rep * Dx, h + max(0, rep) * Dy
     X, Y = np.meshgrid(np.arange(W2), np.arange(H2))
     cx = int(round(org[0] + CUT * Dx))
-    k = np.clip(np.ceil((X - cx) / Dx - 1e-9).astype(np.int64), 0, n - 2)
+    steps = np.clip(np.ceil((X - cx) / Dx - 1e-9).astype(np.int64), 0, abs(rep))
+    k = steps if rep >= 0 else -steps
     sx, sy = X - k * Dx, Y - k * Dy
     inside = (sx >= 0) & (sx < w) & (sy >= 0) & (sy < h)
     cy, cxx = np.clip(sy, 0, h - 1), np.clip(sx, 0, w - 1)
@@ -331,14 +340,42 @@ def compose(sp, cln, org, D, n):
     return im.crop(bb), (org[0] - bb[0], org[1] - bb[1])
 
 
+ANGLE_TOL = 0.25   # ベイの傾き(|dy/dx|)が多数派からこの割合を超えて外れたら合成元にしない
+
+
+def pick_source(found):
+    """合成元の台を選ぶ。基本は2マス機だが、そこだけ絵のアイソメ角が多数派から外れていたら
+    (生成AIがたまに1台だけ違う角度で描く)、角度が多数派に近い台に切り替える。"""
+    ang = {}
+    for i, (n, _sp, spots) in enumerate(found):
+        if not spots or len(spots) < 2:
+            continue
+        cs = sorted([s[0] for s in spots], key=lambda c: c[0])
+        dx = cs[-1][0] - cs[0][0]
+        if dx > 4:
+            ang[i] = abs(cs[-1][1] - cs[0][1]) / dx
+    if 0 not in ang or len(found[0][2]) != 2:
+        return None
+    if len(ang) < 3:
+        return 0
+    med = sorted(ang.values())[len(ang) // 2]
+    if med > 0 and abs(ang[0] - med) / med <= ANGLE_TOL:
+        return 0
+    return min(ang, key=lambda i: abs(ang[i] - med))
+
+
 def synth_fit(theme, found, W, H, GU, GV, iso):
     """2マス機の絵からNマス機を合成する。{'2':{ax,ay},...} を返す。無理なら None"""
     step_x = abs(iso['ux'] * W / GU)
     step_y = abs(iso['uy'] * H / GU)
-    sp, spots = found[0][1], found[0][2]                    # 幅が最小 = 2マス機
-    if not spots or len(spots) != 2:
+    src = pick_source(found)
+    if src is None:
         return None
+    m, sp, spots = found[src]
+    if m != 2:
+        print(f'   ※2マス機だけ絵の角度が浮いていたので、{m}マス機を合成元にした')
     cs = sorted([s[0] for s in spots], key=lambda c: c[0])
+    cs = [cs[0], cs[1]]                                     # 隣り合う2つの投入口 = 1ベイ
     if cs[1][1] < cs[0][1]:                                 # 長軸が右斜め上 → 左右反転
         sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
         cs = [(sp.width - 1 - c[0], c[1]) for c in cs][::-1]
@@ -361,7 +398,7 @@ def synth_fit(theme, found, W, H, GU, GV, iso):
     cln = clean_bay(sp, (Dx, Py), bad, org[0] + CUT * Dx)
     out_fit = {}
     for n, _sp, _s in found:
-        im, o = compose(sp, cln, org, (Dx, Py), n)
+        im, o = compose(sp, cln, org, (Dx, Py), n, m)
         ow, oh = max(1, round(im.width * scale)), max(1, round(im.height * scale))
         res = im.resize((ow, oh), Image.LANCZOS)
         res.save(os.path.join(OUT, f'mach-{theme}-s{n}.png'))
@@ -397,7 +434,11 @@ def main():
         found = []
         for n, bb in zip(SIZES, picks):
             sp = sheet.crop(bb)
-            spots = pick_spots(spot_blobs(sp, test), n) if test else None
+            cands = spot_blobs(sp, test) if test else []
+            top = SPOT_TOP.get(theme)
+            if top:
+                cands = [c for c in cands if c[0][1] < sp.height * top]
+            spots = pick_spots(cands, n) if test else None
             found.append((n, sp, spots))
         measured = [abs((s[-1][0][0] - s[0][0][0]) / (n - 1)) for n, _, s in found if s and n > 1]
         if len(measured) >= 2:
