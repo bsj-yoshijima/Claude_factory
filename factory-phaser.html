@@ -11,10 +11,13 @@
     font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);overflow:hidden}
   #wrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
   /* 編集中は工場が右へスッと寄り、空いた左にパレットが入る。
-     Phaser は Scale.FIT で親要素を見ているので、幅そのものを animate すると
-     再フィットが 500ms 間隔のポーリングでしか走らずカクつく。
-     見た目は transform で動かし、当たり判定は JS 側で scale.refresh() し直す。 */
-  #game{width:min(1300px,96vw);aspect-ratio:1024/572;will-change:transform;transition:transform var(--slide)}
+     縮小して逃がすのではなく、パレットを除いた残り幅いっぱいまで盤面を広げる
+     (margin-left で右へ寄せると、flex の中央揃えがパレットの右側を基準に効く)。
+     Phaser は Scale.FIT で親要素を見ているが、再フィットは 500ms ポーリングなので
+     アニメ中は JS から毎フレーム scale.refresh() を叩いて追従させる。 */
+  #game{width:min(1300px,96vw);aspect-ratio:1024/572;margin-left:0;
+        transition:width var(--slide),margin-left var(--slide)}
+  #wrap.editing #game{width:min(1300px,calc(100vw - var(--palw) - 32px));margin-left:var(--palw)}
   #game canvas{image-rendering:pixelated;border-radius:8px;box-shadow:0 24px 80px rgba(0,0,0,.6)}
   .tab{background:var(--panel);color:var(--mint);border:1px solid var(--edge);border-radius:8px;padding:5px 12px;cursor:pointer;backdrop-filter:blur(3px)}
   .tab:hover{border-color:var(--mint)}
@@ -133,7 +136,7 @@
   .arrow{color:#5f7a72;font-size:16px}
   /* 編集パレット。盤面に重ねると工場が隠れるので、左からスライドインする縦のサイドバーにした。
      盤面とは領域が重ならないので、以前必要だった pointer-events:none の逃がしは不要。 */
-  #palette{position:fixed;left:0;top:0;bottom:0;width:var(--palw);z-index:8;display:flex;flex-direction:column;gap:7px;
+  #palette{position:fixed;left:0;top:0;bottom:0;width:var(--palw);box-sizing:border-box;z-index:8;display:flex;flex-direction:column;gap:7px;
     background:var(--panel);border-right:1px solid var(--edge);padding:14px 12px;backdrop-filter:blur(6px);
     overflow-y:auto;overscroll-behavior:contain;box-shadow:8px 0 32px rgba(0,0,0,.45);
     transform:translateX(-100%);transition:transform var(--slide);will-change:transform}
@@ -2013,29 +2016,21 @@ window.__openMachine=(id)=>{
 };
 /* ===== 編集モードの寄せ =====
    パレットを盤面に重ねると工場が隠れるので、編集中は工場を右へスッと寄せ、空いた左にパレットを出す。
-   幅を animate すると Phaser(Scale.FIT) の再フィットが 500ms ポーリングでしか走らずカクつくので、
-   見た目は transform で動かす。transform はレイアウトを変えないぶん Phaser が気づかない＝
-   キャンバスの当たり判定が古いままになるので、動いている間だけ scale.refresh() を回して追従させる。 */
+   寄せ方は CSS(#wrap.editing #game の width と margin-left)に任せ、盤面は残り幅いっぱいまで広げる。
+   Phaser(Scale.FIT) は親要素の大きさを 500ms ごとのポーリングでしか見に行かないので、
+   アニメ中だけ毎フレーム scale.refresh() を叩いて、描画も当たり判定もぬるっと追従させる。 */
 const gameEl=document.getElementById('game'), wrapEl=document.getElementById('wrap');
-function gameShift(){
-  const P=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--palw'))||336;
-  const w=gameEl.offsetWidth||1;                             // offsetWidth は transform の影響を受けない
-  const s=Math.min(1,(window.innerWidth-P-24)/w);            // 右の余白に収まらない分だけ縮める
-  return `translateX(${Math.round(P/2)}px) scale(${s.toFixed(4)})`;
-}
-function slideGame(on){
-  gameEl.style.transform = on ? gameShift() : '';
+function slideGame(){
   const g=window.__game; if(!g||!g.scale) return;
-  const t0=performance.now();                                 // トランジションが終わるまで境界を取り直す
-  const tick=()=>{ g.scale.refresh(); if(performance.now()-t0<560) requestAnimationFrame(tick); };
+  const t0=performance.now();
+  const tick=()=>{ g.scale.refresh(); if(performance.now()-t0<620) requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 }
-window.addEventListener('resize',()=>{ if(wrapEl.classList.contains('editing')) gameEl.style.transform=gameShift(); });
 /* 編集モードのON/OFF表示をシーンに合わせる。Eキーや「✥移動」でシーン側から切り替わることがある */
 function syncEditFab(){ const on=!!(window.__scene&&window.__scene.editMode), fab=document.getElementById('editFab');
   if(fab.classList.contains('on')===on) return;              // 変化したときだけ描き直す
   fab.classList.toggle('on',on); paletteEl.classList.toggle('show',on);
-  wrapEl.classList.toggle('editing',on); slideGame(on);
+  wrapEl.classList.toggle('editing',on); slideGame();
   if(on) renderPalette(); else { editSel=null; window.__editSel=null; } }
 function toggleEditMode(){ if(!window.__scene){ toast('準備中…'); return; }
   const on=window.__scene.toggleEdit(); syncEditFab();
@@ -2070,7 +2065,7 @@ loadGame().then(async ()=>{
     saveGame(); updateBadge(); toast('✅ 全背景・全アイテムを解放しました（在庫）');
   }
   if(q.get('edit')){ paletteEl.classList.add('show'); document.getElementById('editFab').classList.add('on');
-    wrapEl.classList.add('editing'); slideGame(true); renderPalette(); }
+    wrapEl.classList.add('editing'); slideGame(); renderPalette(); }
   if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop'));
 });
 </script>

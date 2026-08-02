@@ -46,6 +46,9 @@ ok(geo.pw>0&&geo.ph>0, `パレットの領域を取得 (${Math.round(geo.pw)}×$
 ok(Math.round(geo.pl)===0 && geo.ph>=window0.h*0.9, `パレットは画面左に張り付いた縦パネル (left=${Math.round(geo.pl)}, h=${Math.round(geo.ph)})`);
 ok(geo.cl>=geo.pr-1, `工場はパレットの右へ寄っている (canvas.left=${Math.round(geo.cl)} ≧ palette.right=${Math.round(geo.pr)})`);
 ok(geo.cr<=geo.vw+1, `寄せても工場が画面からはみ出さない (canvas.right=${Math.round(geo.cr)} ≦ ${geo.vw})`);
+// 縮めて逃がすのではなく、パレットを除いた残り幅いっぱいに広げる（余白を残さない）
+ok(geo.vw-geo.cr <= (geo.cl-geo.pr)+6, `右の余白が左と同程度まで詰まっている (左${Math.round(geo.cl-geo.pr)}px / 右${Math.round(geo.vw-geo.cr)}px)`);
+ok(geo.cw >= (geo.vw-geo.pw)*0.9, `盤面が残り幅の9割以上を使っている (canvas ${Math.round(geo.cw)}px / 残り ${Math.round(geo.vw-geo.pw)}px)`);
 // パレット領域を格子状に叩いて、キャンバスと重なる点が1つも無いこと
 const over=+await ev(`(()=>{const p=document.getElementById('palette').getBoundingClientRect(),
   c=document.querySelector('#game canvas').getBoundingClientRect(); let n=0;
@@ -64,7 +67,7 @@ ok(Math.abs(+got-wantX)<8, `寄せたあともポインタ座標が合う (x ${g
 await ev(`document.getElementById('editFab').click()`); await sleep(700);
 ok(await ev(`window.__scene.editMode===false`), 'もう一度押すと編集モードOFF');
 ok(await ev(`document.getElementById('palette').getBoundingClientRect().right<=1`), 'パレットは左へ引っ込む');
-ok(await ev(`!document.getElementById('game').style.transform`), '工場の寄せも戻る');
+ok(await ev(`!document.getElementById('wrap').classList.contains('editing')`), '工場の寄せも戻る');
 
 console.log('\n=== 製造機クリック → 設定パネル（中身は🏭製造の一覧と同じ行 + 配置） ===');
 const mid=await ev(`window.__scene.placed.find(x=>x.kind==='machine').id`);
