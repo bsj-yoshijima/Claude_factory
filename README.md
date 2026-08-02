@@ -12,7 +12,18 @@
 
 ## 使い方
 
-依存ゼロ（Node標準モジュールのみ）。
+### マルチユーザー版（Postgres + Google SSO）
+
+各ユーザーが自分の工場を持つ版。詳細は [docs/multiuser.md](docs/multiuser.md)。
+
+```bash
+npm install && docker compose up -d && node server/index.mjs
+# → http://localhost:4321
+```
+
+### 単一ユーザー版（依存ゼロ・ローカル専用）
+
+Node標準モジュールのみ。`~/.claude/sessions/*.json` を直接読む。
 
 ```bash
 node server.mjs
@@ -222,7 +233,9 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 
 | ファイル | 内容 |
 |---|---|
-| `server.mjs` | セッションを読んで配信＋静的ファイル配信する常駐サーバ |
+| `server/*.mjs` | **マルチユーザー版サーバ**（Postgres / OTLP / hooks / ゲームAPI）。[docs/multiuser.md](docs/multiuser.md) |
+| `db/schema.sql` | マルチユーザー版のスキーマ |
+| `server.mjs` | 旧・単一ユーザー版。セッションを読んで配信＋静的ファイル配信する常駐サーバ |
 | `factory-phaser.html` / `game/main.js` | **現行のゲーム画面**（Phaser版。`/` と `/next`） |
 | `metrics.html` / `otel.mjs` | 📊 メトリクス（`/metrics`）。OTel 受信 + WP / スコアカード集計 |
 | `assets/room-*.png` | Stitch 生成のテーマ別背景（`docs/stitch-prompts.md` にプロンプト） |

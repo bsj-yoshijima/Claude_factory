@@ -929,7 +929,11 @@ class Main extends Phaser.Scene {
     }
   }
   async poll(){
-    let d=null; try{ const r=await fetch('/api/sessions',{cache:'no-store'}); d=await r.json(); }catch(_){}
+    // マルチユーザー版では factory-phaser.html が /api/state で一括取得しているので
+    // そこから受け取る（同じ情報を2本のエンドポイントで取りに行かない）
+    let d=null;
+    try{ d = (typeof window.__agentFeed==='function') ? window.__agentFeed() : null; }catch(_){}
+    if(!d){ try{ const r=await fetch('/api/sessions',{cache:'no-store'}); d=await r.json(); }catch(_){} }
     if(!d) d={workers:[{sessionId:'d1',project:'eventos-api',working:true},{sessionId:'d2',project:'metabase',working:true},{sessionId:'d3',project:'olc-fw',working:true},{sessionId:'d4',project:'checkin',working:false},{sessionId:'d5',project:'seed',working:false},{sessionId:'d6',project:'news',working:false}]};
     const present=new Set(); let busyN=0,idleN=0;
     (d.workers||[]).forEach((w,idx)=>{
