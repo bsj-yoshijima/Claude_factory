@@ -134,9 +134,9 @@ console.log('\n[3] 向き(dir)と重なり判定');
 s.buildLayout([]);
 const a3=s.addPlaced('machine','s3',{cell:{c:4,r:4},dir:'u'});
 ok(!!a3, 'u向き 3マス機を (4,4) に設置');
-ok(s.canPlace('machine',5,4,{sub:'s2'})===false, '占有中の (5,4) には置けない');
-ok(s.canPlace('machine',4,5,{sub:'s3',dir:'u'})===true, '隣の行 (4,5) には置ける');
-ok(s.canPlace('machine',10,4,{sub:'s3',dir:'u'})===false, '盤外にはみ出す配置は不可');
+ok(s.canPlace('machine',5,4,{variant:'s2'})===false, '占有中の (5,4) には置けない');
+ok(s.canPlace('machine',4,5,{variant:'s3',dir:'u'})===true, '隣の行 (4,5) には置ける');
+ok(s.canPlace('machine',10,4,{variant:'s3',dir:'u'})===false, '盤外にはみ出す配置は不可');
 ok(s.addPlaced('machine','s2',{cell:{c:5,r:4},dir:'v',strict:true})===null, '重なる指定は strict で拒否');
 ok(s.rotateMachine(a3)===true, '90°回転できる');
 ok(s.placed.find(x=>x.id===a3).dir==='v', '回転後 dir=v');
@@ -183,11 +183,11 @@ ok(s.getMachine(r5.id).product!==null, '復元後も判定できる');
 console.log('\n[8] 旧セーブの移行');
 const dropped=s.buildLayout([
   {id:'b1',kind:'belt',c:10,r:5},{id:'b2',kind:'belt',c:9,r:5},{id:'o1',kind:'outlet',c:11,r:5},
-  {id:'m1',kind:'machine',sub:'red',lvl:2,c:3,r:3},
+  {id:'m1',kind:'machine',variant:'red',lvl:2,c:3,r:3},
 ]);
 ok(dropped===3, `コンベア2+出荷口1=3件を破棄 → 実際 ${dropped}`);
 ok(machines().length===1, '製造機だけ残る');
-ok(machines()[0].sub==='s2', '旧4種(red)は最小の2マス機に読み替え');
+ok(machines()[0].variant==='s2', '旧4種(red)は最小の2マス機に読み替え');
 ok(machines()[0].lvl===2, 'レベルは維持');
 ok(s.getMachine(machines()[0].id).slots.length===2, 'スロットが2つ用意される');
 
@@ -242,8 +242,8 @@ console.log('\n[12] 製造機の移動（掴んで置き直す）');
   ok(s.editMode===true, '編集モードでなければ自動でONになる');
   ok(F().isMoving()===true, '移動モード中である');
 
-  ok(s.canPlace('machine',1,2,{sub:'s3',dir:'u',ignoreId:mv})===true, 'ignoreId で自分自身の占有は無視される');
-  ok(s.canPlace('machine',1,1,{sub:'s3',dir:'u'})===false, 'ignoreId なしなら自分と重なって不可');
+  ok(s.canPlace('machine',1,2,{variant:'s3',dir:'u',ignoreId:mv})===true, 'ignoreId で自分自身の占有は無視される');
+  ok(s.canPlace('machine',1,1,{variant:'s3',dir:'u'})===false, 'ignoreId なしなら自分と重なって不可');
 
   toasts.length=0;
   click(5,5);   // 他の製造機の上 = 置けない
@@ -323,7 +323,7 @@ console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と�
   ok(Phaser.Geom.Polygon.Contains(hit,c2.x,c2.y), '3マス目(占有の端)の中心も掴める');
   ok(Phaser.Geom.Polygon.Contains(hit,c0.x,c0.y-de._hgt*0.6), '筐体の高さぶん(床の外)も掴める');
   ok(!Phaser.Geom.Polygon.Contains(hit,pt(8,8).x,pt(8,8).y), '離れたマスは掴めない');
-  const hit2=s._machHit({kind:'machine',sub:'s2',dir:'u',cell:{c:5,r:5},_hgt:de._hgt});
+  const hit2=s._machHit({kind:'machine',variant:'s2',dir:'u',cell:{c:5,r:5},_hgt:de._hgt});
   ok(!Phaser.Geom.Polygon.Contains(hit2,c0.x,c0.y), '別の製造機の当たり判定には入らない');
 
   // -- 置ける先へドラッグして移動 --

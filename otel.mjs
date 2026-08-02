@@ -410,9 +410,9 @@ export function snapshot() {
   };
 
   // キー = ツール名 + 親/子。親と子を別行にして内訳が見えるようにする
-  const agg = new Map();   // key -> {tool, sub, ok, ng, wp}
+  const agg = new Map();   // key -> {tool, isSubagent, ok, ng, wp}
   const perUser = new Map();
-  const delegation = new Map();      // id -> {sub, all}
+  const delegation = new Map();      // id -> {viaSubagent, all}
   const minuteBuckets = new Map();   // `${id}|${分}` -> 生WP
   const addToMinute = (id, t, wp) => {
     const k = `${id}|${Math.floor(t / 60000)}`;
@@ -421,19 +421,19 @@ export function snapshot() {
   for (const e of toolEvents) {
     // Agent / Task 自身は「起動コスト」なので係数をかけない（入れ子でも二重に割り引かない）
     const isAgent = e.tool === 'Agent' || e.tool === 'Task';
-    const sub = !isAgent && inSubagent(e.sess, e.t);
-    const key = `${e.tool}|${sub}`;
+    const isSubagent = !isAgent && inSubagent(e.sess, e.t);
+    const key = `${e.tool}|${isSubagent}`;
     let g = agg.get(key);
-    if (!g) { g = { tool: e.tool, sub, ok: 0, ng: 0, wp: 0 }; agg.set(key, g); }
+    if (!g) { g = { tool: e.tool, isSubagent, ok: 0, ng: 0, wp: 0 }; agg.set(key, g); }
     if (!e.ok) { g.ng++; continue; }
-    const w = (WP.tool[e.tool] ?? WP.tool._default) * (sub ? WP.subagentFactor : 1);
+    const w = (WP.tool[e.tool] ?? WP.tool._default) * (isSubagent ? WP.subagentFactor : 1);
     g.ok++; g.wp += w;
     perUser.set(e.id, (perUser.get(e.id) || 0) + w);
     addToMinute(e.id, e.t, w);
     // 委譲率のための人ごとの内訳（係数はかけない生の件数）
     let ds = delegation.get(e.id);
-    if (!ds) { ds = { sub: 0, all: 0 }; delegation.set(e.id, ds); }
-    ds.all++; if (sub) ds.sub++;
+    if (!ds) { ds = { viaSubagent: 0, all: 0 }; delegation.set(e.id, ds); }
+    ds.all++; if (isSubagent) ds.viaSubagent++;
   }
   for (const e of metricWpEvents) addToMinute(e.id, e.t, e.wp);
 
@@ -458,10 +458,11 @@ export function snapshot() {
 
   const breakdown = [
     ...[...agg.values()].sort((a, b) => b.wp - a.wp).map(g => ({
-      label: `tool_result ${g.tool}${g.sub ? ' 〈子〉' : ''}`,
+      label: `tool_result ${g.tool}${g.isSubagent ? ' 〈子〉' : ''}`,
       count: g.ok,
-      weight: +((WP.tool[g.tool] ?? WP.tool._default) * (g.sub ? WP.subagentFactor : 1)).toFixed(2),
-      wp: g.wp, kind: 'tool', sub: g.sub,
+      weight: +((WP.tool[g.tool] ?? WP.tool._default)
+                * (g.isSubagent ? WP.subagentFactor : 1)).toFixed(2),
+      wp: g.wp, kind: 'tool', isSubagent: g.isSubagent,
       failed: g.ng, isDefaultWeight: WP.tool[g.tool] === undefined,
     })),
     { label: 'lines_of_code(added)', count: added, weight: WP.linesAdded, wp: added * WP.linesAdded, kind: 'metric' },
@@ -476,7 +477,7 @@ export function snapshot() {
      単一の合計値は作らない。多軸のまま並べてフロントで並べ替える。 */
   const scorecard = [...users.values()].map(u => {
     const s = u.sc;
-    const d = delegation.get(u.id) || { sub: 0, all: 0 };
+    const d = delegation.get(u.id) || { viaSubagent: 0, all: 0 };
     const lines = s.linesAdded + s.linesRemoved;
     const outcome = s.linesAdded + s.linesRemoved * SCORE.eff.removed + s.prs * SCORE.eff.prLines;
     const eligible = s.prs >= SCORE.minPrs && lines >= SCORE.minLines;
@@ -497,7 +498,7 @@ export function snapshot() {
       // 委譲率は total_tool_uses（実測）を優先し、無ければヒューリスティックにフォールバック
       delegationPct: s.subToolUses && s.toolsOk
         ? +(s.subToolUses / s.toolsOk * 100).toFixed(1)
-        : (d.all ? +(d.sub / d.all * 100).toFixed(1) : 0),
+        : (d.all ? +(d.viaSubagent / d.all * 100).toFixed(1) : 0),
       delegationSource: s.subToolUses ? 'subagent_completed' : 'heuristic',
       // 投入
       outputTokens: s.outputTokens, cacheReadTokens: s.cacheReadTokens, costUsd: +s.costUsd.toFixed(2),
@@ -529,7 +530,7 @@ export function snapshot() {
     },
     subagent: {
       windows: agentWindows.length,
-      toolsInside: [...agg.values()].filter(g => g.sub).reduce((s, g) => s + g.ok, 0),
+      toolsInside: [...agg.values()].filter(g => g.isSubagent).reduce((s, g) => s + g.ok, 0),
       factor: WP.subagentFactor,
     },
     series: [...series.values()].sort((a, b) => a.name.localeCompare(b.name) || b.value - a.value),

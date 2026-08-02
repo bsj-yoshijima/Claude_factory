@@ -14,7 +14,7 @@ if(!rarLine) throw new Error('const RAR= が見つからない');
 const ctx = vm.createContext({ console });
 vm.runInContext(
   rarLine + '\n' + cut('/* == CRAFT-DATA-START ==','/* == CRAFT-DATA-END == */')
-  + '\n;globalThis.$={GENRES,GENRE,SECRET_G,MATS,MAT,PRODS,PROD,RECIPES,SECRETS,BLOB,RAR,'
+  + '\n;globalThis.$={GENRES,GENRE,SECRET_G,MATS,MAT,PRODS,PROD,RECIPES,SECRETS,UNKNOWN_PRODUCT,RAR,'
   + 'genreOf,genresOfMats,normPool,poolFor,rollProduct};', ctx);
 const $ = ctx.$;
 
@@ -45,7 +45,7 @@ ok(new Set($.PRODS.map(p=>p.id)).size===$.PRODS.length, `製品idが重複して
   ok(!bad.length, `製品の相性原材料が同ジャンルで実在${bad.length?' → '+bad.map(p=>p.id):''}`); }
 for(const g of [...$.GENRES,{id:$.SECRET_G,n:'シークレット',e:'✨'}]){
   const n=$.PRODS.filter(p=>p.g===g.id).length; ok(n>0, `${g.e}${g.n}: 製品 ${n}種`); }
-ok($.PROD[$.BLOB] && $.PROD[$.BLOB].g===$.SECRET_G, '🪨謎のカタマリはシークレットタブ側にいる');
+ok($.PROD[$.UNKNOWN_PRODUCT] && $.PROD[$.UNKNOWN_PRODUCT].g===$.SECRET_G, '🪨謎のカタマリはシークレットタブ側にいる');
 
 console.log('\n[4] レシピ（キーの正規化 / 同ジャンル / 参照先）');
 for(const k of Object.keys($.RECIPES)){
@@ -80,7 +80,7 @@ const roll=(key,n)=>{ const c={}; for(let i=0;i<n;i++){ const p=$.rollProduct(ke
   const key='glass,wire', want=new Set($.poolFor(key).map(x=>x.p.id));
   const got=Object.keys(roll(key,3000));
   ok(got.every(id=>want.has(id)), `${key}: 出たのは定義した製品だけ（${got.join(',')}）`);
-  ok(!got.includes($.BLOB), `${key}: 🪨が混ざらない`); }
+  ok(!got.includes($.UNKNOWN_PRODUCT), `${key}: 🪨が混ざらない`); }
 { // 明示した比率どおりに出るか（{pc:55,...} 形式）
   const key='glass,iron,semic,wire', n=20000, c=roll(key,n);
   const spec=$.RECIPES[key], sum=Object.values(spec).reduce((a,b)=>a+b,0);
@@ -88,23 +88,23 @@ const roll=(key,n)=>{ const c={}; for(let i=0;i<n;i++){ const p=$.rollProduct(ke
   ok(Math.max(...errs)<0.02, `${key}: 明示した比率と一致（最大誤差 ${(Math.max(...errs)*100).toFixed(2)}pt）`); }
 { // 未定義の同ジャンル組み合わせ → 🪨
   const c=roll('rice,sugar',500);
-  ok(Object.keys(c).length===1 && c[$.BLOB]===500, 'レシピに無い同ジャンルの組み合わせ → 🪨 のみ'); }
+  ok(Object.keys(c).length===1 && c[$.UNKNOWN_PRODUCT]===500, 'レシピに無い同ジャンルの組み合わせ → 🪨 のみ'); }
 { // ジャンル跨ぎ（隠しレシピ以外） → 🪨
   const c=roll('iron,milk',500);
-  ok(Object.keys(c).length===1 && c[$.BLOB]===500, 'ジャンル跨ぎ（隠しレシピ外）→ 🪨 のみ'); }
+  ok(Object.keys(c).length===1 && c[$.UNKNOWN_PRODUCT]===500, 'ジャンル跨ぎ（隠しレシピ外）→ 🪨 のみ'); }
 { // 隠しレシピ: ほとんど🪨、まれにシークレット。実測が p に寄るか
   for(const key of Object.keys($.SECRETS)){
     const s=$.SECRETS[key], n=40000, c=roll(key,n);
     const hit=(c[s.pid]||0)/n;
-    ok(Object.keys(c).every(id=>id===s.pid||id===$.BLOB), `${key}: 出るのは ${s.pid} か 🪨 だけ`);
+    ok(Object.keys(c).every(id=>id===s.pid||id===$.UNKNOWN_PRODUCT), `${key}: 出るのは ${s.pid} か 🪨 だけ`);
     ok(Math.abs(hit-s.p)<0.01, `${key}: ${s.pid} 実測 ${(hit*100).toFixed(2)}% ≒ 設定 ${(s.p*100).toFixed(1)}%`);
-    ok((c[$.BLOB]||0)/n>0.5, `${key}: 跨ぎなので大半（${(((c[$.BLOB]||0)/n)*100).toFixed(1)}%）は 🪨`);
+    ok((c[$.UNKNOWN_PRODUCT]||0)/n>0.5, `${key}: 跨ぎなので大半（${(((c[$.UNKNOWN_PRODUCT]||0)/n)*100).toFixed(1)}%）は 🪨`);
   } }
 { // 素材なし → 🪨（クラッシュしない）
-  ok($.rollProduct(null).id===$.BLOB && $.rollProduct('').id===$.BLOB, '素材なし → 🪨'); }
+  ok($.rollProduct(null).id===$.UNKNOWN_PRODUCT && $.rollProduct('').id===$.UNKNOWN_PRODUCT, '素材なし → 🪨'); }
 
 console.log('\n[7] 到達性（全製品がどこかのレシピから出られるか）');
-{ const reach=new Set([$.BLOB]);
+{ const reach=new Set([$.UNKNOWN_PRODUCT]);
   for(const k of Object.keys($.RECIPES)) for(const x of $.normPool($.RECIPES[k])) reach.add(x.p.id);
   for(const k of Object.keys($.SECRETS)) reach.add($.SECRETS[k].pid);
   const un=$.PRODS.filter(p=>!reach.has(p.id));
