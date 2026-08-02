@@ -83,23 +83,41 @@ export async function tick(userId) {
       await c.query(`UPDATE machines SET wp=$3 WHERE user_id=$1 AND id=$2`, [userId, m.id, wp]);
     }
 
+    let gain = 0;
     if (produced.length) {
       await c.query(
         `INSERT INTO products_made(user_id, product_id, machine_id, recipe_key)
          SELECT $1, * FROM UNNEST($2::text[], $3::text[], $4::text[])`,
         [userId, produced.map((x) => x.product.id), produced.map((x) => x.machineId),
          produced.map((x) => x.key)]);
-    }
-    await c.query(
-      `UPDATE factories SET wp_mark=$2, last_tick_at=now() WHERE user_id=$1`, [userId, wpNow]);
 
-    return { delta, produced, capped };
+      /* 売上は「完成した瞬間」に立てる。
+         以前は🎁完成品を開いたとき(claim)に加算していたので、製造個数だけ伸びて
+         売上が止まって見えた（開くまで一日分がまとめて後から乗る）。製造個数と
+         同じタイミングで積むほうが素直なので、ここで 💰 と sales_daily を動かす。
+         図鑑登録と NEW 判定は今までどおり claim（開いたとき）のまま。 */
+      gain = produced.reduce((s, x) => s + (PROD_PRICE[x.product.r] || 0), 0);
+      if (gain) {
+        await c.query(
+          `INSERT INTO sales_daily(user_id, day, amount) VALUES ($1,$2,$3)
+           ON CONFLICT (user_id, day) DO UPDATE SET amount = sales_daily.amount + EXCLUDED.amount`,
+          [userId, jstDay(), gain]);
+      }
+    }
+    // 💰が動いたので rev も上げる（ポーリング側に factory を送り直させる）
+    await c.query(
+      `UPDATE factories SET wp_mark=$2, last_tick_at=now(),
+              money = money + $3, rev = rev + CASE WHEN $3 > 0 THEN 1 ELSE 0 END
+        WHERE user_id=$1`, [userId, wpNow, gain]);
+
+    return { delta, produced, capped, gain };
   });
 }
 
 /**
- * 🎁完成品を開いたときの処理。
- * 旧実装と同じく「開いた瞬間」に図鑑登録と売上加算をする（作った瞬間ではない）。
+ * 🎁完成品を開いたときの処理。図鑑登録と NEW 判定だけを行う。
+ * 売上(💰 / sales_daily)は完成した瞬間に tick() が積んでいるのでここでは足さない。
+ * gain は「今回まとめて見た分の合計額」の表示用（加算はもう済んでいる）。
  * @returns {{items:Array, gain:number, registered:number}}
  */
 export async function claim(userId) {
@@ -132,15 +150,6 @@ export async function claim(userId) {
         `INSERT INTO dex(user_id, product_id, count, first_at) VALUES ($1,$2,$3,now())
          ON CONFLICT (user_id, product_id) DO UPDATE SET count = dex.count + EXCLUDED.count`,
         [userId, pid, n]);
-    }
-    if (gain) {
-      // rev も上げる: 💰が変わったのでポーリング側に factory を送り直させる
-      await c.query(`UPDATE factories SET money = money + $2, rev = rev + 1 WHERE user_id=$1`,
-        [userId, gain]);
-      await c.query(
-        `INSERT INTO sales_daily(user_id, day, amount) VALUES ($1,$2,$3)
-         ON CONFLICT (user_id, day) DO UPDATE SET amount = sales_daily.amount + EXCLUDED.amount`,
-        [userId, jstDay(), gain]);
     }
     return { items, gain, registered };
   });

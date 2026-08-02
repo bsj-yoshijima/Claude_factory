@@ -758,7 +758,7 @@ document.getElementById('dexBtn').addEventListener('click',()=>openDex());
 // 1製品あたりの必要WP = マス数 × WP_PER_SLOT。今後変わる可能性があるのでここ1箇所で調整する
 const WP_PER_SLOT = 50;
 const needWp = (m)=> Math.max(1, (m && m.size) || 1) * WP_PER_SLOT;
-// 製品の売価（レア度別）。完成品一覧を開いたタイミングで 💰 に加算される
+// 製品の売価（レア度別）。製品が完成した瞬間に 💰 と売上に加算される
 const PROD_PRICE = {1:60, 2:200, 3:700, 4:2600, 5:9000};
 // 原材料をセットできるマス数 = 製造機のマス数(2〜5)。台ごとに1レシピ。
 
@@ -1127,7 +1127,7 @@ function tickCraft(){
   const delta=Math.max(0, WPST.total - c.wpMark);
   c.wpMark=WPST.total;
   if(delta<=0) return;
-  let last=null, total=0;
+  let last=null, total=0, gain=0;
   for(const m of machines()){
     const st=machState(m.id); if(!st.running) continue;
     st.wp += delta;
@@ -1140,14 +1140,17 @@ function tickCraft(){
       const rec={ pid:p.id, at:Date.now(), key:key||'', mid:m.id };
       c.made.push({...rec, viewed:false});   // 🎁完成品（開くと消える新着分）
       c.log.push(rec);                       // 📊今日の製造（記録として残る分）
+      gain+=PROD_PRICE[p.r]||0;              // 売上は完成した瞬間に立てる（下でまとめて加算）
       last=p; total++; n++;
     }
   }
+  // 製造個数と同じタイミングで 💰 と売上を積む（🎁を開くまで待たない）
+  if(gain){ G.money+=gain; const d=jstDayOf(Date.now()); c.sales[d]=(c.sales[d]||0)+gain; }
   saveGame();
   if(total){
-    updateDoneBtn();
+    updateDoneBtn(); updateBadge(); renderBoard();   // 💰と今日の売上がその場で動く
     if(window.__scene&&window.__scene.celebrate) window.__scene.celebrate(last.e);
-    toast(`${last.e} ${last.n} が完成！(💰${(PROD_PRICE[last.r]||0).toLocaleString()})${total>1?` ×${total}個`:''} 🎁完成品で確認`);
+    toast(`${last.e} ${last.n} が完成！(+💰${(PROD_PRICE[last.r]||0).toLocaleString()})${total>1?` ×${total}個`:''} 🎁完成品で確認`);
     if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
   }
 }
@@ -1196,7 +1199,7 @@ function openToday(){
             <div class="qn"><b style="color:#eafff4">×${r.n}</b></div>${ks}</div>`; }).join('')}</div>
         <div class="rowline" style="font-size:11px;color:#9fb0c0">
           レア度の高い順。数字は今日つくった個数、その下は使った原材料の組み合わせ。
-          今日つくったものの合計価値は 💰${gain.toLocaleString()}（🎁完成品を開いた時点で 💰 に入る）。</div>`;
+          今日つくったものの合計価値は 💰${gain.toLocaleString()}（完成した時点で 💰 に入っている）。</div>`;
     },
     actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openDex('prod')}] });
 }
@@ -1322,8 +1325,8 @@ function updateDoneBtn(){
   b.classList.toggle('show', n>0);
   document.getElementById('doneN').textContent = n || '';
 }
-/* マルチユーザー版: 回収(図鑑登録 + 売上加算)はサーバの /api/claim が行う。
-   「開いた瞬間に登録・加算」という仕様は旧実装と同じ。 */
+/* マルチユーザー版: 回収(図鑑登録)はサーバの /api/claim が行う。
+   売上は完成した瞬間にサーバの tick() が積んでいるので、ここでは合計額を見せるだけ。 */
 async function openDoneServer(){
   const r=await NET.call('POST','/api/claim'); if(!r) return;
   PENDING=0; updateDoneBtn();
@@ -1339,7 +1342,7 @@ async function openDoneServer(){
     `<span class="chip"><b style="color:${RAR[k].c}">${RAR[k].n}</b>×${byRar[k]} = 💰${(PROD_PRICE[k]*byRar[k]).toLocaleString()}</span>`).join('');
   openDialog({ title:'🎁 完成品', sub:`${r.items.length}個`,
     body:`${r.gain?`<div class="invbar" style="font-size:12px">
-          <span style="color:#9fb0c0">今回の売上</span>
+          <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
           <b style="color:#ffd27a;font-size:19px">💰 ${r.gain.toLocaleString()}</b>${bd}</div>`
         :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
@@ -1362,7 +1365,8 @@ function openDone(){
       <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
       <div class="qn">${ks}</div></div>`;
   }).join('');
-  // 一覧を表示したタイミングで図鑑に登録し、同時に売上を💰に加算する（仕様）
+  // 一覧を表示したタイミングで図鑑に登録する。
+  // 💰は完成した瞬間（tickCraft）に入れているので、ここでは合計額を出すだけ
   let reg=0, gain=0, byRar={};
   for(const m of batch){
     const p=PROD[m.pid]; if(!p) continue;
@@ -1370,7 +1374,6 @@ function openDone(){
     const price=PROD_PRICE[p.r]||0; gain+=price;
     byRar[p.r]=(byRar[p.r]||0)+1;
   }
-  if(gain){ G.money+=gain; c.sales[jstDayOf(Date.now())]=(c.sales[jstDayOf(Date.now())]||0)+gain; }
   // 見せたら箱は空にする。次に製品ができるまで🎁ボタンは出ない（常に「新着だけ」を見せる）
   c.made=[];
   saveGame(); updateDoneBtn(); updateBadge(); renderBoard();
@@ -1378,7 +1381,7 @@ function openDone(){
     `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
   openDialog({ title:'🎁 完成品', sub:`${batch.length}個`,
     body:`${gain?`<div class="invbar" style="font-size:12px">
-          <span style="color:#9fb0c0">今回の売上</span>
+          <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
           <b style="color:#ffd27a;font-size:19px">💰 ${gain.toLocaleString()}</b>
           ${bd}</div>`
         :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
@@ -1532,6 +1535,9 @@ const myMetric=()=>MY_METRICS.find(m=>m.id===_myKey)||MY_METRICS[0];
 const myDefaultName=()=> (_myData&&_myData.defaultName)
   || `${(_myData&&_myData.userName)||'あなた'}の工場`;
 const myName=()=> (_myData&&_myData.name) || myDefaultName();
+// 属性値に入れる用のエスケープ（工場名はユーザー入力なので " < > & を潰す）
+const myAttr=(s)=>String(s==null?'':s)
+  .replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 /* 目盛りの上限は 1/2/5×10^n に丸める（軸の数字が読みやすい値になる） */
 function niceMax(v){
@@ -1584,11 +1590,13 @@ function myBody(){
   if(!_myData) return '<div class="cost">読み込み中…</div>';
   const t=_myData.totals7||{wp:0,made:0,sales:0};
   const head=_myEdit
-    ? `<div class="myname"><input id="myNameIn" maxlength="24" placeholder="${myDefaultName()}"
-         value="${(_myData.name||'').replace(/"/g,'&quot;')}">
+    // 編集は「いま表示されている名前」から始める。空欄＋プレイスホルダだと
+    // 消したのか未設定なのか分からないし、一文字だけ直したいときに打ち直しになる
+    ? `<div class="myname"><input id="myNameIn" maxlength="24" placeholder="${myAttr(myDefaultName())}"
+         value="${myAttr(myName())}">
        <span class="ed" id="myNameSave">保存</span><span class="ed" id="myNameCancel">やめる</span></div>
-       <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:4px">24文字まで。空にすると「${myDefaultName()}」に戻ります。</div>`
-    : `<div class="myname"><b>🏭 ${myName()}</b><span class="ed" id="myNameEdit">✏️ 編集</span></div>`;
+       <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:4px">24文字まで。空にすると「${myAttr(myDefaultName())}」に戻ります。</div>`
+    : `<div class="myname"><b>🏭 ${myAttr(myName())}</b><span class="ed" id="myNameEdit">✏️ 編集</span></div>`;
   return `${head}
     ${_myData.failed?`<div class="rowline" style="font-size:11px;color:#ff9f7a;margin-top:8px">
       集計を取得できませんでした。サーバが古い可能性があります（<b>node server/index.mjs</b> を再起動してください）。</div>`:''}
