@@ -48,7 +48,7 @@ const MACH_GEO = { inset:0.10, height:0.42, slot:0.52 };
 const MACH_SIZES = [2,3,4,5];
 const KINDS = ['machine','deco','prop','emoji','prize'];   // 設置できる種類（belt/outlet は廃止）
 const MACH_MIN = 2;
-const MACH_ART = ['normal','arabia','diner','halloween'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
+const MACH_ART = ['normal','arabia','diner','halloween','scifi'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
 const machSize = (sub)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(sub||'').replace(/\D/g,''))||MACH_MIN));
 
 /* ===== 素材の見た目 =====
@@ -316,6 +316,22 @@ class Main extends Phaser.Scene {
     const u0=(c0+IN)/GU, u1=(c0+du*(n-1)+1-IN)/GU, v0=(r0+IN)/GV, v1=(r0+dv*(n-1)+1-IN)/GV;
     return [uvXY(u0,v0), uvXY(u1,v0), uvXY(u1,v1), uvXY(u0,v1)];   // A(最奥) B C(最手前) D
   }
+  /* 占有マスを1マスずつの外周(uv)に切る。inset は両端だけ効かせ、マス同士の継ぎ目は詰める
+     (union が _machFootprint と一致する = 隙間も重なりも出ない) */
+  _machCellQuads(e){ const n=machSize(e.sub), IN=MACH_GEO.inset;
+    const c0=e.cell.c, r0=e.cell.r, du=(e.dir==='v')?0:1, dv=(e.dir==='v')?1:0, out=[];
+    for(let i=0;i<n;i++){
+      const h0=(i===0)?IN:0, h1=(i===n-1)?IN:0;
+      const u0=(c0+du*i+(du?h0:IN))/GU, u1=(c0+du*i+1-(du?h1:IN))/GU;
+      const v0=(r0+dv*i+(dv?h0:IN))/GV, v1=(r0+dv*i+1-(dv?h1:IN))/GV;
+      out.push([uvXY(u0,v0), uvXY(u1,v0), uvXY(u1,v1), uvXY(u0,v1)]);   // A(最奥) B C(最手前) D
+    }
+    return out; }
+  /* マス i の外周のうち隣と接していない辺だけを描く(継ぎ目に線を出さない)。辺は A-B, B-C, C-D, D-A の順 */
+  _strokeOuter(g,q,i,n,dir){
+    const ext=(dir==='v') ? [i===0, true, i===n-1, true] : [true, i===n-1, true, i===0];
+    for(let k=0;k<4;k++){ if(!ext[k]) continue; const p=q[k], r=q[(k+1)%4];
+      g.beginPath(); g.moveTo(p.x,p.y); g.lineTo(r.x,r.y); g.strokePath(); } }
   _makeObjs(e){ const {c,r}=e.cell; const p=cellXY(c,r); const u=(c+0.5)/GU, v=(r+0.5)/GV;
     const tint=this.tintByLight(u,v); const objs=[]; let main=null; e._lit=null;
     if(e.kind==='machine'){
@@ -363,6 +379,17 @@ class Main extends Phaser.Scene {
   hatFit(){ if(this._hatFit) return this._hatFit;
     try{ this._hatFit=JSON.parse(this.cache.text.get('hatfit')||'{}'); }catch(_){ this._hatFit={}; }
     return this._hatFit; }
+  /* 左右反転した製造機テクスチャ(v向き用)。帯の切り出し(setCrop)は「反転したときの切り出し位置」が
+     WebGL と Canvas で食い違うので、flipX せず反転済みテクスチャを焼いて素直に切る。 */
+  _machFlipTex(key){ const fk=key+'__fx';
+    if(!this.textures.exists(fk)){
+      const src=this.textures.get(key).getSourceImage();
+      const cv=document.createElement('canvas'); cv.width=src.width; cv.height=src.height;
+      const cg=cv.getContext('2d'); cg.translate(cv.width,0); cg.scale(-1,1); cg.drawImage(src,0,0);
+      this.textures.addCanvas(fk,cv); }
+    return fk; }
+  /* 製造機は複数マスを一直線に占有するので、深度を1つしか持たせるとマスごとの前後関係が壊れる
+     (手前のマスに立ったキャラが機械の裏へ回る)。絵を「1マスぶんの縦帯」に切り、帯 i をマス i の深度で描く。 */
   _makeMachine(e, objs){
     const sk=this.partsSkin();
     const [A,B,C,D]=this._machFootprint(e);
@@ -370,49 +397,66 @@ class Main extends Phaser.Scene {
     const bx0=Math.min(...xs), bx1=Math.max(...xs), by0=Math.min(...ys), by1=Math.max(...ys);
     const u=(e.cell.c+0.5)/GU, v=(e.cell.r+0.5)/GV, tint=this.tintByLight(u,v);
     const tex=this.machTex(e);
-    const g=this.add.graphics().setDepth(C.y+0.1); objs.push(g); e._gfx=g;
+    const cells=this.cellsOf(e), n=cells.length, quads=this._machCellQuads(e);
+    const dep=cells.map(q=>cellXY(q.c,q.r).y);        // 帯ごとの深度 = そのマス中心の y(キャラと同じ基準)
+    const dBack=dep[0], dFront=dep[n-1];              // u/v どちらの向きでも添字が大きいほど手前
+    const g=this.add.graphics().setDepth(dFront+0.1); objs.push(g); e._gfx=g;   // 掴み手(main)。絵は帯ごとの graphics が持つ
+    const cellG=[];                                   // 手続き描画のときのマスごとの graphics
     let HG, spotPts=null;   // 天面の高さ(px) / 投入口の実位置(スプライトのときアンカーから算出)
+    e._lit=[];              // 採光tintの対象。帯の数だけある
     if(tex){
       // 1マスの送りがゲームと一致するよう焼いてある(tools/cut_machines.py)ので拡縮しない。
       // 拡縮すると送りが崩れて素材アイコンが投入口からズレる。
-      const flip=(e.dir==='v');
-      const img=this.add.image((bx0+bx1)/2, by1, tex.key).setOrigin(0.5,1).setDepth(C.y).setTint(tint);
-      if(flip) img.setFlipX(true);   // 素材はu方向。v方向は左右反転で角度が合う
-      objs.push(img); e._lit=img; this.lit.push({sp:img,u,v});
-      const iw=img.width, ih=img.height;
+      const flip=(e.dir==='v');   // 素材はu方向。v方向は左右反転した絵で角度が合う
+      const key=flip? this._machFlipTex(tex.key) : tex.key;
+      const src=this.textures.get(key).getSourceImage(), iw=src.width, ih=src.height;
       const fitA=((this.machFit()[tex.theme])||{})[String(tex.n)];
-      if(fitA){
-        // 投入口0番が「マス0の中心」の真上に来るよう横位置を合わせる。
-        // bbox中央で置くと絵ごとに数px〜十数px 横へズレ、マスの一部に床が見えてしまう。
-        const c0=cellXY(e.cell.c, e.cell.r);
-        const sx0=(img.x-iw/2)+(flip?1-fitA.ax:fitA.ax)*iw;
-        img.x += c0.x - sx0;
-        const L=img.x-iw/2, T=img.y-ih;
-        const sx=L+(flip?1-fitA.ax:fitA.ax)*iw, sy=T+fitA.ay*ih;
+      const ax=fitA ? (flip?1-fitA.ax:fitA.ax) : null;
+      // 投入口0番が「マス0の中心」の真上に来るよう横位置を合わせる。
+      // bbox中央で置くと絵ごとに数px〜十数px 横へズレ、マスの一部に床が見えてしまう。
+      let imx=(bx0+bx1)/2;
+      if(fitA) imx += cellXY(e.cell.c,e.cell.r).x - ((imx-iw/2)+ax*iw);
+      const L=imx-iw/2;
+      if(fitA){ const sx=L+ax*iw, sy=(by1-ih)+fitA.ay*ih;
         const du=cellXY(1,0).x-cellXY(0,0).x, dv=cellXY(1,0).y-cellXY(0,0).y;
-        spotPts=this.cellsOf(e).map((q,i)=>({x:sx+(flip?-1:1)*du*i, y:sy+dv*i}));
+        spotPts=cells.map((q,i)=>({x:sx+(flip?-1:1)*du*i, y:sy+dv*i}));
         HG = Math.max(2, by1-sy);      // 天面の高さ = 接地点から投入口までの高さ
-      } else {
-        HG = Math.max(2, ih-(by1-by0));
-      }
-      // 絵の本体の奥行はゲームの1マスより浅いことがあり、占有マスの手前側に床が残る。
-      // そこに後ろのキャラが覗くので、占有マスを暗い土台で塞いでからスプライトを重ねる。
-      const base=this.add.graphics().setDepth(C.y-0.3);
-      base.fillStyle(sk.edge,1); base.fillPoints([A,B,C,D],true);
-      base.lineStyle(2,sk.side,1); base.strokePoints([A,B,C,D],true);
-      objs.push(base);
-      const sh=this.add.image((bx0+bx1)/2+3, by1-2, 'shadow').setDepth(C.y-0.5)
-        .setDisplaySize(iw*0.9,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);
+      } else HG = Math.max(2, ih-(by1-by0));
+      // 帯の切れ目は「隣のマス中心との中点」。両端は絵の端まで伸ばす(端の飾りを落とさない)。
+      // 境界は整数pxに丸める(隣り合う帯が同じ値になる=継ぎ目に隙間も重なりも出ない)。
+      const cx=cells.map(q=>cellXY(q.c,q.r).x), asc=(cx[n-1]>=cx[0]), cut=[];
+      for(let i=1;i<n;i++) cut.push(Phaser.Math.Clamp(Math.round((cx[i-1]+cx[i])/2-L),0,iw));
+      const sh=this.add.image((bx0+bx1)/2+3, by1-2, 'shadow').setDepth(dBack-0.6)
+        .setDisplaySize(iw*0.9,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);   // 影は機械の一番奥より後ろ
+      cells.forEach((q,i)=>{
+        // 絵の本体の奥行はゲームの1マスより浅いことがあり、占有マスの手前側に床が残る。
+        // そこに後ろのキャラが覗くので、マスごとの暗い土台で塞いでから帯を重ねる。
+        const bg=this.add.graphics().setDepth(dep[i]-0.3); objs.push(bg);
+        bg.fillStyle(sk.edge,1); bg.fillPoints(quads[i],true);
+        bg.lineStyle(2,sk.side,1); this._strokeOuter(bg,quads[i],i,n,e.dir);
+        const x0 = asc ? (i===0?0:cut[i-1]) : (i===n-1?0:cut[i]);
+        const x1 = asc ? (i===n-1?iw:cut[i]) : (i===0?iw:cut[i-1]);
+        const im=this.add.image(imx, by1, key).setOrigin(0.5,1).setDepth(dep[i]).setTint(tint);
+        im.setCrop(x0, 0, Math.max(0,x1-x0), ih);   // 位置は変えず、自分の帯だけを見せる
+        objs.push(im); e._lit.push(im); this.lit.push({sp:im,u,v});
+      });
     } else {
       HG = MACH_GEO.height*CELL;
       const up=(q)=>({x:q.x, y:q.y-HG});
-      g.fillStyle(0x000000,0.34); g.fillPoints([A,B,C,D].map(q=>({x:q.x+3,y:q.y+3})),true);   // 接地影
-      g.fillStyle(sk.side,1);                                                                 // 手前2面(側面)
-      g.fillPoints([B,C,up(C),up(B)],true); g.fillPoints([D,C,up(C),up(D)],true);
-      g.fillStyle(sk.top,1); g.fillPoints([A,B,C,D].map(up),true);                            // 天面
-      g.lineStyle(2,sk.rim,0.95); g.strokePoints([A,B,C,D].map(up),true);                     // 天面の縁
-      g.lineStyle(2,sk.edge,0.9);
-      for(const q of [B,C,D]) g.lineBetween(q.x,q.y,q.x,q.y-HG);                              // 縦のエッジ
+      // 手続き描画もマスごとに分ける。継ぎ目に線や内壁が出ないよう、外周の面/辺/角だけ描く
+      cells.forEach((q,i)=>{
+        const [a,b,c,d]=quads[i], vv=(e.dir==='v'), first=(i===0), last=(i===n-1);
+        const cg=this.add.graphics().setDepth(dep[i]); objs.push(cg); cellG.push(cg);
+        cg.fillStyle(0x000000,0.34); cg.fillPoints([a,b,c,d].map(p=>({x:p.x+3,y:p.y+3})),true);   // 接地影
+        cg.fillStyle(sk.side,1);                                                                  // 手前2面(側面)
+        if(vv||last) cg.fillPoints([b,c,up(c),up(b)],true);
+        if(!vv||last) cg.fillPoints([d,c,up(c),up(d)],true);
+        cg.fillStyle(sk.top,1); cg.fillPoints([a,b,c,d].map(up),true);                            // 天面
+        cg.lineStyle(2,sk.rim,0.95); this._strokeOuter(cg,[a,b,c,d].map(up),i,n,e.dir);           // 天面の縁
+        cg.lineStyle(2,sk.edge,0.9);
+        for(const p of [ (vv?first:last)&&b, last&&c, (vv?last:first)&&d ])
+          if(p) cg.lineBetween(p.x,p.y,p.x,p.y-HG);                                               // 縦のエッジ
+      });
     }
     const up=(q)=>({x:q.x, y:q.y-HG});
     e._hgt=HG;   // 筐体の高さ(px)。ドラッグの当たり判定(_machHit)で使う
@@ -422,20 +466,22 @@ class Main extends Phaser.Scene {
     while(e.slots.length < machSize(e.sub)) e.slots.push(null);
     e._slotObjs=[];
     const SL=MACH_GEO.slot;
-    this.cellsOf(e).forEach((q,idx)=>{
+    cells.forEach((q,idx)=>{
       const mat=e.slots[idx], m=matArt(mat);
       const ctr = (spotPts && spotPts[idx]) || up(cellXY(q.c,q.r));   // 絵の投入口 > マス中心の真上
       if(tex){ // スプライトは意匠が自由なので穴は描かない。素材が入っているマスだけ光らせる
-        if(m){ g.fillStyle(m.c,0.5); g.fillEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24);
-               g.lineStyle(1.5,sk.glow,0.85); g.strokeEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24); } }
-      else {   // 手続き描画のときだけ、置き場が分かるよう穴を描く
+        if(m){ const gl=this.add.graphics().setDepth(dep[idx]+0.1); objs.push(gl);
+               gl.fillStyle(m.c,0.5); gl.fillEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24);
+               gl.lineStyle(1.5,sk.glow,0.85); gl.strokeEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24); } }
+      else {   // 手続き描画のときだけ、置き場が分かるよう穴を描く(そのマスの graphics に載せる)
+        const cg=cellG[idx];
         const s0=uvXY((q.c+0.5-SL/2)/GU,(q.r+0.5-SL/2)/GV), s1=uvXY((q.c+0.5+SL/2)/GU,(q.r+0.5-SL/2)/GV);
         const s2=uvXY((q.c+0.5+SL/2)/GU,(q.r+0.5+SL/2)/GV), s3=uvXY((q.c+0.5-SL/2)/GU,(q.r+0.5+SL/2)/GV);
         const poly=[s0,s1,s2,s3].map(up);
-        g.fillStyle(m?m.c:0x0d1116, m?0.85:0.6); g.fillPoints(poly,true);
-        g.lineStyle(1.5, m?sk.glow:sk.edge, m?0.9:0.7); g.strokePoints(poly,true);
+        cg.fillStyle(m?m.c:0x0d1116, m?0.85:0.6); cg.fillPoints(poly,true);
+        cg.lineStyle(1.5, m?sk.glow:sk.edge, m?0.9:0.7); cg.strokePoints(poly,true);
       }
-      if(m){ const t=this.add.text(ctr.x,ctr.y-CELL*0.08,m.e,{fontSize:Math.round(CELL*0.5)+'px'}).setOrigin(0.5,0.5).setDepth(C.y+0.2+idx*0.01);
+      if(m){ const t=this.add.text(ctr.x,ctr.y-CELL*0.08,m.e,{fontSize:Math.round(CELL*0.5)+'px'}).setOrigin(0.5,0.5).setDepth(dep[idx]+0.2);
              objs.push(t); e._slotObjs.push(t); }
     });
 
@@ -512,7 +558,9 @@ class Main extends Phaser.Scene {
     return e.id;
   }
   _detach(e){ for(const o of e.objs) o.destroy(); e._dbase=null;
-    if(e._lit){ const i=this.lit.findIndex(x=>x.sp===e._lit); if(i>=0)this.lit.splice(i,1); }
+    // _lit は1枚(deco/prop)のことも、帯に分けた複数枚(製造機)のこともある
+    for(const sp of (Array.isArray(e._lit)?e._lit:(e._lit?[e._lit]:[]))){
+      const i=this.lit.findIndex(x=>x.sp===sp); if(i>=0)this.lit.splice(i,1); }
     if(e.kind==='machine'){ for(const q of this.cellsOf(e)){
       const i=this.machineCells.findIndex(m=>m.c===q.c&&m.r===q.r); if(i>=0)this.machineCells.splice(i,1); } } }
   // ラグは平物。占有レイヤーが家具(occ)と別なので判定を切り替える

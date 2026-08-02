@@ -3,23 +3,40 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 // 代入した値は控えて読み戻せる(ドラッグは obj._e / obj.x,y を読み書きするので素通しでは検証できない)
+// メソッドは Phaser と同じく自分自身を返す(チェーンしても同じオブジェクトを指す)。
+// setDepth/setCrop は引数を控える → 「帯ごとの深度」を検証できる。
 const chain = () => { const store={};
-  return new Proxy(function(){}, {
+  const p = new Proxy(function(){}, {
     get(t,k){
       if(Object.prototype.hasOwnProperty.call(store,k)) return store[k];
+      if(k==='__store') return store;   // 「何が設定されたか」をテストから覗く口
+      if(k==='setDepth') return (d)=>{ store.depth=d; return p; };
+      if(k==='setCrop')  return (x,y,w,h)=>{ store.crop={x,y,width:w,height:h}; return p; };
       if(k==='texture') return {key:'stub', getSourceImage:()=>({width:64,height:64})};
       if(k==='displayWidth'||k==='displayHeight'||k==='x'||k==='y'||k==='width'||k==='height') return 32;
       if(k==='visible') return true;
       if(k==='destroy') return ()=>{};
-      return chain();
+      return (...a)=>p;
     },
-    apply(){ return chain(); },
+    apply(){ return p; },
     set(t,k,v){ store[k]=v; return true; },
-  }); };
+  });
+  return p; };
 const obj = () => { const o = chain(); return o; };
 
-const textures = { exists:(k)=>['dec_crate','dec_plant','m_red','m_blue','m_green','m_yellow','item_box','shadow','spark'].includes(k),
-  remove(){}, addCanvas(){}, get:()=>({ getSourceImage:()=>({width:64,height:64}) }) };
+// 製造機スプライトは実物のPNGサイズを使う(帯の切り出し位置が絵の幅に依る)
+const pngWH=(p)=>{ const b=fs.readFileSync(p); return { width:b.readUInt32BE(16), height:b.readUInt32BE(20) }; };   // IHDR
+const MACH_PNG={};
+for(const th of ['normal','arabia','diner','halloween','scifi']) for(const n of [2,3,4,5]){
+  try{ MACH_PNG[`mach_${th}_s${n}`]=pngWH(new URL(`../assets/mach-${th}-s${n}.png`, import.meta.url)); }catch(_){}
+}
+let machTexOn=true;            // false にすると手続き描画のフォールバックを通せる
+const canvasTex={};            // addCanvas で焼いたテクスチャ(v向きの反転絵など)
+const textures = {
+  exists:(k)=>['dec_crate','dec_plant','m_red','m_blue','m_green','m_yellow','item_box','shadow','spark'].includes(k)
+    || (machTexOn && !!MACH_PNG[k]) || !!canvasTex[k],
+  remove(k){ delete canvasTex[k]; }, addCanvas(k,cv){ canvasTex[k]=cv; },
+  get:(k)=>({ getSourceImage:()=> canvasTex[k] || MACH_PNG[k] || {width:64,height:64} }) };
 
 const Phaser = {
   AUTO:0, BlendModes:{ADD:1,NORMAL:0,MULTIPLY:2},
@@ -76,7 +93,9 @@ s.input = { _h:{}, on(ev,fn){ (this._h[ev]=this._h[ev]||[]).push(fn); }, setDrag
   keyboard:{ _h:{}, on(ev,fn){ (this._h[ev]=this._h[ev]||[]).push(fn); } } };
 s.time = { addEvent(){} };
 s.tweens = { add(){} };
-s.cache = { json:{ get:()=>({}) }, text:{ get:()=>'{}' } };
+// 投入口アンカーは実物を読ませる(帯の切り出しと素材アイコンの位置がこれに依る)
+const machFitSrc=fs.readFileSync(new URL('../assets/mach-fit.json', import.meta.url)).toString();
+s.cache = { json:{ get:()=>({}) }, text:{ get:(k)=> k==='machfit'? machFitSrc : '{}' } };
 s.poll = async()=>{};
 s.createNightFx = function(){ this.windows=[]; this.uLen=0.55; this.sh=0.04;
   this.skyLayer=obj(); this.sun=obj(); this.sunG=obj(); this.moon=obj(); this.moonG=obj(); this.stars=[];
@@ -415,6 +434,90 @@ console.log('\n[14] グローバル名の衝突（main.js と factory-phaser.htm
   const a=tops(src), b=tops(inline);
   const dup=[...a].filter(x=>b.has(x));
   ok(dup.length===0, `グローバル名の衝突なし${dup.length?' → '+dup.join(','):''}`);
+}
+
+console.log('\n[15] 合成した製造機スプライトの1マス送り（tools/cut_machines.py の成果物）');
+{ // 3/4/5マス機は2マス機の絵から合成しているので、
+  //   ・投入口0番の絶対位置(px)は4サイズとも同一（奥側は一切ずらさないから）
+  //   ・サイズが1つ増えるごとに絵は ちょうど1マスぶん 大きくなる
+  // が成り立つ。崩れていたら素材アイコンが投入口からズレる。
+  const pngSize=(p)=>{ const b=fs.readFileSync(p);
+    return { w:b.readUInt32BE(16), h:b.readUInt32BE(20) }; };            // IHDR
+  const dir=new URL('../assets/', import.meta.url);
+  const fit=JSON.parse(fs.readFileSync(new URL('mach-fit.json', dir)).toString());
+  const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
+  const [,W,H,GU] = src.match(/const W = (\d+), H = (\d+), GU = (\d+), GV = \d+/).map(Number);
+  const iso = Object.fromEntries([...src.matchAll(/(ux|uy):\s*(-?[\d.]+)/g)].map(m=>[m[1],+m[2]]));
+  const stepX = Math.abs(iso.ux*W/GU), stepY = Math.abs(iso.uy*H/GU);
+  ok(Object.keys(fit).length>0, `mach-fit.json にテーマがある (${Object.keys(fit).join(', ')})`);
+  for(const th of Object.keys(fit)){
+    const at=[2,3,4,5].map(n=>{ const a=fit[th][String(n)];
+      const s=pngSize(new URL(`mach-${th}-s${n}.png`, dir));
+      return { n, ...s, px:a.ax*s.w, py:a.ay*s.h }; });
+    const dx=Math.max(...at.map(a=>a.px))-Math.min(...at.map(a=>a.px));
+    const dy=Math.max(...at.map(a=>a.py))-Math.min(...at.map(a=>a.py));
+    ok(dx<1 && dy<1, `${th}: 投入口0番の位置が4サイズとも同じ (ブレ ${dx.toFixed(2)}, ${dy.toFixed(2)}px)`);
+    for(let i=1;i<4;i++){   // 画像サイズは整数なので1マス送りの丸めで ±1px は出る
+      const gw=at[i].w-at[i-1].w, gh=at[i].h-at[i-1].h;
+      ok(Math.abs(gw-stepX)<=1, `${th}: s${at[i].n} は s${at[i-1].n} より横に1マス分だけ広い (${gw}px / 目標 ${stepX.toFixed(2)})`);
+      ok(Math.abs(gh-stepY)<=1.5, `${th}: s${at[i].n} は s${at[i-1].n} より縦に1マス分だけ高い (${gh}px / 目標 ${stepY.toFixed(2)})`);
+    }
+    const gw=at[3].w-at[0].w, gh=at[3].h-at[0].h;   // 丸めが溜まっていないこと
+    ok(Math.abs(gw-3*stepX)<=1, `${th}: s2→s5 で横に3マス分ちょうど (${gw}px / 目標 ${(3*stepX).toFixed(2)})`);
+    ok(Math.abs(gh-3*stepY)<=2, `${th}: s2→s5 で縦に3マス分ちょうど (${gh}px / 目標 ${(3*stepY).toFixed(2)})`);
+  }
+}
+
+console.log('\n[16] 製造機は「マスごとの深度」で描く（帯分割）');
+{ // 深度が1つしか無いと、手前のマスに立ったキャラが機械の裏へ回ってしまう(既存バグ)。
+  // 絵を1マスぶんの縦帯に切り、帯 i を「マス i の中心y」で描いていることを確かめる。
+  const cxy=sandbox.cellXY;
+  const depthsOf=(e)=>e.objs.map(o=>o.__store.depth).filter(d=>typeof d==='number');
+  const bandsOf=(e)=>e.objs.filter(o=>o.__store.crop);
+  const near=(a,b)=>Math.abs(a-b)<1e-6;
+  for(const dir of ['u','v']){
+    for(const th of [null,'halloween']){        // null=normal(アンカー無し) / halloween=アンカーあり
+      s.setPartsTheme(th); s.buildLayout([]);
+      const id=s.addPlaced('machine','s5',{cell:{c:2,r:3},dir});
+      const e=s.placed.find(x=>x.id===id), cells=s.cellsOf(e), want=cells.map(q=>cxy(q.c,q.r).y);
+      const tag=`${th||'normal'} dir=${dir}`;
+      const bands=bandsOf(e);
+      ok(bands.length===cells.length, `${tag}: 帯の数がマス数(5)と一致 → 実際 ${bands.length}`);
+      ok(bands.every((b,i)=>near(b.__store.depth,want[i])),
+         `${tag}: 各帯の depth が対応するマス中心の y と一致`);
+      // 帯は絵を隙間なく分割する(継ぎ目に穴も重なりも出ない)
+      const iw=MACH_PNG[`mach_${th||'normal'}_s5`].width;
+      const seg=bands.map(b=>[b.__store.crop.x, b.__store.crop.x+b.__store.crop.width]).sort((a,b)=>a[0]-b[0]);
+      ok(seg[0][0]===0 && seg[4][1]===iw, `${tag}: 両端の帯は絵の端まで伸びる (0..${iw})`);
+      ok(seg.every((g,i)=>i===0||g[0]===seg[i-1][1]), `${tag}: 帯同士に隙間も重なりもない`);
+      ok(seg.every(g=>g[1]-g[0]>0), `${tag}: 空の帯が無い`);
+      // 土台・素材アイコンもそのマスの深度に置く
+      const ds=depthsOf(e);
+      ok(want.every(y=>ds.some(d=>near(d,y-0.3))), `${tag}: 土台もマスごとの深度`);
+      ['milk','egg','flour','rice','meat'].forEach((m,i)=>s.setSlot(id,i,m));
+      const e2=s.placed.find(x=>x.id===id), ds2=depthsOf(e2);
+      ok(want.every(y=>ds2.some(d=>near(d,y+0.2))), `${tag}: 素材アイコンもマスごとの深度`);
+      // 昔の「全部いちばん手前の角(C.y)で描く」に戻っていないこと
+      const C=s._machFootprint(e2)[2];
+      ok(bandsOf(e2).filter(b=>near(b.__store.depth,C.y)).length===0, `${tag}: 1枚岩の深度(C.y)は残っていない`);
+      ok(e2._lit.length===5 && e2._lit.every(sp=>s.lit.some(x=>x.sp===sp)), `${tag}: 5枚とも採光tintの対象になる`);
+      s.removeItem(id);
+      ok(s.lit.length===0, `${tag}: 撤去で採光の登録も5枚ぶん外れる`);
+    }
+  }
+  // 手続き描画のフォールバック(スプライトが無いテーマ)も同じくマスごとの深度
+  machTexOn=false; s._machFit=null; s.setPartsTheme(null); s.buildLayout([]);
+  for(const dir of ['u','v']){
+    const id=s.addPlaced('machine','s4',{cell:{c:1,r:1},dir});
+    const e=s.placed.find(x=>x.id===id), cells=s.cellsOf(e);
+    ok(bandsOf(e).length===0, `手続き描画 dir=${dir}: スプライトを使っていない`);
+    const ds=depthsOf(e);
+    ok(cells.every(q=>ds.some(d=>near(d,cxy(q.c,q.r).y))), `手続き描画 dir=${dir}: 筐体もマスごとの深度`);
+    ok(cells.length===4 && ds.filter(d=>cells.some(q=>near(d,cxy(q.c,q.r).y))).length===4,
+       `手続き描画 dir=${dir}: マス数(4)ぶんの筐体に分かれている`);
+    s.removeItem(id);
+  }
+  machTexOn=true; s._machFit=null; s.setPartsTheme(null); s.buildLayout([]);
 }
 
 console.log(fail? `\n${fail} 件 FAIL` : '\nすべて通過');

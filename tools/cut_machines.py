@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stitch生成の製造機シート(マゼンタ背景・4台)を1台ずつ切り出し、ゲームの座標系へ焼く。
+"""Stitch生成の製造機シート(マゼンタ背景・4台)から、3/4/5マス機を「2マス機の絵」で合成する。
 
     使い方: python3 tools/cut_machines.py
 
@@ -7,24 +7,38 @@
 出力 : assets/mach-<theme>-s<N>.png     … 透過PNG。1マスの送りがゲームの1マスと一致する大きさ
        assets/mach-fit.json             … 素材アイコンを絵の投入口に乗せるためのアンカー
 
-較正の考え方（ここが肝）:
-  4台は「同じ機械の長さ違い」なので、1マスの送り(隣り合う投入口の中心間距離)は4台とも同じはず。
-  ところが生成された絵は毎回、長い台ほど送りを詰めてくる(実測 43.7→40.6→38.1→36.9px, ±9.6%)。
+なぜ合成するのか:
+  4台は「同じ機械の長さ違い」なので1マスの送りは4台とも同じはず。ところが生成AIは
+  何度指示しても長い台ほどマスを詰めてくる(halloween ±13%, scifi ±57%)。4台とも全体幅を
+  同じにしようとするためで、生成のやり直しでは直らない。
 
-  そこで **投入口を検出して送りを実測し、テーマ全体で1つの倍率**
-  (ゲームの送り ÷ 実測の送りの中央値) を4台すべてに等倍でかける。
-  サイズごとに違う倍率をかけると「サイズごとにデザインの見え方が変わる」ので絶対にやらない。
-  残る ±9.6% のばらつきは、2マス機がやや大きめ・5マス機がやや小さめに見える程度で吸収する。
+  そこで **2マス機の絵1枚だけを正とし、そこから1ベイ(1マスぶんの区画)を取り出して
+  繰り返す**。送りは定義上ぴったり一定になり、デザインも4サイズで完全に同一になる。
+  シートの3/4/5マス機は使わない(ログに実測値を出すだけ)。
 
-  絵の長軸が「右斜め上」向き(送りのdyが負)なら、切り出し時に左右反転して
-  ゲームが基準とする「右斜め下」向きに揃える。もう一方の対角はゲーム側が更に反転して使う。
+合成の手順:
+  1. シートから2マス機を切り出す。長軸が「右斜め上」なら左右反転してゲームの「右斜め下」に揃える。
+  2. 1ベイの周期ベクトルをテンプレートマッチで実測する(投入口の重心はホッパーの大きさの差で
+     偏るので使わない)。得た周期 (Dx,Dy) を、ゲームのアイソメ比 uy/ux に合うよう
+     Py=round(Dx*比) へ **列ごとの縦シフト(せん断)** で直す。垂直線は垂直のまま保たれ、
+     Py-Dy が整数なので絵の周期性も厳密に保たれる。
+  3. **画面上の縦線 x=c で切る**。機械は (Dx,Py) で右下へ伸びるので、幅 Dx の縦帯 1 本が
+     ちょうど「ベイ1つぶんの列」(投入口・天面・前面が同じ列に乗る)になる。
+     アイソメの斜線で切るとホッパーや煙突のような背の高い部分が別の帯へずれて穴が空く。
+  4. Nマス機 = [x<=c の奥側] + [縦帯を N-2 回] + [x>c の手前側を (N-2)*(Dx,Py) ずらす]。
+     ずらし量が整数なので補間は起きない(各領域は元絵の純粋な平行移動)。
+  5. 繰り返す縦帯からは端の飾り(煙突・煙・歯車)を消す。1ベイ隣に同じ絵が無い画素を飾りと見なし、
+     「1ベイ隣の同じ相対位置」の絵で置き換える。奥側の飾りは前方から、手前側の飾りは後方から借りる。
 
 なぜゲームの表示サイズまで縮小するか:
   Phaser は pixelArt:true (NEAREST) なので、大きい素材を縮めて描くとピクセルが間引かれて
   描き込みが壊れる。あらかじめ LANCZOS で表示サイズへ落としておけば ほぼ 1:1 で描ける。
+
+投入口を検出できないテーマ(normal / arabia / diner)は、従来の幅合わせ(legacy_fit)のまま。
 """
 import os, re, math, itertools
 from collections import deque
+import numpy as np
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,6 +52,7 @@ MIN_AREA = 2000               # これ未満の連結成分はゴミとして捨
 # 未登録のテーマは較正できないので、従来どおり幅合わせにフォールバックする。
 SPOT_TEST = {
     'halloween': lambda p: p[3] > 128 and max(p[:3]) < 60,                                                    # ホッパーの暗い口
+    'scifi':     lambda p: p[3] > 128 and max(p[:3]) < 70,                                                    # 吸気リングの暗い口
     'onsen':     lambda p: p[3] > 128 and p[1] > 140 and p[2] > 140 and p[0] < 170 and p[1]-p[0] > 25,        # 湯(ターコイズ)
 }
 SPOT_MIN_AREA = 120
@@ -137,76 +152,6 @@ def split_machines(sheet):
     return picks
 
 
-def _unused_slot_centers(sp, n):
-    """スプライトから凹みスロットの中心を実測する。
-    穴は「面積のある暗い塊」。輪郭線と区別するため収縮して残るものだけを拾う。"""
-    w, h = sp.size
-    px = sp.load()
-    dark = [[False] * h for _ in range(w)]
-    for x in range(w):
-        for y in range(h):
-            r, g, b, a = px[x, y]
-            if a > 128 and (r + g + b) / 3 < 78:
-                dark[x][y] = True
-    # 収縮(4近傍) x2 : 細い輪郭線を消し、面のある穴だけ残す
-    core = dark
-    for _ in range(2):
-        nxt = [[False] * h for _ in range(w)]
-        for x in range(1, w - 1):
-            for y in range(1, h - 1):
-                if core[x][y] and core[x-1][y] and core[x+1][y] and core[x][y-1] and core[x][y+1]:
-                    nxt[x][y] = True
-        core = nxt
-    # 連結成分
-    seen = [[False] * h for _ in range(w)]
-    comps = []
-    for x in range(w):
-        for y in range(h):
-            if not core[x][y] or seen[x][y]:
-                continue
-            q = deque([(x, y)]); seen[x][y] = True; pts = []
-            while q:
-                cx, cy = q.popleft(); pts.append((cx, cy))
-                for dx, dy in ((1,0),(-1,0),(0,1),(0,-1)):
-                    nx, ny = cx+dx, cy+dy
-                    if 0 <= nx < w and 0 <= ny < h and core[nx][ny] and not seen[nx][ny]:
-                        seen[nx][ny] = True; q.append((nx, ny))
-            comps.append(pts)
-    comps.sort(key=len, reverse=True)
-    cand = comps[:n + 4]               # 端のコントロールパネル等、穴でない暗部も混じる
-    if len(cand) < n:
-        return None
-    info = [((sum(p[0] for p in c) / len(c), sum(p[1] for p in c) / len(c)), len(c)) for c in cand]
-
-    def score(sub):
-        """スロットは『等間隔・一直線・同じ大きさ』に並ぶ。そこからの外れ具合を測る"""
-        sub = sorted(sub, key=lambda t: t[0][0])
-        xs = [t[0][0] for t in sub]; ys = [t[0][1] for t in sub]; ar = [t[1] for t in sub]
-        if n == 1:
-            return 0.0
-        gaps = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
-        if min(gaps) <= 1:
-            return 1e9
-        gm = sum(gaps) / len(gaps)
-        even = sum((g - gm) ** 2 for g in gaps) / len(gaps) / (gm * gm)      # 等間隔か
-        # 直線か: 端点を結ぶ直線からの残差
-        x0, y0, x1, y1 = xs[0], ys[0], xs[-1], ys[-1]
-        dx, dy = x1 - x0, y1 - y0
-        L = math.hypot(dx, dy) or 1
-        line = sum(abs((xs[i]-x0)*dy - (ys[i]-y0)*dx) / L for i in range(len(xs))) / len(xs) / max(1, gm)
-        am = sum(ar) / len(ar)
-        size = sum(abs(a - am) for a in ar) / len(ar) / am                   # 同じ大きさか
-        return even * 3 + line * 3 + size
-
-    best, bs = None, 1e18
-    for sub in itertools.combinations(info, n):
-        v = score(list(sub))
-        if v < bs:
-            bs, best = v, list(sub)
-    cs = sorted([t[0] for t in best], key=lambda c: c[0])   # 左(奥)→右(手前)= u方向の並び
-    return cs
-
-
 def target_height(n, W, H, GU, GV, iso, IN):
     """u方向にNマス並べたときの、占有外周の画面bbox高さ(px)。筐体の高さは含まない"""
     return abs((n - 2 * IN) / GU * iso['uy'] * H) + abs((1 - 2 * IN) / GV * iso['vy'] * H)
@@ -265,11 +210,177 @@ def pick_spots(cands, n):
     return best
 
 
+# ---- ここから「2マス機からNマス機を合成する」ための道具 ----------------------------
+
+CUT = 0.5          # 切断線の位置。投入口0から何周期ぶん手前か(0.5 = ベイの境目)
+BAD_TOL = 56       # 1ベイ隣と色がこれ以上違えば「端の飾り」と見なす(RGBユークリッド距離)
+BAD_JITTER = 2     # 絵の微妙なズレを許すため、比較先は ±2px の範囲で最も近い画素を採る
+
+
+def _shift(m, dx, dy):
+    """配列を (dx,dy) だけずらす(はみ出しは0埋め)。m[y][x] が m[y+dy][x+dx] を見に行く"""
+    h, w = m.shape[0], m.shape[1]
+    out = np.zeros_like(m)
+    xs0, xs1 = max(0, -dx), min(w, w - dx)
+    ys0, ys1 = max(0, -dy), min(h, h - dy)
+    if xs1 <= xs0 or ys1 <= ys0:
+        return out
+    out[ys0:ys1, xs0:xs1] = m[ys0 + dy:ys1 + dy, xs0 + dx:xs1 + dx]
+    return out
+
+
+def measure_period(sp, org, guess, rad=8):
+    """1ベイの周期ベクトル(整数)をテンプレートマッチで実測する。
+    投入口の重心はホッパーの大きさの差で数px偏るので、絵そのものを突き合わせる。"""
+    a = np.asarray(sp.convert('RGBA')).astype(np.int32)
+    h, w, _ = a.shape
+    rgb = a[:, :, :3]; op = a[:, :, 3] > 128
+    gx, gy = int(round(guess[0])), int(round(guess[1]))
+    tw = max(16, abs(gx)); th = max(16, int(abs(gx) * 1.5))       # 投入口まわり1ベイぶん
+    tx0 = max(0, min(w - tw, int(round(org[0] - tw / 2))))
+    ty0 = max(0, min(h - th, int(round(org[1] - th * 0.35))))
+    T = rgb[ty0:ty0+th, tx0:tx0+tw]; TO = op[ty0:ty0+th, tx0:tx0+tw]
+    best = (1e18, gx, gy)
+    for dx in range(gx - rad, gx + rad + 1):
+        for dy in range(gy - rad, gy + rad + 1):
+            x0, y0 = tx0 + dx, ty0 + dy
+            if x0 < 0 or y0 < 0 or x0 + tw > w or y0 + th > h:
+                continue
+            C = rgb[y0:y0+th, x0:x0+tw]; CO = op[y0:y0+th, x0:x0+tw]
+            e = float(((T - C) ** 2).sum(axis=2)[TO & CO].sum()) + 3 * 160 * 160 * int((TO ^ CO).sum())
+            if e / (tw * th) < best[0]:
+                best = (e / (tw * th), dx, dy)
+    return best[1], best[2]
+
+
+def shear_y(sp, r):
+    """列 x を round(r*x) px だけ縦にずらす。垂直線は垂直のまま。
+    r*Dx が整数なら「(Dx,Dy)周期 → (Dx,Dy+r*Dx)周期」の言い換えになり、周期性は厳密に保たれる。"""
+    if r == 0:
+        return sp, 0
+    a = np.asarray(sp.convert('RGBA'))
+    h, w, _ = a.shape
+    sh = [int(round(r * x)) for x in range(w)]
+    pad0, pad1 = max(0, -min(sh)), max(0, max(sh))
+    out = np.zeros((h + pad0 + pad1, w, 4), dtype=a.dtype)
+    for x in range(w):
+        out[pad0 + sh[x]:pad0 + sh[x] + h, x, :] = a[:, x, :]
+    return Image.fromarray(out, 'RGBA'), pad0
+
+
+def deco_mask(sp, D):
+    """「1ベイ前にも後ろにも同じ絵が無い」画素 = 端の飾り(煙突・煙・歯車・端の面)"""
+    Dx, Dy = D
+    a = np.asarray(sp.convert('RGBA')).astype(np.int32)
+    h, w, _ = a.shape
+    rgb = a[:, :, :3]; op = a[:, :, 3] > 128
+    best = np.full((h, w), 1e9)
+    for sgn in (+1, -1):
+        for ox in range(-BAD_JITTER, BAD_JITTER + 1):
+            for oy in range(-BAD_JITTER, BAD_JITTER + 1):
+                B = _shift(rgb, sgn*Dx + ox, sgn*Dy + oy)
+                OB = _shift(op, sgn*Dx + ox, sgn*Dy + oy)
+                d = np.sqrt(((rgb - B) ** 2).sum(axis=2))
+                best = np.minimum(best, np.where(OB, d, 1e9))
+    return op & (best > BAD_TOL)
+
+
+def clean_bay(sp, D, bad, mid_x):
+    """飾りを「1ベイ隣の同じ相対位置」の絵で置き換えた『素のベイ』。繰り返す縦帯はこれを使う。
+    奥側(x<mid_x)の飾りは前方(+D)から、手前側は後方(-D)から借りる = 必ず機械の内側から取る。"""
+    Dx, Dy = D
+    a = np.asarray(sp.convert('RGBA'))
+    h, w, _ = a.shape
+    out = a.copy()
+    X = np.arange(w)[None, :].repeat(h, 0)
+    todo = bad.copy()
+    for sgn in (+1, -1):                       # 第一希望(奥は+D / 手前は-D)
+        want = todo & ((X < mid_x) == (sgn > 0))
+        ok = want & ~_shift(todo, sgn*Dx, sgn*Dy)
+        out[ok] = _shift(a, sgn*Dx, sgn*Dy)[ok]
+        todo = todo & ~ok
+    for sgn in (-1, +1):                       # 第二希望
+        ok = todo & ~_shift(todo, sgn*Dx, sgn*Dy)
+        out[ok] = _shift(a, sgn*Dx, sgn*Dy)[ok]
+        todo = todo & ~ok
+    out[todo] = 0                              # 前後とも飾りなら消す
+    return Image.fromarray(out, 'RGBA')
+
+
+def compose(sp, cln, org, D, n):
+    """Nマス機を合成する。画面上の縦線 x=cx で切り、幅Dxの縦帯を N-2 回はさむ。
+    領域kは元絵の (k*Dx, k*Dy) 平行移動そのもの(整数)なので、補間は一切起きない。"""
+    Dx, Dy = D
+    a = np.asarray(sp.convert('RGBA'))
+    b = np.asarray(cln.convert('RGBA'))
+    h, w, _ = a.shape
+    W2, H2 = w + (n - 2) * Dx, h + (n - 2) * Dy
+    X, Y = np.meshgrid(np.arange(W2), np.arange(H2))
+    cx = int(round(org[0] + CUT * Dx))
+    k = np.clip(np.ceil((X - cx) / Dx - 1e-9).astype(np.int64), 0, n - 2)
+    sx, sy = X - k * Dx, Y - k * Dy
+    inside = (sx >= 0) & (sx < w) & (sy >= 0) & (sy < h)
+    cy, cxx = np.clip(sy, 0, h - 1), np.clip(sx, 0, w - 1)
+    # 繰り返す縦帯(k>=1 かつ 元絵の切断線より奥)だけ飾りを消した絵を使う。
+    # 奥側(k=0)と手前側(sx>cx)は元絵のまま = 煙突も歯車も1つずつ残る。
+    use = np.where(((k >= 1) & (sx <= cx))[:, :, None], b[cy, cxx], a[cy, cxx])
+    out = np.zeros((H2, W2, 4), dtype=a.dtype)
+    out[inside] = use[inside]
+    im = Image.fromarray(out, 'RGBA')
+    bb = im.getbbox() or (0, 0, W2, H2)
+    return im.crop(bb), (org[0] - bb[0], org[1] - bb[1])
+
+
+def synth_fit(theme, found, W, H, GU, GV, iso):
+    """2マス機の絵からNマス機を合成する。{'2':{ax,ay},...} を返す。無理なら None"""
+    step_x = abs(iso['ux'] * W / GU)
+    step_y = abs(iso['uy'] * H / GU)
+    sp, spots = found[0][1], found[0][2]                    # 幅が最小 = 2マス機
+    if not spots or len(spots) != 2:
+        return None
+    cs = sorted([s[0] for s in spots], key=lambda c: c[0])
+    if cs[1][1] < cs[0][1]:                                 # 長軸が右斜め上 → 左右反転
+        sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
+        cs = [(sp.width - 1 - c[0], c[1]) for c in cs][::-1]
+        print('   ※長軸が右斜め上なので左右反転してゲームの向きに揃えた')
+    guess = (cs[1][0] - cs[0][0], cs[1][1] - cs[0][1])
+    Dx, Dy = measure_period(sp, cs[0], guess)
+    if Dx < 8:
+        return None
+    Py = int(round(Dx * step_y / step_x))                   # ゲームのアイソメ比に合う縦の送り
+    r = (Py - Dy) / Dx
+    sp, pad = shear_y(sp, r)
+    org = (cs[0][0], cs[0][1] + pad + round(r * cs[0][0]))
+    scale = step_x / Dx
+    print(f'   2マス機の1ベイ = ({Dx},{Dy})px → ({Dx},{Py})px にせん断 (列あたり {r:+.4f}px)'
+          f' / 倍率 {scale:.4f}')
+    if Py != Dy:
+        print(f'   ※絵のアイソメ角がゲームと違う(1ベイの縦 {Dy}px に対しゲームは {Py}px)。'
+              f'差の{abs(Dy-Py)}pxは列ごとの縦シフトで吸収した')
+    bad = deco_mask(sp, (Dx, Py))
+    cln = clean_bay(sp, (Dx, Py), bad, org[0] + CUT * Dx)
+    out_fit = {}
+    for n, _sp, _s in found:
+        im, o = compose(sp, cln, org, (Dx, Py), n)
+        ow, oh = max(1, round(im.width * scale)), max(1, round(im.height * scale))
+        res = im.resize((ow, oh), Image.LANCZOS)
+        res.save(os.path.join(OUT, f'mach-{theme}-s{n}.png'))
+        ax, ay = o[0] * scale / ow, o[1] * scale / oh
+        out_fit[str(n)] = {'ax': round(ax, 4), 'ay': round(ay, 4)}
+        print(f'   s{n}: 合成 {im.width}x{im.height} → {ow}x{oh}  '
+              f'送り ({Dx*scale:.3f}, {Py*scale:.3f})px  アンカー ({ax:.4f}, {ay:.4f})')
+    dy_err = abs(Py * scale - step_y)
+    print(f'   送りの目標 ({step_x:.3f}, {step_y:.3f})px  → 横は完全一致 / '
+          f'縦の残差 {dy_err:.3f}px/マス (5マス機の端で {dy_err*4:.2f}px)')
+    return out_fit
+
+
 def main():
     import json
     W, H, GU, GV, iso, IN = main_js_consts()
     step_x = abs(iso['ux'] * W / GU)      # ゲームの1マス送り(u方向)
     step_y = abs(iso['uy'] * H / GU)
+    print(f'ゲームの1マス送り = ({step_x:.4f}, {step_y:.4f})px  (game/main.js の ISO/W/H/GU より)')
     fit = {}
     for f in sorted(os.listdir(SHEETS)):
         if not f.lower().endswith('.png'):
@@ -282,44 +393,24 @@ def main():
             print(f'   !! 機械を{len(picks)}台しか検出できませんでした(4台必要)。スキップ'); continue
         test = SPOT_TEST.get(theme)
 
-        # 1周目: 投入口を検出して、各台の送りを測る
+        # 投入口を検出する。4台ぶん測るのは「生成された絵がどれだけ詰まっているか」をログに残すため
         found = []
         for n, bb in zip(SIZES, picks):
             sp = sheet.crop(bb)
             spots = pick_spots(spot_blobs(sp, test), n) if test else None
             found.append((n, sp, spots))
-        measured = [( (s[-1][0][0]-s[0][0][0])/(n-1), (s[-1][0][1]-s[0][0][1])/(n-1) )
-                    for n, _, s in found if s and n > 1]
-        if len(measured) < 2:
-            print('   !! 投入口を検出できないテーマなので、従来の幅合わせにフォールバック')
+        measured = [abs((s[-1][0][0] - s[0][0][0]) / (n - 1)) for n, _, s in found if s and n > 1]
+        if len(measured) >= 2:
+            med = sorted(measured)[len(measured) // 2]
+            print(f'   シートの実測送り: {" / ".join(f"{m:.1f}" for m in measured)} px '
+                  f'(ばらつき ±{(max(measured)-min(measured))/med*100:.1f}%) ← これを直すために合成する')
+
+        got = synth_fit(theme, found, W, H, GU, GV, iso) if test else None
+        if got:
+            fit[theme] = got
+        else:
+            print('   !! 2マス機の投入口を検出できないテーマなので、従来の幅合わせにフォールバック')
             legacy_fit(theme, found, W, H, GU, GV, iso, IN)
-            continue
-
-        # 絵の長軸が「右斜め上」向き(dyが負)なら左右反転して「右斜め下」に揃える
-        flip = (sum(m[1] for m in measured) / len(measured)) < 0
-        dxs = sorted(abs(m[0]) for m in measured)
-        med = dxs[len(dxs) // 2]                       # 送りの中央値
-        scale = step_x / med                            # テーマ全体で1つの倍率(等倍)
-        spread = (max(dxs) - min(dxs)) / med * 100
-        print(f'   投入口の送り: {[round(abs(m[0]),1) for m in measured]} (ばらつき ±{spread:.1f}%)'
-              f' / 中央値 {med:.1f}px → 倍率 {scale:.3f}{"  ※左右反転" if flip else ""}')
-
-        for n, sp, spots in found:
-            if flip:
-                sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
-                spots = [((sp.width - 1 - c[0][0], c[0][1]), c[1]) for c in spots][::-1] if spots else None
-            ow, oh = max(1, round(sp.width * scale)), max(1, round(sp.height * scale))
-            out = sp.resize((ow, oh), Image.LANCZOS)
-            out.save(os.path.join(OUT, f'mach-{theme}-s{n}.png'))
-            if spots:
-                ax = spots[0][0][0] * scale / ow
-                ay = spots[0][0][1] * scale / oh
-                fit.setdefault(theme, {})[str(n)] = {'ax': round(ax, 4), 'ay': round(ay, 4)}
-                got = abs(spots[-1][0][0] - spots[0][0][0]) / (n - 1) * scale if n > 1 else step_x
-                print(f'   s{n}: {sp.width}x{sp.height} → {ow}x{oh}  送り {got:.1f}px (目標 {step_x:.1f})'
-                      f'  アンカー ({ax:.3f}, {ay:.3f})')
-            else:
-                print(f'   s{n}: {sp.width}x{sp.height} → {ow}x{oh}  !! 投入口を検出できずアンカーなし')
 
     with open(os.path.join(OUT, 'mach-fit.json'), 'w', encoding='utf-8') as fp:
         json.dump(fit, fp, ensure_ascii=False, indent=1)
