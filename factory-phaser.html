@@ -95,7 +95,7 @@
   .btn{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,66px);gap:8px;margin-top:6px}
   .cell{width:66px;height:80px;border-radius:8px;border:2px solid #333;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:28px;position:relative;cursor:pointer}
-  .cell small{font-size:8px;margin-top:1px} .cell .cnt{position:absolute;bottom:2px;right:5px;font-size:9px;color:#fff}
+  .cell small{font-size:8px;margin-top:1px} .cell .qty{position:absolute;bottom:2px;right:5px;font-size:9px;color:#fff}
   .cell.own:hover{box-shadow:0 0 0 2px var(--gold) inset}
   .cardwrap{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;min-height:100px;align-items:center;margin:6px 0}
   .card{width:72px;height:94px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:32px;border:2px solid #fff;animation:pop .45s ease both}
@@ -153,8 +153,8 @@
   #craft:hover{border-color:var(--mint)}
   #craft .pe{font-size:25px;line-height:1;flex:none}
   #craft .nm{font-size:13px;font-weight:700;color:#eafff4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
-  #craft .sub{font-size:10px;color:#9fb0c0;margin-top:2px}
-  #craft .sub.warn{color:#ff9f7a}
+  #craft .note{font-size:10px;color:#9fb0c0;margin-top:2px}
+  #craft .note.warn{color:#ff9f7a}
   #craft .go{font-size:10px;color:#9fdcc6;flex:none}
   /* ===== 🏭製造ダイアログ: 原材料のマスとWPの進捗 ===== */
   .mslots{display:flex;gap:7px;flex-wrap:wrap}
@@ -253,7 +253,7 @@
     <div class="mi" id="agentsBtn">🧑‍🏭 エージェント（スキン変更）</div>
     <div class="msep"></div>
     <div class="mh">記録</div>
-    <div class="mi" id="dexBtn">📖 図鑑</div>
+    <div class="mi" id="collectionBtn">📖 図鑑</div>
     <div class="mi" id="lbBtn">🏆 リーダーボード</div>
     <a class="mi" id="metricsMi" href="/metrics">📊 メトリクス</a>
   </div>
@@ -290,7 +290,7 @@ const SELL={1:60,2:180,3:600,4:2400,5:9000};         // 景品売却額(レア�
 // 製造機は2〜5マス（1マス機は廃止）。最小の2マス機が最初の1台。
 const MACH={ s2:{e:'2️⃣',n:'製造機 2マス',price:0},      s3:{e:'3️⃣',n:'製造機 3マス',price:6500},
              s4:{e:'4️⃣',n:'製造機 4マス',price:15000},  s5:{e:'5️⃣',n:'製造機 5マス',price:34000} };
-const machSub=(t)=> MACH[t] ? t : 's2';   // 旧4種(red等)・旧1マス機(s1) はすべて2マス機に読み替え
+const machVariant=(t)=> MACH[t] ? t : 's2';   // 旧4種(red等)・旧1マス機(s1) はすべて2マス機に読み替え
 const lvCost=(lvl)=> Math.round(120*lvl*lvl);        // レベルアップ費用
 const DECO={ crate:{e:'📦',n:'木箱',price:150}, drum:{e:'🛢️',n:'ドラム缶',price:200}, plant:{e:'🪴',n:'観葉植物',price:180}, pallet:{e:'🧱',n:'パレット',price:160}, sign:{e:'🚧',n:'標識',price:220} };
 // Stitch製 装飾プロップ(床に置くオブジェクト)。th = 対応テーマ(未指定は汎用)
@@ -520,7 +520,7 @@ const SERIES={
 };
 /* == ECON-DATA-END == */
 
-let G={ pity:0, inv:{}, money:0, machines:[{type:'s2',lvl:1}], decos:{},
+let G={ pity:0, inv:{}, money:0, machines:[{variant:'s2',lvl:1}], decos:{},
         bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[],
         stock:{machine:{},prop:{},deco:{}}, lastT:null };
 let saveT=null;
@@ -535,7 +535,7 @@ let saveT=null;
    multi=false のとき: 従来どおり /api/save に G を丸ごと保存する
    ========================================================================= */
 const NET={
-  multi:false, last:null, dexLoaded:false,
+  multi:false, last:null, collectionLoaded:false,
   rev:-1,          // いま手元にある工場の版番号。サーバはこれが一致すれば factory を省略する
   async probe(){
     try{
@@ -565,7 +565,7 @@ function applyFactory(f){
   G.seriesOwned=f.seriesOwned||[]; G.stock=f.stock||{machine:{},prop:{},deco:{}};
   G.emojiDecos=f.emojiDecos||[];
   G.layout=[
-    ...(f.machines||[]).map(m=>({id:m.id,kind:'machine',sub:m.sub,dir:m.dir,c:m.cx,r:m.cy,lvl:m.lvl,slots:m.slots})),
+    ...(f.machines||[]).map(m=>({id:m.id,kind:'machine',variant:m.variant,dir:m.dir,c:m.cx,r:m.cy,lvl:m.lvl,slots:m.slots})),
     ...(f.props||[]),
   ];
   const c=craftState(); c.mach={};
@@ -578,7 +578,7 @@ function pushLayout(){
   layoutT=setTimeout(async ()=>{
     snapLayout();
     const ms=(G.layout||[]).filter(e=>e.kind==='machine')
-      .map(e=>({id:e.id,sub:e.sub,dir:e.dir,cx:e.c,cy:e.r,lvl:e.lvl}));
+      .map(e=>({id:e.id,variant:e.variant,dir:e.dir,cx:e.c,cy:e.r,lvl:e.lvl}));
     const props=(G.layout||[]).filter(e=>e.kind!=='machine');
     const r=await NET.call('PUT','/api/layout',{machines:ms,props});
     if(r&&r.factory) applyFactory(r.factory);
@@ -591,43 +591,49 @@ function saveGame(){
 async function loadGame(){
   if(await NET.probe()){                              // マルチユーザー版サーバに繋がった
     applyFactory(NET.last.factory);
-    const d=await NET.call('GET','/api/dex');
+    const d=await NET.call('GET','/api/collection');
     if(d){ const c=craftState();
-      c.dex=Object.fromEntries(Object.entries(d.dex||{}).map(([k,v])=>[k,v.n]));
-      c.dexMeta=d.dex||{}; G.inv=d.inv||{}; NET.dexLoaded=true; }
+      c.collection=Object.fromEntries(
+        Object.entries(d.collection||{}).map(([k,v])=>[k,v.owned]));
+      c.collectionMeta=d.collection||{}; G.inv=d.inv||{}; NET.collectionLoaded=true; }
     const sk=await NET.call('GET','/api/skins'); if(sk) G.skins=sk.skins||{};
     return;
   }
   let s=null; try{ s=await (await fetch('/api/save',{cache:'no-store'})).json(); }catch(_){}
   if(!s||typeof s!=='object'){ try{ s=JSON.parse(localStorage.getItem('cf-save')); }catch(_){} }
   if(s&&typeof s==='object') G=Object.assign(G,s);     // 旧セーブの景品(inv)・pityは引き継ぎ、経済フィールドを補完
-  if(!G.inv)G.inv={}; if(!Array.isArray(G.machines)||!G.machines.length)G.machines=[{type:'s2',lvl:1}]; if(!G.decos)G.decos={};
-  for(const m of G.machines) m.type=machSub(m.type);
+  if(!G.inv)G.inv={}; if(!Array.isArray(G.machines)||!G.machines.length)G.machines=[{variant:'s2',lvl:1}]; if(!G.decos)G.decos={};
+  /* 旧セーブ移行: 製造機の種別は machines[].type / layout[].sub と名前が割れていた。
+     どちらも variant に寄せる（kind の下位で MACH/PROP/DECO 表を引くキー、の意）。 */
+  for(const m of G.machines){ if(m.variant==null&&m.type!=null){ m.variant=m.type; delete m.type; }
+    m.variant=machVariant(m.variant); }
   if(!Array.isArray(G.bgOwned))G.bgOwned=['auto']; if(!Array.isArray(G.floorOwned))G.floorOwned=['wood']; if(!G.bg)G.bg='auto'; if(!G.floor)G.floor='wood';
   if(!G.skins||typeof G.skins!=='object')G.skins={}; if(!Array.isArray(G.seriesOwned))G.seriesOwned=[]; if(!Array.isArray(G.emojiDecos))G.emojiDecos=[]; if(!Array.isArray(G.layout))G.layout=[];
+  // 旧セーブの layout[].sub → variant。この下の在庫復元が variant を読むので必ず先に済ませる
+  for(const e of G.layout) if(e.variant==null&&e.sub!=null){ e.variant=e.sub; delete e.sub; }
   ['money'].forEach(k=>{ if(typeof G[k]!=='number')G[k]=0; });
   // 在庫(owned)。無ければ現在の配置から復元(既存の設置物は所持扱い)
   if(!G.stock||typeof G.stock!=='object'){ G.stock={machine:{},prop:{},deco:{}};
-    for(const e of G.layout){ if(G.stock[e.kind]) G.stock[e.kind][e.sub]=(G.stock[e.kind][e.sub]||0)+1; } }
+    for(const e of G.layout){ if(G.stock[e.kind]) G.stock[e.kind][e.variant]=(G.stock[e.kind][e.variant]||0)+1; } }
   for(const k of ['machine','prop','deco']) if(!G.stock[k]||typeof G.stock[k]!=='object') G.stock[k]={};
   delete G.stock.belt; delete G.belts;                       // コンベアは廃止
   // 旧セーブの移行: コンベア/出荷口の配置を捨て、旧4種の製造機を1マス機に読み替える
   G.layout=(G.layout||[]).filter(e=>e.kind!=='belt'&&e.kind!=='outlet');
-  for(const e of G.layout) if(e.kind==='machine') e.sub=machSub(e.sub);
-  const ms={}; for(const t in G.stock.machine) ms[machSub(t)]=(ms[machSub(t)]||0)+G.stock.machine[t];
+  for(const e of G.layout) if(e.kind==='machine') e.variant=machVariant(e.variant);
+  const ms={}; for(const t in G.stock.machine) ms[machVariant(t)]=(ms[machVariant(t)]||0)+G.stock.machine[t];
   G.stock.machine=ms; }
 // 在庫と配置数
-function ownedN(kind,sub){ return (G.stock[kind]&&G.stock[kind][sub])||0; }
-function availN(kind,sub){ return Math.max(0, ownedN(kind,sub) - cnt(kind,sub)); }
-function addStock(kind,sub,n){ n=n||1; if(!G.stock[kind])G.stock[kind]={}; G.stock[kind][sub]=(G.stock[kind][sub]||0)+n; }
+function ownedN(kind,variant){ return (G.stock[kind]&&G.stock[kind][variant])||0; }
+function availN(kind,variant){ return Math.max(0, ownedN(kind,variant) - placedCount(kind,variant)); }
+function addStock(kind,variant,n){ n=n||1; if(!G.stock[kind])G.stock[kind]={}; G.stock[kind][variant]=(G.stock[kind][variant]||0)+n; }
 // 設置済みは必ず所持(在庫)に含める(在庫 >= 設置数 を保証)
 function reconcileStock(){ const need={machine:{},prop:{},deco:{}};
-  for(const e of (G.layout||[])) if(need[e.kind]) need[e.kind][e.sub]=(need[e.kind][e.sub]||0)+1;
+  for(const e of (G.layout||[])) if(need[e.kind]) need[e.kind][e.variant]=(need[e.kind][e.variant]||0)+1;
   for(const k of ['machine','prop','deco']){ for(const s in need[k]) if((G.stock[k][s]||0)<need[k][s]) G.stock[k][s]=need[k][s]; } }
 // 配置レイアウト(位置)の唯一の真実 = G.layout。シーンから同期。
 function snapLayout(){ if(window.__scene) G.layout=window.__scene.getLayout(); }
 window.__layoutChanged=()=>{ snapLayout(); saveGame(); };
-const cnt=(kind,sub)=> (G.layout||[]).filter(e=>e.kind===kind&&(sub==null||e.sub===sub)).length;
+const placedCount=(kind,variant)=> (G.layout||[]).filter(e=>e.kind===kind&&(variant==null||e.variant===variant)).length;
 // エージェント頭アクセ(スキン)の永続化: main.js からクリック巡回時に呼ばれる
 window.__skinChanged=(proj,skinId)=>{ if(!proj)return;
   if(skinId==='none') delete G.skins[proj]; else G.skins[proj]=skinId;
@@ -639,7 +645,7 @@ const overlay=document.getElementById('overlay'), panel=document.getElementById(
    すべてのダイアログ(ショップ・図鑑・エージェント・原材料・製造機…)はこれに載せる。
      openDialog({
        title  : 見出し（絵文字込みの文字列）
-       sub    : 見出し右の小さい補足。文字列 or (dlg)=>文字列
+       subtitle: 見出し右の小さい補足。文字列 or (dlg)=>文字列
        tabs   : [{id,label}] or (dlg)=>[…]  省略可。タブ付きダイアログ
        tab    : 初期タブid
        onTab  : (id,dlg)=>void  タブを押したとき（省略時は dlg.tab を差し替えて再描画）
@@ -663,9 +669,9 @@ function openDialog(o){
     const old=panel.querySelector('.pbody'), sc=old?old.scrollTop:0;   // live更新でスクロール位置を失わない
     const tabs=val(o.tabs,dlg)||[];
     const acts=val(o.actions,dlg)||[];
-    const sub=o.sub!=null?val(o.sub,dlg):'';
+    const subtitle=o.subtitle!=null?val(o.subtitle,dlg):'';
     panel.innerHTML='<span class="close" title="閉じる">✕</span>'
-      +`<div class="dlgHead"><h2>${o.title||''}${sub?`<span class="dlgSub">${sub}</span>`:''}</h2>`
+      +`<div class="dlgHead"><h2>${o.title||''}${subtitle?`<span class="dlgSub">${subtitle}</span>`:''}</h2>`
       +(tabs.length?`<div class="sttabs">${tabs.map(t=>`<span class="sttab ${t.id===dlg.tab?'on':''}" data-dlgtab="${t.id}">${t.label}</span>`).join('')}</div>`:'')
       +'</div>'
       +`<div class="pbody">${val(o.body,dlg)||''}</div>`
@@ -690,30 +696,30 @@ window.__toast=toast;   // scene(main.js)から通知を出す用
 function updateBadge(){ const m=document.getElementById('shopMoney');
   if(m) m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
 
-let _dexTab='prod';   // 'prod'=製造した製品(ゲームのゴール) / 'prize'=ガチャ景品
-let _dexG='food';     // 製品タブ配下のジャンル切り替え（GENRES + ✨シークレット）
+let _collectionTab='prod';   // 'prod'=製造した製品(ゲームのゴール) / 'prize'=ガチャ景品
+let _collectionGenre='food';     // 製品タブ配下のジャンル切り替え（GENRES + ✨シークレット）
 // 図鑑のジャンルタブ。GENRES に足せば自動で増える
-const dexGenres = ()=>[...GENRES, {id:SECRET_G,e:'✨',n:'シークレット'}];
+const collectionGenres = ()=>[...GENRES, {id:SECRET_G,e:'✨',n:'シークレット'}];
 const prodsOfGenre = (g)=>PRODS.filter(p=>p.g===g);
-function dexTabs(){
+function collectionTabs(){
   const c=craftState();
-  const pOwned=PRODS.filter(p=>c.dex[p.id]).length;
+  const pOwned=PRODS.filter(p=>c.collection[p.id]).length;
   const zOwned=PRIZES.filter(p=>G.inv[p.id]).length;
   return [{id:'prod',label:`🏭 製品 ${pOwned}/${PRODS.length}`},{id:'prize',label:`🎁 景品 ${zOwned}/${PRIZES.length}`}];
 }
-function dexBody(){
+function collectionBody(){
   const c=craftState();
   let body;
-  if(_dexTab==='prod'){
-    const gs=dexGenres();
-    if(!gs.some(g=>g.id===_dexG)) _dexG=gs[0].id;
+  if(_collectionTab==='prod'){
+    const gs=collectionGenres();
+    if(!gs.some(g=>g.id===_collectionGenre)) _collectionGenre=gs[0].id;
     // 製品タブ配下のジャンル切り替え。件数は「発見済み/全部」
     const gtabs=`<div class="sttabs">${gs.map(g=>{ const list=prodsOfGenre(g.id);
-      const own=list.filter(p=>c.dex[p.id]).length;
-      return `<span class="sttab ${g.id===_dexG?'on':''}" data-dexg="${g.id}">${g.e} ${g.n} ${own}/${list.length}</span>`;
+      const own=list.filter(p=>c.collection[p.id]).length;
+      return `<span class="sttab ${g.id===_collectionGenre?'on':''}" data-collection-genre="${g.id}">${g.e} ${g.n} ${own}/${list.length}</span>`;
       }).join('')}</div>`;
     // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
-    body=gtabs+`<div class="pgrid">${prodsOfGenre(_dexG).map(p=>{ const n=c.dex[p.id]||0;
+    body=gtabs+`<div class="pgrid">${prodsOfGenre(_collectionGenre).map(p=>{ const n=c.collection[p.id]||0;
       // 発見済みには主な原材料をヒントとして出す（レシピを推測する手がかり）
       const hint=p.m.length?p.m.map(x=>MAT[x]?MAT[x].e:'').join(''):'';
       return n ? `<div class="pcard" style="border-color:${RAR[p.r].c}"><div class="e">${p.e}</div>
@@ -721,34 +727,34 @@ function dexBody(){
                     <div class="qn">×${n}</div><div class="qn" title="主な原材料">${hint}</div></div>`
                : `<div class="pcard miss"><div class="e">❓</div><div class="nm">？？？</div>
                     <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`; }).join('')}</div>
-      <div class="rowline" style="font-size:11px;color:#9fb0c0">${_dexG===SECRET_G
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">${_collectionGenre===SECRET_G
         ? `シークレットは<b style="color:#ffd27a">ジャンルを跨いだ原材料</b>の特定の組み合わせでのみ、ごく低確率で出る。
            跨いだ組み合わせのほとんどは 🪨 謎のカタマリ。`
-        : `同じ ${GENRE[_dexG]?GENRE[_dexG].e+GENRE[_dexG].n:''} ジャンルの原材料の組み合わせを変えて未発見の製品を探そう。
+        : `同じ ${GENRE[_collectionGenre]?GENRE[_collectionGenre].e+GENRE[_collectionGenre].n:''} ジャンルの原材料の組み合わせを変えて未発見の製品を探そう。
            1製品 = マス数 × ${WP_PER_SLOT}WP。レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。`}</div>`;
   } else {
     body=`<div class="grid">${PRIZES.map(p=>{ const have=G.inv[p.id]||0,col=RAR[p.r].c;
-      return have? `<div class="cell own" data-id="${p.id}" style="border-color:${col}" title="クリックで部屋に飾る">${p.e}<small style="color:${col}">${RAR[p.r].n}</small><span class="cnt">×${have}</span></div>`
+      return have? `<div class="cell own" data-id="${p.id}" style="border-color:${col}" title="クリックで部屋に飾る">${p.e}<small style="color:${col}">${RAR[p.r].n}</small><span class="qty">×${have}</span></div>`
                  : `<div class="cell" style="opacity:.45">❓<small style="color:#9fb0c0">${RAR[p.r].n}</small></div>`; }).join('')}</div>
       <div class="rowline" style="font-size:11px;color:#9fb0c0">所持アイテムをクリックで部屋に飾る</div>`;
   }
   return body;
 }
-function openDex(tab,genre){
-  if(tab)_dexTab=tab;
-  if(genre)_dexG=genre;
-  return openDialog({ title:'📖 図鑑', tabs:dexTabs, tab:_dexTab,
-    onTab:(id,d)=>{ _dexTab=id; d.refresh(); },
-    body:dexBody,
+function openCollection(tab,genre){
+  if(tab)_collectionTab=tab;
+  if(genre)_collectionGenre=genre;
+  return openDialog({ title:'📖 図鑑', tabs:collectionTabs, tab:_collectionTab,
+    onTab:(id,d)=>{ _collectionTab=id; d.refresh(); },
+    body:collectionBody,
     onRender:(p,d)=>{
-      p.querySelectorAll('[data-dexg]').forEach(el=>el.onclick=()=>{ _dexG=el.dataset.dexg; d.refresh(); });
+      p.querySelectorAll('[data-collection-genre]').forEach(el=>el.onclick=()=>{ _collectionGenre=el.dataset.collectionGenre; d.refresh(); });
       p.querySelectorAll('.cell.own').forEach(el=>el.onclick=()=>{
         const z=PRIZES.find(x=>x.id===el.dataset.id);
         if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(z.e, RAR[z.r].c); snapLayout(); saveGame(); toast(`${z.e} ${z.n} を部屋に飾った！`); closeOverlay(); }
       }); } });
 }
 // 引数なしで開く（そのまま渡すと click イベントが tab として入ってしまう）
-document.getElementById('dexBtn').addEventListener('click',()=>openDex());
+document.getElementById('collectionBtn').addEventListener('click',()=>openCollection());
 
 /* =========================================================================
    製造プロトタイプ — 抽出機に原材料をセット → 実WPを溜めて製品化
@@ -895,7 +901,7 @@ const PRODS = [
   // レシピに無い組み合わせのときだけ出る。組み合わせを探す動機になる「ハズレ枠」
   {id:'blob',    g:SECRET_G,e:'🪨',n:'謎のカタマリ',r:1,m:[]},
 ];
-const BLOB='blob';
+const UNKNOWN_PRODUCT='blob';
 const PROD = Object.fromEntries(PRODS.map(p=>[p.id,p]));
 
 // 組み合わせ（重複を除いた原材料のソート済みキー）→ 出うる製品と確率
@@ -979,10 +985,10 @@ function pickWeighted(pool){
 function poolFor(key){
   if(!key) return [];
   const s=SECRETS[key];
-  if(s&&PROD[s.pid]) return [{p:PROD[s.pid],w:s.p},{p:PROD[BLOB],w:1-s.p}];
-  if(genresOfMats(key.split(',')).length>1) return [{p:PROD[BLOB],w:1}];
+  if(s&&PROD[s.pid]) return [{p:PROD[s.pid],w:s.p},{p:PROD[UNKNOWN_PRODUCT],w:1-s.p}];
+  if(genresOfMats(key.split(',')).length>1) return [{p:PROD[UNKNOWN_PRODUCT],w:1}];
   const pool=normPool(RECIPES[key]);
-  return pool.length?pool:[{p:PROD[BLOB],w:1}];
+  return pool.length?pool:[{p:PROD[UNKNOWN_PRODUCT],w:1}];
 }
 /* 組み合わせから1つ引く。判定の順番がゲーム性なのでここが唯一の分岐点。
    1. 隠しレシピ（ジャンル跨ぎ）→ p の確率でシークレット / 外れは🪨
@@ -990,11 +996,11 @@ function poolFor(key){
    3. 同ジャンルのレシピ         → 重み付き抽選
    4. 同ジャンルでレシピ無し     → 🪨 */
 function rollProduct(key){
-  if(!key) return PROD[BLOB];
+  if(!key) return PROD[UNKNOWN_PRODUCT];
   const s=SECRETS[key];
-  if(s&&PROD[s.pid]) return (Math.random()<(s.p||0)) ? PROD[s.pid] : PROD[BLOB];
-  if(genresOfMats(key.split(',')).length>1) return PROD[BLOB];
-  return pickWeighted(normPool(RECIPES[key])) || PROD[BLOB];
+  if(s&&PROD[s.pid]) return (Math.random()<(s.p||0)) ? PROD[s.pid] : PROD[UNKNOWN_PRODUCT];
+  if(genresOfMats(key.split(',')).length>1) return PROD[UNKNOWN_PRODUCT];
+  return pickWeighted(normPool(RECIPES[key])) || PROD[UNKNOWN_PRODUCT];
 }
 /* == CRAFT-DATA-END == */
 
@@ -1013,7 +1019,7 @@ function trimCraftLog(c){
   const keepFrom=Date.now()-7*24*3600*1000;
   if(c.log.length>2000 || c.log.some(m=>!(m.at>=keepFrom)))
     c.log=c.log.filter(m=>m.at>=keepFrom).slice(-2000);
-  const keepDay=jstDayOf(keepFrom);
+  const keepDay=jstDay(keepFrom);
   for(const d in c.sales) if(d<keepDay) delete c.sales[d];
 }
 function craftState(){
@@ -1023,7 +1029,11 @@ function craftState(){
   if(c.activeId===undefined) c.activeId=null;
   // made = 🎁完成品の「まだ見ていない分」だけ。一覧を開いたら空にする（＝毎回が新着）
   if(!Array.isArray(c.made)) c.made=[];
-  if(!c.dex||typeof c.dex!=='object') c.dex={};
+  /* collection = 図鑑（product_id → 所持数）。旧セーブは c.dex という名前だったので拾う。
+     旧名のまま残すと図鑑がまるごと空に見えるので、移行してから旧キーを消す。 */
+  if(!c.collection||typeof c.collection!=='object'){
+    c.collection = (c.dex&&typeof c.dex==='object') ? c.dex : {}; }
+  if(c.dex!==undefined) delete c.dex;
   /* log = 製造の記録（📊今日の製造で使う）。made は開くと消えるので別に持つ。
      旧セーブには log が無いので、そのときだけ made から起こす。 */
   if(!Array.isArray(c.log)) c.log=c.made.map(m=>({pid:m.pid, at:m.at, key:m.key||'', mid:m.mid}));
@@ -1084,17 +1094,17 @@ window.__craft = {
    マルチユーザー版は /api/state の1本にまとめてある。実測するとブラウザのポーリングが
    テレメトリ受信の30倍のリクエストを生むので、エンドポイントを統合し、
    タブが見えていないときは止める。 */
-let WPST={ total:0, today:0, ok:false, sc:[] };
-let PENDING=0;
+let wpState={ total:0, today:0, ok:false, scorecard:[] };
+let pendingCount=0;
 async function pollWp(){
   if(NET.multi){
     if(document.visibilityState==='hidden') return;   // 裏に回っている間は叩かない
     // 手元の版番号を渡す。工場の形が変わっていなければサーバは factory を返さない
     const d=await NET.call('GET','/api/state?rev='+NET.rev);
-    if(!d){ WPST.ok=false; return; }
+    if(!d){ wpState.ok=false; return; }
     NET.last=d;
-    WPST={ total:d.wp.total, today:d.wp.today, ok:true, sc:WPST.sc };
-    PENDING=d.pending;
+    wpState={ total:d.wp.total, today:d.wp.today, ok:true, scorecard:wpState.scorecard };
+    pendingCount=d.pending;
     if(d.factory){ applyFactory(d.factory); }      // 版が変わったときだけ来る
     else {
       // 差分だけ反映する（毎回変わるのは 💰 と各機械の進捗だけ）
@@ -1109,8 +1119,8 @@ async function pollWp(){
   try{
     const r=await fetch('/api/otel',{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
     const d=await r.json();
-    WPST={ total:d.wpTotal||0, today:d.wpToday||0, ok:true, sc:d.scorecard||[] };
-  }catch(_){ WPST.ok=false; }
+    wpState={ total:d.wpTotal||0, today:d.wpToday||0, ok:true, scorecard:d.scorecard||[] };
+  }catch(_){ wpState.ok=false; }
   tickCraft(); renderCraft();
 }
 /* main.js の poll() はここからエージェント一覧を受け取る（二重ポーリングを避ける） */
@@ -1121,11 +1131,11 @@ window.__agentFeed=()=> (NET.multi&&NET.last) ? {workers:NET.last.agents} : null
    ・原材料を変えてもWPはリセットしない（溜まった分はそのまま次に使う） */
 function tickCraft(){
   if(NET.multi) return;            // 製造判定はサーバ側（server/craft.mjs）
-  const c=craftState(); if(!WPST.ok) return;
+  const c=craftState(); if(!wpState.ok) return;
   // 初回は基準だけ取る（起動前に稼いだWPを遡って入れない）
-  if(typeof c.wpMark!=='number'){ c.wpMark=WPST.total; saveGame(); return; }
-  const delta=Math.max(0, WPST.total - c.wpMark);
-  c.wpMark=WPST.total;
+  if(typeof c.wpMark!=='number'){ c.wpMark=wpState.total; saveGame(); return; }
+  const delta=Math.max(0, wpState.total - c.wpMark);
+  c.wpMark=wpState.total;
   if(delta<=0) return;
   let last=null, total=0, gain=0;
   for(const m of machines()){
@@ -1135,7 +1145,7 @@ function tickCraft(){
     while(st.wp>=need && n<20){
       st.wp-=need;                                  // 超過分は次の製品に繰り越す
       const key=keyOfSlots(m.slots);                // ここで初めて組み合わせを見る
-      const p=key ? rollProduct(key) : PROD[BLOB];  // 空なら「レシピに無い」扱い
+      const p=key ? rollProduct(key) : PROD[UNKNOWN_PRODUCT];  // 空なら「レシピに無い」扱い
       if(!p) break;
       const rec={ pid:p.id, at:Date.now(), key:key||'', mid:m.id };
       c.made.push({...rec, viewed:false});   // 🎁完成品（開くと消える新着分）
@@ -1145,7 +1155,7 @@ function tickCraft(){
     }
   }
   // 製造個数と同じタイミングで 💰 と売上を積む（🎁を開くまで待たない）
-  if(gain){ G.money+=gain; const d=jstDayOf(Date.now()); c.sales[d]=(c.sales[d]||0)+gain; }
+  if(gain){ G.money+=gain; const d=jstDay(Date.now()); c.sales[d]=(c.sales[d]||0)+gain; }
   saveGame();
   if(total){
     updateDoneBtn(); updateBadge(); renderBoard();   // 💰と今日の売上がその場で動く
@@ -1157,16 +1167,16 @@ function tickCraft(){
 
 /* --- 今日の労働量ボード（画面上中央・このゲームの主役の数字） ---
    「今日どれだけ働いたか」を示す数字なので、製造の設定とは切り離して大きく出す。 */
-const jstDayOf = t => new Date(t + 9*3600*1000).toISOString().slice(0,10);
+const jstDay = t => new Date(t + 9*3600*1000).toISOString().slice(0,10);
 // 今日の製造は記録(c.log)から数える。🎁完成品を開いても消えない
-function logToday(){ const d=jstDayOf(Date.now()); return craftState().log.filter(m=>jstDayOf(m.at)===d); }
+function logToday(){ const d=jstDay(Date.now()); return craftState().log.filter(m=>jstDay(m.at)===d); }
 const madeToday = ()=> NET.multi ? ((NET.last&&NET.last.today.made)||0) : logToday().length;
 const salesToday = ()=> NET.multi ? ((NET.last&&NET.last.today.sales)||0)
-                                  : (craftState().sales[jstDayOf(Date.now())]||0);
+                                  : (craftState().sales[jstDay(Date.now())]||0);
 function renderBoard(){
   const el=document.getElementById('board'); if(!el) return;
   el.innerHTML=`
-    <div class="m"><div class="v">${WPST.ok?Math.floor(WPST.today).toLocaleString():'—'}<small>WP</small></div>
+    <div class="m"><div class="v">${wpState.ok?Math.floor(wpState.today).toLocaleString():'—'}<small>WP</small></div>
       <div class="l">今日の労働量</div></div>
     <div class="m prod hit" id="todayBtn" title="クリックで今日つくったものを見る">
       <div class="v">${madeToday()}<small>個</small></div>
@@ -1179,7 +1189,7 @@ function renderBoard(){
    原材料の組み合わせも出すので、当たった組み合わせを見返す用途にも使える。 */
 function openToday(){
   return openDialog({ title:'📊 今日の製造',
-    sub:()=>`${madeToday()}個 / 売上 💰${Math.floor(salesToday()).toLocaleString()}`,
+    subtitle:()=>`${madeToday()}個 / 売上 💰${Math.floor(salesToday()).toLocaleString()}`,
     live:2000,
     body:()=>{
       const rows={};
@@ -1201,7 +1211,7 @@ function openToday(){
           レア度の高い順。数字は今日つくった個数、その下は使った原材料の組み合わせ。
           今日つくったものの合計価値は 💰${gain.toLocaleString()}（完成した時点で 💰 に入っている）。</div>`;
     },
-    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openDex('prod')}] });
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection('prod')}] });
 }
 
 /* --- 製造のコンパクト表示（画面上中央）。詳しい操作は🏭製造ダイアログに寄せ、
@@ -1215,8 +1225,8 @@ function renderCraft(){
   const st = !ms.length ? '製造機なし' : run ? `⚙️ 製造中 ${run}/${ms.length}台` : `📦 待機中 ${ms.length}台`;
   el.innerHTML = `<span class="pe">🏭</span>
     <div class="mid"><div class="nm">製造機設定</div>
-      <div class="sub">${st}</div>${
-      WPST.ok?'':'<div class="sub warn">WP未取得（サーバ未接続）</div>'}</div>
+      <div class="note">${st}</div>${
+      wpState.ok?'':'<div class="note warn">WP未取得（サーバ未接続）</div>'}</div>
     <span class="go">▸</span>`;
   el.title='クリックで🏭製造（原材料のセット・製造開始）';
   renderBoard();
@@ -1267,7 +1277,7 @@ function machRow(m){
         title="${(!st.running&&!nSet)?'原材料を1つ以上セットしてください':''}">${st.running?'■ 停止':'▶ 製造開始'}</button>
     </div>${picker}
     <div class="wpline"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
-      <b${WPST.ok?'':' style="color:#ff9f7a"'}>${Math.floor(st.wp)} / ${need} WP</b></div>
+      <b${wpState.ok?'':' style="color:#ff9f7a"'}>${Math.floor(st.wp)} / ${need} WP</b></div>
   </div>`;
 }
 /* machRow のクリックを結線する。dlg.refresh() で描き直す前提。 */
@@ -1286,7 +1296,7 @@ function bindMachRow(p,d){
 function openCraft(){
   _craftPick=null;
   return openDialog({ title:'🏭 製造',
-    sub:()=>{ const ms=machines(); return ms.length?`${ms.length}台 / 稼働 ${runningCount()}台`:'製造機がありません'; },
+    subtitle:()=>{ const ms=machines(); return ms.length?`${ms.length}台 / 稼働 ${runningCount()}台`:'製造機がありません'; },
     live:1000,
     body:()=>{
       const ms=machinesSorted();
@@ -1321,7 +1331,7 @@ window.__machineClick = (machineId)=>{ if(window.__openMachine) window.__openMac
 /* --- 完成品（新着だけを見せる箱。1回開いたら中身は空になる） --- */
 function updateDoneBtn(){
   const c=craftState(), b=document.getElementById('doneBtn'); if(!b) return;
-  const n = NET.multi ? PENDING : c.made.length;
+  const n = NET.multi ? pendingCount : c.made.length;
   b.classList.toggle('show', n>0);
   document.getElementById('doneN').textContent = n || '';
 }
@@ -1329,10 +1339,12 @@ function updateDoneBtn(){
    売上は完成した瞬間にサーバの tick() が積んでいるので、ここでは合計額を見せるだけ。 */
 async function openDoneServer(){
   const r=await NET.call('POST','/api/claim'); if(!r) return;
-  PENDING=0; updateDoneBtn();
+  pendingCount=0; updateDoneBtn();
   const st=await NET.call('GET','/api/state'); if(st){ NET.last=st; applyFactory(st.factory); }
-  const d=await NET.call('GET','/api/dex');
-  if(d){ const c=craftState(); c.dex=Object.fromEntries(Object.entries(d.dex||{}).map(([k,v])=>[k,v.n])); c.dexMeta=d.dex||{}; }
+  const d=await NET.call('GET','/api/collection');
+  if(d){ const c=craftState(); c.collection=Object.fromEntries(
+    Object.entries(d.collection||{}).map(([k,v])=>[k,v.owned]));
+    c.collectionMeta=d.collection||{}; }
   updateBadge(); renderBoard();
   const byRar={}; for(const it of r.items) byRar[it.r]=(byRar[it.r]||0)+1;
   const cards=[...r.items].reverse().slice(0,200).map(p=>`<div class="pcard">${p.isNew?'<span class="new">NEW</span>':''}
@@ -1340,7 +1352,7 @@ async function openDoneServer(){
       <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`).join('');
   const bd=Object.keys(byRar).sort().map(k=>
     `<span class="chip"><b style="color:${RAR[k].c}">${RAR[k].n}</b>×${byRar[k]} = 💰${(PROD_PRICE[k]*byRar[k]).toLocaleString()}</span>`).join('');
-  openDialog({ title:'🎁 完成品', sub:`${r.items.length}個`,
+  openDialog({ title:'🎁 完成品', subtitle:`${r.items.length}個`,
     body:`${r.gain?`<div class="invbar" style="font-size:12px">
           <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
           <b style="color:#ffd27a;font-size:19px">💰 ${r.gain.toLocaleString()}</b>${bd}</div>`
@@ -1348,13 +1360,13 @@ async function openDoneServer(){
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
         ${r.registered?`${r.registered}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。</div>
       <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
-    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openDex('prod')}] });
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection('prod')}] });
 }
 function openDone(){
   if(NET.multi) return openDoneServer();
   const c=craftState();
   const batch=c.made.slice();                                // 今回見せる分（あとで空にする）
-  const had={}; for(const k in c.dex) had[k]=c.dex[k];      // 「初めて」の判定は登録前の図鑑で行う
+  const had={}; for(const k in c.collection) had[k]=c.collection[k];      // 「初めて」の判定は登録前の図鑑で行う
   const cards=[...batch].reverse().slice(0,200).map(m=>{
     const p=PROD[m.pid]; if(!p) return '';
     // 未登録の製品は該当する全部に NEW を付ける（3個できていれば3個とも）
@@ -1370,7 +1382,7 @@ function openDone(){
   let reg=0, gain=0, byRar={};
   for(const m of batch){
     const p=PROD[m.pid]; if(!p) continue;
-    c.dex[m.pid]=(c.dex[m.pid]||0)+1; reg++;
+    c.collection[m.pid]=(c.collection[m.pid]||0)+1; reg++;
     const price=PROD_PRICE[p.r]||0; gain+=price;
     byRar[p.r]=(byRar[p.r]||0)+1;
   }
@@ -1379,7 +1391,7 @@ function openDone(){
   saveGame(); updateDoneBtn(); updateBadge(); renderBoard();
   const bd=Object.keys(byRar).sort().map(r=>
     `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
-  openDialog({ title:'🎁 完成品', sub:`${batch.length}個`,
+  openDialog({ title:'🎁 完成品', subtitle:`${batch.length}個`,
     body:`${gain?`<div class="invbar" style="font-size:12px">
           <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
           <b style="color:#ffd27a;font-size:19px">💰 ${gain.toLocaleString()}</b>
@@ -1389,7 +1401,7 @@ function openDone(){
         ${reg?`${reg}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。図鑑を埋めていこう。
         今日つくったものは 📊今日の製造 でいつでも見返せる。</div>
       <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
-    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openDex('prod')}] });
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection('prod')}] });
 }
 document.getElementById('doneBtn').addEventListener('click',openDone);
 
@@ -1626,9 +1638,9 @@ async function myLocalData(days){
     who=String((top&&(top.name||top.email||top.id))||'').split('@')[0];
   }catch(_){}
   const made={};
-  for(const m of (c.log||[])){ const d=jstDayOf(m.at); made[d]=(made[d]||0)+1; }
+  for(const m of (c.log||[])){ const d=jstDay(m.at); made[d]=(made[d]||0)+1; }
   const series=[];
-  for(let i=days-1;i>=0;i--){ const day=jstDayOf(Date.now()-i*86400000);
+  for(let i=days-1;i>=0;i--){ const day=jstDay(Date.now()-i*86400000);
     series.push({day, wp:Math.round(wpDaily[day]||0), made:made[day]||0, sales:Math.round(c.sales[day]||0)}); }
   const sum=(l,k)=>l.reduce((a,d)=>a+d[k],0), last7=series.slice(-7);
   return { name:G.factoryName||'', userName:who||'あなた', defaultName:`${who||'あなた'}の工場`,
@@ -1696,7 +1708,7 @@ function skinThumb(id,px){ const e=(id==='none')?'🧑‍🏭':((BG_META[id]&&BG
 function openAgents(){
   const esc=(s)=>String(s||'').replace(/[<>&]/g,'');
   return openDialog({ title:'🧑‍🏭 エージェント',
-    sub:()=>{ const r=agentRows(), n=r.reduce((s,p)=>s+p.n,0), b=r.reduce((s,p)=>s+p.busy,0);
+    subtitle:()=>{ const r=agentRows(), n=r.reduce((s,p)=>s+p.n,0), b=r.reduce((s,p)=>s+p.busy,0);
       return `稼働 ${b} / 休憩 ${n-b}`; },
     live:1000,                          // 開いている間は最新の稼働状況に追従
     body:()=>{
@@ -1713,7 +1725,7 @@ function openAgents(){
         // スキンの一覧は長いので行の直下で折りたたみ表示（他の行が押し出されないよう高さを制限）
         if(open) h+=`<div class="grid" style="margin:0 0 12px 8px;max-height:196px;overflow-y:auto">${skins.map(s=>{ const on=p.skinId===s.id;
             return `<div class="cell own" data-skin="${s.id}" data-proj="${key}" title="${s.n}"
-              style="${on?'border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset':''}">${skinThumb(s.id,26)}<small style="color:#cfeee0">${s.n}</small>${on?'<span class="cnt">✓</span>':''}</div>`;
+              style="${on?'border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset':''}">${skinThumb(s.id,26)}<small style="color:#cfeee0">${s.n}</small>${on?'<span class="qty">✓</span>':''}</div>`;
           }).join('')}</div>`;
         return h;
       }).join('')
@@ -1755,7 +1767,7 @@ function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machin
     if(window.__scene&&lv)window.__scene.setMachineLevel(id,lv);
     updateBadge(); toast(`Lv${lv} に強化！`); }); return; }
   G.money-=c; e.lvl++;
-  const M=MACH[machSub(e.sub)];
+  const M=MACH[machVariant(e.variant)];
   if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${M.e} ${M.n} を Lv${e.lvl} に強化！`); }
 // 素材スロットの要約（ショップ一覧用）。何が作れるかは伏せ、素材と稼働状態だけ出す
 function slotSummary(e){ const mats=[...new Set((e.slots||[]).filter(Boolean))].sort();
@@ -1795,7 +1807,7 @@ function shopBody(){
     } else if(_shopTab==='mach'){
       body = '<div class="cost" style="margin:2px 0 6px">設置済みの製造機（Lv↑で生産量が増える。素材は🏭製造タブでセット）</div>';
       const machs=(G.layout||[]).filter(e=>e.kind==='machine');
-      body += (machs.length?machs:[]).map(e=>{ const c=lvCost(e.lvl), M=MACH[machSub(e.sub)];
+      body += (machs.length?machs:[]).map(e=>{ const c=lvCost(e.lvl), M=MACH[machVariant(e.variant)];
         return `<div class="rc"><div class="ic">${M.e}</div>
         <div class="mid"><div class="nm">${M.n} <span style="color:#7fe6ff;font-size:11px">Lv${e.lvl}</span></div>
         <div class="cost">${slotSummary(e)} ・ 次のLv 💰${c.toLocaleString()}</div></div>
@@ -1844,7 +1856,7 @@ function shopBody(){
 }
 function openShop(tab){ if(tab)_shopTab=tab;
   return openDialog({ title:'🏪 ショップ',
-    sub:()=>`<span id="shopMoney" style="color:#ffd27a;font-size:13px">💰 ${Math.floor(G.money).toLocaleString()}</span>`,
+    subtitle:()=>`<span id="shopMoney" style="color:#ffd27a;font-size:13px">💰 ${Math.floor(G.money).toLocaleString()}</span>`,
     tabs:SHOP_TABS.map(t=>({id:t[0],label:t[1]})), tab:_shopTab,
     onTab:(id,d)=>{ _shopTab=id; d.refresh(); },
     body:shopBody,
@@ -1903,8 +1915,8 @@ function renderPalette(){
         +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去 ・ ラグは床の平物なので家具の下に敷けます';
       // テーマ(=背景)で絞り込む。propFilter が null なら全部。DECO は汎用('')扱い
       const inFilter=(th)=> propFilter===null || (th||'')===propFilter;
-      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.sub===t));
-      const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.sub===t));
+      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.variant===t));
+      const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.variant===t));
       items=(P.concat(D).join(''))||`<div class="phint" style="padding:8px">${propFilter===null?'在庫なし。🏪ショップ→設備 で購入してください。':'このテーマの在庫がありません。「すべて」に戻すか、🏪ショップで購入してください。'}</div>`;
       // 絞り込み行: 在庫のあるテーマだけ出す。適用中の背景と同じテーマには印を付ける
       const nOf=(th)=> Object.keys(PROP).filter(t=>(PROP[t].th||'')===th&&availN('prop',t)>0).length
@@ -1922,7 +1934,7 @@ function renderPalette(){
       : `<span class="c" data-stow="all">📦 すべて収納 (${placedN})</span><span class="c" data-selmode="1">☑️ 選んで収納</span>`;
   } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です')
       +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去 ・ クリックで設定パネル（↻回転・✥移動／素材は🏭製造タブ）';
-    const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.sub===t));
+    const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.variant===t));
     items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
   }
   paletteEl.innerHTML=`<div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
@@ -1933,7 +1945,7 @@ function renderPalette(){
   paletteEl.querySelectorAll('[data-selmode]').forEach(el=>el.onclick=()=>{ setSelMode(el.dataset.selmode==='1'); renderPalette(); });
   paletteEl.querySelectorAll('[data-stow]').forEach(el=>el.onclick=()=>stow(el.dataset.stow));
   paletteEl.querySelectorAll('[data-bg]').forEach(el=>el.onclick=()=>{ applyBg(el.dataset.bg); renderPalette(); });
-  paletteEl.querySelectorAll('[data-place]').forEach(el=>el.onclick=()=>{ const p=el.dataset.place.split(':'); editSel={kind:p[0],sub:p[1]||null}; window.__editSel=editSel; renderPalette(); });
+  paletteEl.querySelectorAll('[data-place]').forEach(el=>el.onclick=()=>{ const p=el.dataset.place.split(':'); editSel={kind:p[0],variant:p[1]||null}; window.__editSel=editSel; renderPalette(); });
 }
 window.renderPalette=renderPalette;
 function setSelMode(on){ const s=window.__scene; if(!s) return;
@@ -1956,14 +1968,14 @@ function stow(mode){ const s=window.__scene; if(!s) return;
   toast(`${n}個を在庫に戻しました`);
 }
 window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
-  if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
-  const s=window.__scene; const id = s.addPlaced(sel.kind, sel.sub, {cell:{c,r}, dir:s.placeDir});
-  if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.sub)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
+  if(availN(sel.kind,sel.variant)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
+  const s=window.__scene; const id = s.addPlaced(sel.kind, sel.variant, {cell:{c,r}, dir:s.placeDir});
+  if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.variant)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
 /* ===== 製造機の設定パネル: 中身は🏭製造の一覧と同じ行（machRow）。
        違いは「その下に配置（↻回転 / ✥移動）が付く」ことだけ。編集中に機械をクリックで開く ===== */
 window.__openMachine=(id)=>{
   const F=window.__factory; if(!F) return; _craftPick=null;
-  const dlg=openDialog({ title:'🏭 製造機', sub:()=>{ const m=F.getMachine(id); return m?`${m.size}マス${m.lvl>1?` Lv${m.lvl}`:''}`:''; },
+  const dlg=openDialog({ title:'🏭 製造機', subtitle:()=>{ const m=F.getMachine(id); return m?`${m.size}マス${m.lvl>1?` Lv${m.lvl}`:''}`:''; },
     live:1000,
     body:()=>{
     const m=machinesSorted().find(x=>x.id===id);

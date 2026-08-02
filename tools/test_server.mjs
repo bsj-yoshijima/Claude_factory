@@ -218,11 +218,11 @@ try {
   console.log('\n[5] 製造（サーバ権威）');
   {
     // 2マス機を1台置いて素材をセット → 稼働
-    let r = await a('PUT', '/api/layout', { body: { machines: [{ id: 'm1', sub: 's2', cx: 3, cy: 3 }], props: [] } });
+    let r = await a('PUT', '/api/layout', { body: { machines: [{ id: 'm1', variant: 's2', cx: 3, cy: 3 }], props: [] } });
     eq(r.status, 200, '在庫のぶんだけ製造機を設置できる');
 
     const over = await a('PUT', '/api/layout', {
-      body: { machines: [{ id: 'm1', sub: 's2', cx: 3, cy: 3 }, { id: 'm2', sub: 's2', cx: 5, cy: 3 }], props: [] } });
+      body: { machines: [{ id: 'm1', variant: 's2', cx: 3, cy: 3 }, { id: 'm2', variant: 's2', cx: 5, cy: 3 }], props: [] } });
     eq(over.status, 400, '在庫を超える設置はサーバが拒否する');
 
     await a('PUT', '/api/machine/slots', { body: { id: 'm1', slots: ['flour', 'milk'] } });
@@ -263,9 +263,10 @@ try {
     eq(after.today.sales, st1.today.sales, '🎁を開いても今日の売上は二重に増えない');
     eq(after.pending, 0, '回収後は新着が 0 になる');
     eq(after.today.made, 3, '📊今日の製造に3個が記録される');
-    const dex = (await a('GET', '/api/dex')).json.dex;
-    ok(Object.keys(dex).length > 0, '図鑑に登録される');
-    ok(Object.values(dex).every((d) => d.firstAt), '初取得日時が記録される（旧実装には無かった）');
+    const collection = (await a('GET', '/api/collection')).json.collection;
+    ok(Object.keys(collection).length > 0, '図鑑に登録される');
+    ok(Object.values(collection).every((d) => d.firstAt),
+      '初取得日時が記録される（旧実装には無かった）');
   }
 
   console.log('\n[6] ショップ（サーバ検証）');

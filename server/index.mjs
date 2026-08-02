@@ -293,7 +293,7 @@ async function handle(req, res) {
         case 'PUT /api/machine/slots': r = await API.putSlots(user, body); break;
         case 'PUT /api/machine/run':  r = await API.putRunning(user, body); break;
         case 'PUT /api/skin':         r = await API.putSkin(user, body); break;
-        case 'GET /api/dex':          r = await API.getDex(user); break;
+        case 'GET /api/collection':   r = await API.getCollection(user); break;
         case 'GET /api/leaderboard':  r = await API.getLeaderboard(user, url.searchParams); break;
         case 'GET /api/made':         r = await API.getMade(user, url.searchParams); break;
         case 'GET /api/me':           r = await API.getMe(user, await Auth.ensureIngestToken(user.id)); break;

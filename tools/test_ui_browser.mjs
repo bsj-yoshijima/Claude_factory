@@ -155,7 +155,7 @@ await sleep(1200);
 ok(await ev(`document.getElementById('overlay').classList.contains('show')&&document.querySelectorAll('[data-cslot]').length>0`), '開いている間も更新され続ける（live）');
 // 2台目を置くと行が増える
 const mid2=await ev(`(()=>{const s=window.__scene; for(let r=0;r<16;r++)for(let c=0;c<16;c++){
-  if(s.canPlace('machine',c,r,{sub:'s3',dir:'u'})) return s.addPlaced('machine','s3',{cell:{c,r},dir:'u'}); } return null;})()`);
+  if(s.canPlace('machine',c,r,{variant:'s3',dir:'u'})) return s.addPlaced('machine','s3',{cell:{c,r},dir:'u'}); } return null;})()`);
 await ev(`window.__layoutChanged()`); await ev(`openCraft()`); await sleep(350);
 ok((await ev(`document.querySelectorAll('.mrow').length`))===nrow+1, `2台目を置くと行が増える (${nrow}→${nrow+1})`);
 ok((await ev(`document.querySelectorAll('[data-cslot][data-cmid=${JSON.stringify(mid2)}]').length`))===3, '2台目は3マスぶんのスロットが出る');
@@ -171,7 +171,7 @@ await ev(`window.__factory.setSlot(${JSON.stringify(mid)},0,null); window.__fact
 await ev(`closeOverlay()`); await sleep(200);
 
 console.log('\n=== ショップ/図鑑（共通ダイアログ） ===');
-for(const [fn,label] of [['openShop','ショップ'],['openDex','図鑑']]){
+for(const [fn,label] of [['openShop','ショップ'],['openCollection','図鑑']]){
   await ev(`${fn}()`); await sleep(300);
   ok(await ev(`document.getElementById('overlay').classList.contains('show')`), `${label}が開く`);
   ok(await ev(`!!document.querySelector('#panel .dlgHead h2') && !!document.querySelector('#panel .pbody')`), `${label}が共通ダイアログ（見出し＋本文）で描かれる`);
@@ -179,14 +179,14 @@ for(const [fn,label] of [['openShop','ショップ'],['openDex','図鑑']]){
   await ev(`closeOverlay()`); await sleep(150);
 }
 console.log('\n=== 📖 図鑑: 製品タブ配下のジャンル切り替え ===');
-await ev(`openDex('prod')`); await sleep(300);
-const ngt=await ev(`document.querySelectorAll('[data-dexg]').length`);
+await ev(`openCollection('prod')`); await sleep(300);
+const ngt=await ev(`document.querySelectorAll('[data-collection-genre]').length`);
 ok(ngt===(await ev(`GENRES.length+1`)), `ジャンルタブが全ジャンル + ✨シークレット ぶん出る (${ngt})`);
-ok(await ev(`[...document.querySelectorAll('#panel .pgrid .pcard')].length===PRODS.filter(p=>p.g===_dexG).length`),
+ok(await ev(`[...document.querySelectorAll('#panel .pgrid .pcard')].length===PRODS.filter(p=>p.g===_collectionGenre).length`),
    '出ている製品カードは選択中ジャンルの数と一致');
 for(const g of ['mech','life','secret']){
-  await ev(`document.querySelector('[data-dexg="${g}"]').click()`); await sleep(250);
-  ok(await ev(`document.querySelector('[data-dexg="${g}"]').classList.contains('on') && _dexG==='${g}'`), `${g} タブに切り替わる`);
+  await ev(`document.querySelector('[data-collection-genre="${g}"]').click()`); await sleep(250);
+  ok(await ev(`document.querySelector('[data-collection-genre="${g}"]').classList.contains('on') && _collectionGenre==='${g}'`), `${g} タブに切り替わる`);
   ok(await ev(`document.querySelectorAll('#panel .pgrid .pcard').length===PRODS.filter(p=>p.g==='${g}').length`),
      `${g} の製品だけが並ぶ (${await ev(`PRODS.filter(p=>p.g==='${g}').length`)}種)`);
 }
@@ -269,7 +269,7 @@ await ev(`closeOverlay()`); await sleep(150);
 console.log('\n=== メニューのグルーピング ===');
 ok((await ev(`document.querySelectorAll('#menu .mh').length`))>=3, 'メニューに見出しが3つ以上ある');
 ok((await ev(`document.querySelectorAll('#menu .msep').length`))>=2, 'メニューに区切りがある');
-for(const idn of ['craftBtn','shopBtn','dexBtn','lbBtn','agentsBtn','editMenuBtn'])
+for(const idn of ['craftBtn','shopBtn','collectionBtn','lbBtn','agentsBtn','editMenuBtn'])
   ok(await ev(`!!document.getElementById('${idn}')`), `メニュー項目 #${idn} がある`);
 console.log('\n=== 編集パレットの案内文（実態に合わせる） ===');
 await ev(`document.getElementById('editFab').click()`); await sleep(400);

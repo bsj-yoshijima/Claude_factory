@@ -52,8 +52,9 @@ npm install && docker compose up -d && node server/index.mjs
 | `server/ingest-otel.mjs` | OTLP → 分バケット。親子判定・重複排除 |
 | `server/ingest-hooks.mjs` | hooks → `agent_sessions`。在/不在の減衰ルール |
 | `server/wp.mjs` | 重みの定義と WP の集計 |
+| `server/time.mjs` | JST の暦日。集計の境界を決めるので定義は1箇所だけ |
 | `server/craft.mjs` | 製造エンジン（サーバ権威） |
-| `server/api.mjs` | ゲーム API。💰・図鑑・在庫を書き換えるのはここだけ |
+| `server/api.mjs` | ゲーム API。💰・図鑑（`collection`）・在庫を書き換えるのはここだけ |
 | `server/auth.mjs` | Google SSO / dev ログイン / 取り込みトークン |
 | `db/schema.sql` | スキーマ。全部冪等なので起動のたびに流している |
 

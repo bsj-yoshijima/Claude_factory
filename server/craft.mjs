@@ -7,12 +7,12 @@
 // たびに遅延評価される）。旧実装の「1tickあたり20個まで」の刻みも不要になった。
 import { tx, one, all } from './db.mjs';
 import { totalWp } from './wp.mjs';
-import { rollProduct, keyOfSlots, needWp, PROD, PROD_PRICE, BLOB } from './game-data.mjs';
+import { jstDay } from './time.mjs';
+import { rollProduct, keyOfSlots, needWp, PROD, PROD_PRICE, UNKNOWN_PRODUCT }
+  from './game-data.mjs';
 
 // 病的なケースの保険。到達したら黙って捨てず必ず記録する（WP.md §4 と同じ方針）
 const MAX_PER_MACHINE = 2000;
-
-const jstDay = (t = Date.now()) => new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
 /**
  * その人の製造を最新まで進める。
@@ -55,7 +55,7 @@ export async function tick(userId) {
     if (delta <= 0) return { delta: 0, produced: [], capped: 0, noop: true };
 
     const machines = (await c.query(
-      `SELECT m.id, m.sub, m.wp,
+      `SELECT m.id, m.variant, m.wp,
               COALESCE(ARRAY_AGG(s.mat_id ORDER BY s.idx) FILTER (WHERE s.mat_id IS NOT NULL),
                        ARRAY[]::text[]) AS mats
          FROM machines m
@@ -69,12 +69,12 @@ export async function tick(userId) {
 
     for (const m of machines) {
       let wp = Number(m.wp) + delta;
-      const need = needWp(m.sub);
+      const need = needWp(m.variant);
       let n = 0;
       while (wp >= need && n < MAX_PER_MACHINE) {
         wp -= need;
         const key = keyOfSlots(m.mats);                 // ここで初めて組み合わせを見る
-        const p = key ? rollProduct(key) : PROD[BLOB];  // 空なら「レシピに無い」扱い
+        const p = key ? rollProduct(key) : PROD[UNKNOWN_PRODUCT];   // 空なら「レシピに無い」扱い
         if (!p) break;
         produced.push({ machineId: m.id, product: p, key: key || '' });
         n++;
@@ -131,7 +131,7 @@ export async function claim(userId) {
 
     // 「初めて」の判定は登録『前』の図鑑で行う（同じ新製品が3個なら3個とも NEW）
     const had = new Set((await c.query(
-      `SELECT product_id FROM dex WHERE user_id=$1`, [userId])).rows.map((r) => r.product_id));
+      `SELECT product_id FROM collection WHERE user_id=$1`, [userId])).rows.map((r) => r.product_id));
 
     let gain = 0, registered = 0;
     const counts = new Map();
@@ -147,8 +147,9 @@ export async function claim(userId) {
 
     for (const [pid, n] of counts) {
       await c.query(
-        `INSERT INTO dex(user_id, product_id, count, first_at) VALUES ($1,$2,$3,now())
-         ON CONFLICT (user_id, product_id) DO UPDATE SET count = dex.count + EXCLUDED.count`,
+        `INSERT INTO collection(user_id, product_id, owned, first_at) VALUES ($1,$2,$3,now())
+         ON CONFLICT (user_id, product_id)
+         DO UPDATE SET owned = collection.owned + EXCLUDED.owned`,
         [userId, pid, n]);
     }
     return { items, gain, registered };
