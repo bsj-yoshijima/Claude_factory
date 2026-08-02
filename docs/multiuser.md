@@ -52,8 +52,9 @@ npm install && docker compose up -d && node server/index.mjs
 | `server/ingest-otel.mjs` | OTLP → 分バケット。親子判定・重複排除 |
 | `server/ingest-hooks.mjs` | hooks → `agent_sessions`。在/不在の減衰ルール |
 | `server/wp.mjs` | 重みの定義と WP の集計 |
+| `server/time.mjs` | JST の暦日。集計の境界を決めるので定義は1箇所だけ |
 | `server/craft.mjs` | 製造エンジン（サーバ権威） |
-| `server/api.mjs` | ゲーム API。💰・図鑑・在庫を書き換えるのはここだけ |
+| `server/api.mjs` | ゲーム API。💰・図鑑（`collection`）・在庫を書き換えるのはここだけ |
 | `server/auth.mjs` | Google SSO / dev ログイン / 取り込みトークン |
 | `db/schema.sql` | スキーマ。全部冪等なので起動のたびに流している |
 
@@ -82,8 +83,10 @@ npm install && docker compose up -d && node server/index.mjs
 副作用として **ブラウザを開いていなくても製造が進む**（`/api/state` のたびに遅延評価）。
 旧実装の「1tickあたり20個まで」の刻みも要らなくなった。
 
-「止めている機械にはWPが入らない」「素材を変えてもWPはリセットしない」「回収（🎁を開く）
-の瞬間に図鑑登録と売上加算」といったゲームのルールは旧実装のまま維持している。
+「止めている機械にはWPが入らない」「素材を変えてもWPはリセットしない」といったゲームの
+ルールは旧実装のまま。売上（💰 / `sales_daily`）だけは**製品が完成した瞬間**に `tick()` が
+積むように変えた（旧実装は🎁を開くまで加算されず、製造個数だけ伸びて売上が止まって見えた）。
+回収（🎁を開く）の瞬間に行うのは図鑑登録と NEW 判定だけ。
 
 ### 3. 集計のキーはトークン。ペイロードの `user.email` は信用しない
 

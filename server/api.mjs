@@ -1,6 +1,7 @@
 // ゲーム API。💰・図鑑・在庫を書き換えるのはここだけ（クライアントは結果を受け取る）。
 import { q, one, all, tx } from './db.mjs';
-import { totalWp, todayWp, dailyWp, capStats, jstDay, WP } from './wp.mjs';
+import { totalWp, todayWp, dailyWp, capStats, WP } from './wp.mjs';
+import { jstDay } from './time.mjs';
 import { activeAgents } from './ingest-hooks.mjs';
 import { tick, claim, pendingCount, madeBetween } from './craft.mjs';
 import * as GD from './game-data.mjs';
@@ -23,7 +24,7 @@ const bumpRev = (c, userId) =>
 async function factoryOf(userId) {
   const f = await one(`SELECT * FROM factories WHERE user_id=$1`, [userId]);
   const machines = await all(
-    `SELECT m.id, m.sub, m.dir, m.cx, m.cy, m.lvl, m.running, m.wp,
+    `SELECT m.id, m.variant, m.dir, m.cx, m.cy, m.lvl, m.running, m.wp,
             COALESCE(ARRAY_AGG(s.mat_id ORDER BY s.idx) FILTER (WHERE s.idx IS NOT NULL),
                      ARRAY[]::text[]) AS slots
        FROM machines m LEFT JOIN machine_slots s ON s.user_id=m.user_id AND s.machine_id=m.id
@@ -36,9 +37,9 @@ async function factoryOf(userId) {
     bgOwned: f.bg_owned, floorOwned: f.floor_owned, seriesOwned: f.series_owned,
     props: f.props, stock: f.stock, emojiDecos: f.emoji_decos,
     machines: machines.map((m) => ({
-      id: m.id, sub: m.sub, dir: m.dir, cx: m.cx, cy: m.cy, lvl: m.lvl,
+      id: m.id, variant: m.variant, dir: m.dir, cx: m.cx, cy: m.cy, lvl: m.lvl,
       running: m.running, wp: Number(m.wp),
-      need: GD.needWp(m.sub),
+      need: GD.needWp(m.variant),
       slots: m.slots,
     })),
   };
@@ -204,12 +205,12 @@ export async function putLayout(user, body) {
     // 在庫チェック（製造機）
     const want = {};
     for (const m of machines) {
-      const sub = GD.machSub(m.sub);
-      want[sub] = (want[sub] || 0) + 1;
+      const variant = GD.machVariant(m.variant);
+      want[variant] = (want[variant] || 0) + 1;
     }
-    for (const [sub, n] of Object.entries(want)) {
-      const owned = Number(stock.machine?.[sub] || 0);
-      if (n > owned) return bad(`製造機 ${sub} の在庫が足りません（所持${owned} / 設置${n}）`);
+    for (const [variant, n] of Object.entries(want)) {
+      const owned = Number(stock.machine?.[variant] || 0);
+      if (n > owned) return bad(`製造機 ${variant} の在庫が足りません（所持${owned} / 設置${n}）`);
     }
 
     const keep = machines.map((m) => String(m.id));
@@ -217,11 +218,11 @@ export async function putLayout(user, body) {
       `DELETE FROM machines WHERE user_id=$1 AND NOT (id = ANY($2::text[]))`, [user.id, keep]);
     for (const m of machines) {
       await c.query(
-        `INSERT INTO machines(id, user_id, sub, dir, cx, cy, lvl)
+        `INSERT INTO machines(id, user_id, variant, dir, cx, cy, lvl)
          VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7,1))
          ON CONFLICT (user_id, id) DO UPDATE
-           SET sub=EXCLUDED.sub, dir=EXCLUDED.dir, cx=EXCLUDED.cx, cy=EXCLUDED.cy`,
-        [String(m.id), user.id, GD.machSub(m.sub), m.dir === 'v' ? 'v' : 'u',
+           SET variant=EXCLUDED.variant, dir=EXCLUDED.dir, cx=EXCLUDED.cx, cy=EXCLUDED.cy`,
+        [String(m.id), user.id, GD.machVariant(m.variant), m.dir === 'v' ? 'v' : 'u',
          Number(m.cx) | 0, Number(m.cy) | 0, Number(m.lvl) || 1]);
     }
     await c.query(`UPDATE factories SET props=$2 WHERE user_id=$1`,
@@ -235,9 +236,9 @@ export async function putLayout(user, body) {
 export async function putSlots(user, body) {
   const id = String(body?.id || '');
   const slots = Array.isArray(body?.slots) ? body.slots : [];
-  const m = await one(`SELECT sub FROM machines WHERE id=$1 AND user_id=$2`, [id, user.id]);
+  const m = await one(`SELECT variant FROM machines WHERE id=$1 AND user_id=$2`, [id, user.id]);
   if (!m) return bad('その製造機がありません');
-  const size = GD.sizeOf(m.sub);
+  const size = GD.sizeOf(m.variant);
   await tx(async (c) => {
     await c.query(`DELETE FROM machine_slots WHERE user_id=$1 AND machine_id=$2`, [user.id, id]);
     for (let i = 0; i < size; i++) {
@@ -275,12 +276,13 @@ export const skinsOf = async (userId) =>
   Object.fromEntries((await all(`SELECT project, skin_id FROM skins WHERE user_id=$1`, [userId]))
     .map((r) => [r.project, r.skin_id]));
 
-/* ================================ 図鑑 ================================ */
-export async function getDex(user) {
+/* ========================= 図鑑（コレクション） ========================= */
+export async function getCollection(user) {
   const rows = await all(
-    `SELECT product_id, count, first_at FROM dex WHERE user_id=$1`, [user.id]);
+    `SELECT product_id, owned, first_at FROM collection WHERE user_id=$1`, [user.id]);
   return jsonOk({
-    dex: Object.fromEntries(rows.map((r) => [r.product_id, { n: r.count, firstAt: r.first_at }])),
+    collection: Object.fromEntries(
+      rows.map((r) => [r.product_id, { owned: r.owned, firstAt: r.first_at }])),
     inv: Object.fromEntries((await all(
       `SELECT item_id, qty FROM inventory WHERE user_id=$1 AND qty>0`, [user.id]))
       .map((r) => [r.item_id, r.qty])),
@@ -368,9 +370,10 @@ export async function getLeaderboard(_user, query) {
 
 /* ============================== マイページ ============================== */
 export async function getMe(user, ingestToken) {
-  const [daily, cap, dexN] = await Promise.all([
+  const [daily, cap, collected] = await Promise.all([
     dailyWp(user.id), capStats(user.id),
-    one(`SELECT COUNT(*)::int AS n, COALESCE(SUM(count),0)::int AS total FROM dex WHERE user_id=$1`,
+    one(`SELECT COUNT(*)::int AS n, COALESCE(SUM(owned),0)::int AS total
+           FROM collection WHERE user_id=$1`,
       [user.id]),
   ]);
   const sales = await all(
@@ -383,7 +386,8 @@ export async function getMe(user, ingestToken) {
     ingestToken,
     weights: WP,
     wpDaily: daily, cap,
-    dex: { unique: Number(dexN?.n || 0), total: Number(dexN?.total || 0), all: GD.PRODS.length },
+    collection: { unique: Number(collected?.n || 0), total: Number(collected?.total || 0),
+                  all: GD.PRODS.length },
     salesDaily: sales, madeDaily: made,
   });
 }

@@ -26,9 +26,9 @@ vm.runInContext(
   cut('/* == CRAFT-DATA-START ==', '/* == CRAFT-DATA-END == */') + '\n' +
   // 製造に必要な定数は CRAFT-DATA の外にあるので、ここで同じ値を明示的に持つ。
   // 変えるときは factory-phaser.html 側と揃えること（test_server.mjs が一致を検証する）。
-  'globalThis.$ = {GENRES,GENRE,SECRET_G,MATS,MAT,PRODS,PROD,RECIPES,SECRETS,BLOB,' +
+  'globalThis.$ = {GENRES,GENRE,SECRET_G,MATS,MAT,PRODS,PROD,RECIPES,SECRETS,UNKNOWN_PRODUCT,' +
   'genreOf,genresOfMats,normPool,poolFor,rollProduct,' +
-  'RAR,PRIZES,SELL,MACH,machSub,lvCost,DECO,PROP,BG,FLOOR,SERIES};',
+  'RAR,PRIZES,SELL,MACH,machVariant,lvCost,DECO,PROP,BG,FLOOR,SERIES};',
   ctx,
 );
 
@@ -36,12 +36,13 @@ const $ = ctx.$;
 
 /** 1製品あたりの必要WP = マス数 × WP_PER_SLOT（factory-phaser.html と同値） */
 export const WP_PER_SLOT = 50;
-/** 製品の売価（レア度別）。完成品一覧を開いたときに 💰 に加算される */
+/** 製品の売価（レア度別）。製品が完成した瞬間に 💰 に加算される */
 export const PROD_PRICE = { 1: 60, 2: 200, 3: 700, 4: 2600, 5: 9000 };
 /** 製造機のマス数。's2' → 2 */
-export const sizeOf = (sub) => Math.max(2, Math.min(5, Number(String(sub || 's2').slice(1)) || 2));
+export const sizeOf = (variant) =>
+  Math.max(2, Math.min(5, Number(String(variant || 's2').slice(1)) || 2));
 /** その機械が1製品作るのに必要な WP */
-export const needWp = (sub) => sizeOf(sub) * WP_PER_SLOT;
+export const needWp = (variant) => sizeOf(variant) * WP_PER_SLOT;
 
 /** 素材の集合 → レシピキー（重複除去してソートしカンマ結合） */
 export function keyOfSlots(slots) {
@@ -50,9 +51,9 @@ export function keyOfSlots(slots) {
 }
 
 export const {
-  GENRES, GENRE, SECRET_G, MATS, MAT, PRODS, PROD, RECIPES, SECRETS, BLOB,
+  GENRES, GENRE, SECRET_G, MATS, MAT, PRODS, PROD, RECIPES, SECRETS, UNKNOWN_PRODUCT,
   genreOf, genresOfMats, normPool, poolFor, rollProduct,
-  RAR, PRIZES, SELL, MACH, machSub, lvCost, DECO, PROP, BG, FLOOR, SERIES,
+  RAR, PRIZES, SELL, MACH, machVariant, lvCost, DECO, PROP, BG, FLOOR, SERIES,
 } = $;
 
 /** 購入可能なものの値段を1箇所で引く。サーバ側の購入検証はすべてこれを通す。 */

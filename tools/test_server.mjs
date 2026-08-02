@@ -218,11 +218,11 @@ try {
   console.log('\n[5] 製造（サーバ権威）');
   {
     // 2マス機を1台置いて素材をセット → 稼働
-    let r = await a('PUT', '/api/layout', { body: { machines: [{ id: 'm1', sub: 's2', cx: 3, cy: 3 }], props: [] } });
+    let r = await a('PUT', '/api/layout', { body: { machines: [{ id: 'm1', variant: 's2', cx: 3, cy: 3 }], props: [] } });
     eq(r.status, 200, '在庫のぶんだけ製造機を設置できる');
 
     const over = await a('PUT', '/api/layout', {
-      body: { machines: [{ id: 'm1', sub: 's2', cx: 3, cy: 3 }, { id: 'm2', sub: 's2', cx: 5, cy: 3 }], props: [] } });
+      body: { machines: [{ id: 'm1', variant: 's2', cx: 3, cy: 3 }, { id: 'm2', variant: 's2', cx: 5, cy: 3 }], props: [] } });
     eq(over.status, 400, '在庫を超える設置はサーバが拒否する');
 
     await a('PUT', '/api/machine/slots', { body: { id: 'm1', slots: ['flour', 'milk'] } });
@@ -243,12 +243,15 @@ try {
     }
     const st1 = (await a('GET', '/api/state')).json;
     eq(st1.pending, 3, '300WP ぶん働いたら 2マス機で3個できる（超過は繰り越し）');
+    const salesMade = st1.today.sales - st0.today.sales;   // この節で完成したぶんだけを見る
+    ok(salesMade > 0, '売上は完成した瞬間に立つ（🎁を開く前）', `💰${salesMade}`);
+    eq(st1.factory.money, st0.factory.money + salesMade, '💰も完成した瞬間に増える');
 
-    // 🎁完成品を開く = 図鑑登録 + 売上加算（作った瞬間ではなく開いた瞬間。旧実装と同じ）
+    // 🎁完成品を開く = 図鑑登録のみ。売上はもう立っているので二重加算しない
     const before = st1.factory.money;
     const cl = (await a('POST', '/api/claim')).json;
     eq(cl.items.length, 3, '完成品を回収できる');
-    ok(cl.gain > 0, '売価が加算される', `+💰${cl.gain}`);
+    eq(cl.gain, salesMade, '回収時の表示額は完成時に加算済みの額と一致する');
     // 許容集合はレシピ定義から導く（ハードコードするとレシピ追加で壊れる）
     const GD = await import('../server/game-data.mjs');
     const allowed = new Set(GD.poolFor(GD.keyOfSlots(['flour', 'milk'])).map((x) => x.p.id));
@@ -256,12 +259,14 @@ try {
       '小麦粉+牛乳のレシピに載っている製品しか出ない',
       cl.items.map((x) => `${x.e}${x.n}`).join(' '));
     const after = (await a('GET', '/api/state')).json;
-    eq(after.factory.money, before + cl.gain, '売上が 💰 に反映される');
+    eq(after.factory.money, before, '🎁を開いても 💰 は二重に増えない');
+    eq(after.today.sales, st1.today.sales, '🎁を開いても今日の売上は二重に増えない');
     eq(after.pending, 0, '回収後は新着が 0 になる');
     eq(after.today.made, 3, '📊今日の製造に3個が記録される');
-    const dex = (await a('GET', '/api/dex')).json.dex;
-    ok(Object.keys(dex).length > 0, '図鑑に登録される');
-    ok(Object.values(dex).every((d) => d.firstAt), '初取得日時が記録される（旧実装には無かった）');
+    const collection = (await a('GET', '/api/collection')).json.collection;
+    ok(Object.keys(collection).length > 0, '図鑑に登録される');
+    ok(Object.values(collection).every((d) => d.firstAt),
+      '初取得日時が記録される（旧実装には無かった）');
   }
 
   console.log('\n[6] ショップ（サーバ検証）');

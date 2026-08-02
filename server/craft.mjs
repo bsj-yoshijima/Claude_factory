@@ -7,12 +7,12 @@
 // たびに遅延評価される）。旧実装の「1tickあたり20個まで」の刻みも不要になった。
 import { tx, one, all } from './db.mjs';
 import { totalWp } from './wp.mjs';
-import { rollProduct, keyOfSlots, needWp, PROD, PROD_PRICE, BLOB } from './game-data.mjs';
+import { jstDay } from './time.mjs';
+import { rollProduct, keyOfSlots, needWp, PROD, PROD_PRICE, UNKNOWN_PRODUCT }
+  from './game-data.mjs';
 
 // 病的なケースの保険。到達したら黙って捨てず必ず記録する（WP.md §4 と同じ方針）
 const MAX_PER_MACHINE = 2000;
-
-const jstDay = (t = Date.now()) => new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
 /**
  * その人の製造を最新まで進める。
@@ -55,7 +55,7 @@ export async function tick(userId) {
     if (delta <= 0) return { delta: 0, produced: [], capped: 0, noop: true };
 
     const machines = (await c.query(
-      `SELECT m.id, m.sub, m.wp,
+      `SELECT m.id, m.variant, m.wp,
               COALESCE(ARRAY_AGG(s.mat_id ORDER BY s.idx) FILTER (WHERE s.mat_id IS NOT NULL),
                        ARRAY[]::text[]) AS mats
          FROM machines m
@@ -69,12 +69,12 @@ export async function tick(userId) {
 
     for (const m of machines) {
       let wp = Number(m.wp) + delta;
-      const need = needWp(m.sub);
+      const need = needWp(m.variant);
       let n = 0;
       while (wp >= need && n < MAX_PER_MACHINE) {
         wp -= need;
         const key = keyOfSlots(m.mats);                 // ここで初めて組み合わせを見る
-        const p = key ? rollProduct(key) : PROD[BLOB];  // 空なら「レシピに無い」扱い
+        const p = key ? rollProduct(key) : PROD[UNKNOWN_PRODUCT];   // 空なら「レシピに無い」扱い
         if (!p) break;
         produced.push({ machineId: m.id, product: p, key: key || '' });
         n++;
@@ -83,23 +83,41 @@ export async function tick(userId) {
       await c.query(`UPDATE machines SET wp=$3 WHERE user_id=$1 AND id=$2`, [userId, m.id, wp]);
     }
 
+    let gain = 0;
     if (produced.length) {
       await c.query(
         `INSERT INTO products_made(user_id, product_id, machine_id, recipe_key)
          SELECT $1, * FROM UNNEST($2::text[], $3::text[], $4::text[])`,
         [userId, produced.map((x) => x.product.id), produced.map((x) => x.machineId),
          produced.map((x) => x.key)]);
-    }
-    await c.query(
-      `UPDATE factories SET wp_mark=$2, last_tick_at=now() WHERE user_id=$1`, [userId, wpNow]);
 
-    return { delta, produced, capped };
+      /* 売上は「完成した瞬間」に立てる。
+         以前は🎁完成品を開いたとき(claim)に加算していたので、製造個数だけ伸びて
+         売上が止まって見えた（開くまで一日分がまとめて後から乗る）。製造個数と
+         同じタイミングで積むほうが素直なので、ここで 💰 と sales_daily を動かす。
+         図鑑登録と NEW 判定は今までどおり claim（開いたとき）のまま。 */
+      gain = produced.reduce((s, x) => s + (PROD_PRICE[x.product.r] || 0), 0);
+      if (gain) {
+        await c.query(
+          `INSERT INTO sales_daily(user_id, day, amount) VALUES ($1,$2,$3)
+           ON CONFLICT (user_id, day) DO UPDATE SET amount = sales_daily.amount + EXCLUDED.amount`,
+          [userId, jstDay(), gain]);
+      }
+    }
+    // 💰が動いたので rev も上げる（ポーリング側に factory を送り直させる）
+    await c.query(
+      `UPDATE factories SET wp_mark=$2, last_tick_at=now(),
+              money = money + $3, rev = rev + CASE WHEN $3 > 0 THEN 1 ELSE 0 END
+        WHERE user_id=$1`, [userId, wpNow, gain]);
+
+    return { delta, produced, capped, gain };
   });
 }
 
 /**
- * 🎁完成品を開いたときの処理。
- * 旧実装と同じく「開いた瞬間」に図鑑登録と売上加算をする（作った瞬間ではない）。
+ * 🎁完成品を開いたときの処理。図鑑登録と NEW 判定だけを行う。
+ * 売上(💰 / sales_daily)は完成した瞬間に tick() が積んでいるのでここでは足さない。
+ * gain は「今回まとめて見た分の合計額」の表示用（加算はもう済んでいる）。
  * @returns {{items:Array, gain:number, registered:number}}
  */
 export async function claim(userId) {
@@ -113,7 +131,7 @@ export async function claim(userId) {
 
     // 「初めて」の判定は登録『前』の図鑑で行う（同じ新製品が3個なら3個とも NEW）
     const had = new Set((await c.query(
-      `SELECT product_id FROM dex WHERE user_id=$1`, [userId])).rows.map((r) => r.product_id));
+      `SELECT product_id FROM collection WHERE user_id=$1`, [userId])).rows.map((r) => r.product_id));
 
     let gain = 0, registered = 0;
     const counts = new Map();
@@ -129,18 +147,10 @@ export async function claim(userId) {
 
     for (const [pid, n] of counts) {
       await c.query(
-        `INSERT INTO dex(user_id, product_id, count, first_at) VALUES ($1,$2,$3,now())
-         ON CONFLICT (user_id, product_id) DO UPDATE SET count = dex.count + EXCLUDED.count`,
+        `INSERT INTO collection(user_id, product_id, owned, first_at) VALUES ($1,$2,$3,now())
+         ON CONFLICT (user_id, product_id)
+         DO UPDATE SET owned = collection.owned + EXCLUDED.owned`,
         [userId, pid, n]);
-    }
-    if (gain) {
-      // rev も上げる: 💰が変わったのでポーリング側に factory を送り直させる
-      await c.query(`UPDATE factories SET money = money + $2, rev = rev + 1 WHERE user_id=$1`,
-        [userId, gain]);
-      await c.query(
-        `INSERT INTO sales_daily(user_id, day, amount) VALUES ($1,$2,$3)
-         ON CONFLICT (user_id, day) DO UPDATE SET amount = sales_daily.amount + EXCLUDED.amount`,
-        [userId, jstDay(), gain]);
     }
     return { items, gain, registered };
   });

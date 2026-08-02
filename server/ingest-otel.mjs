@@ -10,6 +10,7 @@
 //     （100人規模で 600 writes/s → 2 writes/s 程度に落ちる）
 //   - event.sequence による重複排除を行う（WP.md §8 ② の未実装項目。再送で二重加算しない）
 import { q, tx } from './db.mjs';
+import { jstDay } from './time.mjs';
 
 /* ===================== OTLP/JSON のデコード =====================
    OTLP/JSON は int64 を「文字列」で送ってくるので必ず Number() を通す。 */
@@ -36,7 +37,6 @@ function dpValue(dp) {
 }
 const nanoToMs = (n) => (n ? Math.round(Number(n) / 1e6) : Date.now());
 const minuteOf = (ms) => Math.floor(ms / 60000);
-const jstDayOf = (ms) => new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 10);
 // 実測メモ: event.name は `claude_code.` プレフィックス無しで届く（"tool_result" 等）
 const norm = (name) => String(name).replace(/^claude_code\./, '');
 
@@ -68,14 +68,14 @@ const isSubagent = (sess) => {
 class Batch {
   constructor(userId) {
     this.userId = userId;
-    this.tools = new Map();     // `${minute}|${tool}|${sub}` -> {ok, ng}
+    this.tools = new Map();     // `${minute}|${tool}|${isSubagent}` -> {ok, ng}
     this.metrics = new Map();   // minute -> {la, lr, commits, prs}
     this.score = new Map();     // day -> {…カウンタ}
     this.names = new Map();     // `${day}|${kind}|${name}` -> count
     this.dedup = new Set();
   }
-  tool(ms, name, sub, ok) {
-    const k = `${minuteOf(ms)}|${name}|${sub ? 1 : 0}`;
+  tool(ms, name, isSubagent, ok) {
+    const k = `${minuteOf(ms)}|${name}|${isSubagent ? 1 : 0}`;
     const e = this.tools.get(k) || { ok: 0, ng: 0 };
     e[ok ? 'ok' : 'ng']++;
     this.tools.set(k, e);
@@ -87,13 +87,13 @@ class Batch {
     this.metrics.set(m, e);
   }
   sc(ms, field, v = 1) {
-    const d = jstDayOf(ms);
+    const d = jstDay(ms);
     const e = this.score.get(d) || {};
     e[field] = (e[field] || 0) + v;
     this.score.set(d, e);
   }
   name(ms, kind, name) {
-    const k = `${jstDayOf(ms)}|${kind}|${name}`;
+    const k = `${jstDay(ms)}|${kind}|${name}`;
     this.names.set(k, (this.names.get(k) || 0) + 1);
   }
   get empty() {
@@ -219,8 +219,8 @@ export async function ingestLogs(userId, payload, audit) {
       const tn = a.tool_name || '(unknown)';
       const ok = !(a.success === false || a.success === 'false');
       // Agent / Task 自身は起動コスト。子係数は SQL 側でも除外している
-      const sub = tn !== 'Agent' && tn !== 'Task' && isSubagent(sess);
-      b.tool(t, tn, sub, ok);
+      const inSub = tn !== 'Agent' && tn !== 'Task' && isSubagent(sess);
+      b.tool(t, tn, inSub, ok);
       b.sc(t, ok ? 'tools_ok' : 'tools_ng');
       if (ok && tn === 'Skill') b.sc(t, 'skill');
       if (ok && (tn === 'Agent' || tn === 'Task')) b.sc(t, 'agent');

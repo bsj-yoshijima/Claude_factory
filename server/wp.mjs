@@ -7,6 +7,7 @@
 //
 // 重みの意味と較正の根拠は WP.md を参照。ここは値の置き場所でしかない。
 import { q, all, one } from './db.mjs';
+import { jstDay } from './time.mjs';
 
 export const WP = {
   tool: {
@@ -61,9 +62,6 @@ export async function dailyWp(userId, fromDay = null, toDay = null) {
     [userId, fromDay, toDay],
   );
 }
-
-export const jstDay = (t = Date.now()) =>
-  new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
 /** 今日のWP（JST） */
 export async function todayWp(userId) {

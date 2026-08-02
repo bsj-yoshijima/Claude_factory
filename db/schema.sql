@@ -81,10 +81,23 @@ ALTER TABLE factories ADD COLUMN IF NOT EXISTS rev bigint NOT NULL DEFAULT 0;
 -- 製造機だけは行にする（running / wp を機械ごとに持つため）。
 -- ★ id はクライアントが生成するレイアウトIDなので、主キーは必ず (user_id, id)。
 --   id 単独にすると他人と同じIDを送るだけで相手の機械を書き換えられる。
+-- 旧列名 sub からの改名。sub は「サブタイトル」「OIDC の subject」とも読めて曖昧だった。
+-- variant = kind(machine/prop/deco) の下位で MACH/PROP/DECO 表を引くキー。
+DO $$
+BEGIN
+  IF to_regclass('machines') IS NOT NULL
+     AND EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name='machines' AND column_name='sub')
+  THEN
+    ALTER TABLE machines RENAME COLUMN sub TO variant;
+    RAISE NOTICE 'machines.sub を variant に改名しました';
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS machines (
   id       text NOT NULL,
   user_id  bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  sub      text NOT NULL,                       -- 's2'..'s5' = マス数
+  variant  text NOT NULL,                       -- 's2'..'s5' = マス数（MACH 表のキー）
   dir      text NOT NULL DEFAULT 'u',
   cx       integer NOT NULL DEFAULT 0,
   cy       integer NOT NULL DEFAULT 0,
@@ -120,7 +133,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS machines (
   id       text NOT NULL,
   user_id  bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  sub      text NOT NULL,
+  variant  text NOT NULL,
   dir      text NOT NULL DEFAULT 'u',
   cx       integer NOT NULL DEFAULT 0,
   cy       integer NOT NULL DEFAULT 0,
@@ -151,11 +164,36 @@ CREATE TABLE IF NOT EXISTS products_made (
 CREATE INDEX IF NOT EXISTS products_made_user_at ON products_made(user_id, made_at DESC);
 CREATE INDEX IF NOT EXISTS products_made_unviewed ON products_made(user_id) WHERE NOT viewed;
 
--- 図鑑。first_at を持つ（旧実装は個数だけで初取得日が残らなかった）
-CREATE TABLE IF NOT EXISTS dex (
+-- 図鑑（＝その人が集めた製品のコレクション）。first_at を持つ。
+-- 旧名は dex（Pokédex 由来の俗語）。英語として図鑑を意味せず RPG の dexterity とも
+-- 紛らわしいので collection に改名した。count も SQL の集計関数名と同じで毎回修飾が
+-- 必要だったため owned にしている。
+DO $$
+BEGIN
+  IF to_regclass('dex') IS NOT NULL AND to_regclass('collection') IS NULL THEN
+    ALTER TABLE dex RENAME TO collection;
+    RAISE NOTICE 'dex を collection に改名しました';
+  END IF;
+  IF to_regclass('collection') IS NOT NULL
+     AND EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_name='collection' AND column_name='count')
+  THEN
+    ALTER TABLE collection RENAME COLUMN count TO owned;
+    RAISE NOTICE 'collection.count を owned に改名しました';
+  END IF;
+  -- 制約・索引の名前も追随させる（RENAME TABLE では変わらない）
+  IF to_regclass('dex_pkey') IS NOT NULL THEN
+    ALTER INDEX dex_pkey RENAME TO collection_pkey;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dex_user_id_fkey') THEN
+    ALTER TABLE collection RENAME CONSTRAINT dex_user_id_fkey TO collection_user_id_fkey;
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS collection (
   user_id    bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   product_id text NOT NULL,
-  count      integer NOT NULL DEFAULT 0,
+  owned      integer NOT NULL DEFAULT 0,
   first_at   timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, product_id)
 );
