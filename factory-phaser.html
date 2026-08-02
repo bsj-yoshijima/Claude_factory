@@ -41,7 +41,9 @@
   #board .l{font-size:9.5px;color:#9fb0c0;letter-spacing:.06em;margin-top:1px}
   #board .m.prod .v{color:#7fe6ff}
   #board .m.sales .v{color:#ffd27a}
-  #board .m.sales .v small{margin:0 2px 0 0;color:#ffd27a}
+  /* 💰は数字の後ろ。絵文字が行の高さを押し広げないよう固定してベースラインに揃える */
+  #board .m.sales .v small{display:inline-block;line-height:1;vertical-align:baseline;
+                           margin:0 0 0 3px;color:#ffd27a}
   #board .m.hit{cursor:pointer}                     /* クリックで今日の製造を開く */
   #board .m.hit:hover{background:rgba(127,230,255,.09)}
   /* 工場レイアウト編集は常時アクセスできるよう右下に固定 */
@@ -223,9 +225,12 @@
               font-size:11px;color:#9fdcc6;cursor:pointer}
   .myname .ed:hover{border-color:var(--mint);color:var(--gold)}
   .mystats{display:flex;gap:26px;flex-wrap:wrap;margin:16px 0 2px}
-  .mystat .k{font-size:11px;color:#9fb0c0}
+  .mystat{min-width:104px}
+  .mystat .k{font-size:11px;color:#9fb0c0;line-height:1.6}
   .mystat .v{font-size:26px;font-weight:700;color:#eafff4;line-height:1.25;white-space:nowrap}
-  .mystat .v small{font-size:12px;color:#9fb0c0;font-weight:400;margin-left:2px}
+  /* 単位(WP/個/💰)は数字のベースラインに揃える。絵文字は行の高さを押し広げるので固定する */
+  .mystat .v small{display:inline-block;font-size:12px;line-height:1;color:#9fb0c0;
+                   font-weight:400;margin-left:3px;vertical-align:baseline}
   .mychart{margin-top:6px}
   .mychart svg{width:100%;height:auto;display:block}
 </style>
@@ -1163,7 +1168,7 @@ function renderBoard(){
     <div class="m prod hit" id="todayBtn" title="クリックで今日つくったものを見る">
       <div class="v">${madeToday()}<small>個</small></div>
       <div class="l">今日の製造</div></div>
-    <div class="m sales"><div class="v"><small>💰</small>${Math.floor(salesToday()).toLocaleString()}</div>
+    <div class="m sales"><div class="v">${Math.floor(salesToday()).toLocaleString()}<small>💰</small></div>
       <div class="l">今日の売上</div></div>`;
   const b=document.getElementById('todayBtn'); if(b) b.onclick=openToday;
 }
@@ -1385,55 +1390,128 @@ function openDone(){
 }
 document.getElementById('doneBtn').addEventListener('click',openDone);
 
-/* --- リーダーボード（/api/otel のスコアカードを工場内から見る） --- */
-const LB_AXES=[['efficiency','効率'],['prs','PR数'],['commits','コミット数'],['lines','変更行数'],
-               ['skill','Skill利用'],['agent','Agent起動'],['customAgent','自作Agent'],
-               ['delegationPct','委譲率'],['activeDays','稼働日数']];
+/* =========================================================================
+   リーダーボード — 期間タブ（今日/今週/今月/今年）× 軸ボタン（9種）
+   ・1画面に出すのは「選んだ軸の値」だけ。全軸を並べると読めないし、
+     暗黙の総合順位に見えてしまう（WP.md §9: 単一の合計点は作らない）
+   ・最初は上位20件。「もっとみる」で20件ずつ追加で取得する
+   ========================================================================= */
+const LB_PERIODS=[['today','今日'],['week','今週'],['month','今月'],['year','今年']];
+const LB_PAGE=20;
+const LB_MEDAL=['🥇','🥈','🥉'];   // 1〜3位は順位の数字の代わりにメダル
+/* 軸の定義。key=APIの項目 / desc=表の上に出す説明 / fmt=セルの表示 */
+const LB_AXES=[
+  {key:'efficiency',  label:'効率',       col:'効率',
+   desc:'少ないトークンでどれだけ成果を出したか。(追加行 + 削除行×0.3 + PR×150) ÷ output_tokens × 1000。PR1件かつ100行以上が対象で、満たさない人は「—」でランク外。難易度は補正しないので絶対量と併せて見ること。',
+   fmt:u=>u.efficiency==null?'<span style="color:#9fb0c0">—</span>':`<b style="color:var(--gold)">${u.efficiency}</b>`},
+  {key:'prs',         label:'PR数',       col:'PR',
+   desc:'期間内に作成したプルリクエストの数。作業がレビュー可能な単位まで届いた回数。',
+   fmt:u=>u.prs.toLocaleString()},
+  {key:'commits',     label:'コミット数', col:'コミット',
+   desc:'期間内のコミット数。小さく刻んで進めているほど増える。',
+   fmt:u=>u.commits.toLocaleString()},
+  {key:'lines',       label:'変更行数',   col:'変更行',
+   desc:'追加行 + 削除行。消した行も労働として数える（行数稼ぎの逆インセンティブを消すため）。',
+   fmt:u=>`${u.lines.toLocaleString()}<span style="color:#9fb0c0;font-size:10px"> (+${u.linesAdded.toLocaleString()} / -${u.linesRemoved.toLocaleString()})</span>`},
+  {key:'skill',       label:'Skill利用',  col:'Skill',
+   desc:'Skill を呼び出した回数。手順を毎回書き下すのではなく、再利用できる形に畳めているか。',
+   fmt:u=>u.skill.toLocaleString()},
+  {key:'agent',       label:'Agent起動',  col:'Agent',
+   desc:'サブエージェントを起動した回数。調査や並行作業を任せられているか。',
+   fmt:u=>u.agent.toLocaleString()},
+  {key:'customAgent', label:'自作Agent',  col:'自作Agent',
+   desc:'自分で定義したエージェントの起動回数。自分の仕事に合わせて道具を作れているか。',
+   fmt:u=>u.customAgent.toLocaleString()},
+  {key:'delegationPct',label:'委譲率',    col:'委譲率',
+   desc:'全ツール実行のうち、サブエージェント側で実行された割合。高いほど本体の文脈を使わずに任せている。',
+   fmt:u=>`${u.delegationPct}%`},
+  {key:'activeDays',  label:'稼働日数',   col:'稼働日',
+   desc:'期間内に Claude Code を使った日数。量ではなく続いているかを見る軸。',
+   fmt:u=>`${u.activeDays.toLocaleString()}日`},
+];
+const lbAxis=(k)=>LB_AXES.find(a=>a.key===k)||LB_AXES[0];
 let _lbKey='efficiency';
-let _lbPeriod='week';       // マルチユーザー版で追加: 日次 / 週次 / 月次 / 全期間
-const LB_PERIODS=[['today','今日'],['week','今週'],['month','今月'],['all','全期間']];
+let _lbPeriod='week';
 async function openLb(){
-  let sc=null;   // null=読み込み中
+  let rows=null;            // null=読み込み中
+  let total=0, loading=false;
+  /* 単一ユーザー版(server.mjs)は期間もページングも持たないので、
+     全件を1度取ってからクライアント側で同じ規則で並べ替え・切り出しをする */
+  let localAll=null;
+  const sortLocal=(list)=>[...list].sort((a,b)=>{
+    const av=a[_lbKey], bv=b[_lbKey];
+    if(av==null&&bv==null) return b.lines-a.lines;
+    if(av==null) return 1; if(bv==null) return -1;
+    return bv-av || b.lines-a.lines;
+  });
+  async function load(more){
+    loading=true;
+    const offset=more?(rows||[]).length:0;
+    if(NET.multi){
+      const d=await NET.call('GET',
+        `/api/leaderboard?period=${_lbPeriod}&metric=${_lbKey}&limit=${LB_PAGE}&offset=${offset}`);
+      const page=(d&&d.scorecard)||[];
+      rows=more?[...(rows||[]),...page]:page;
+      total=(d&&d.total)||rows.length;
+    } else {
+      if(!localAll){ try{ localAll=(await (await fetch('/api/otel',{cache:'no-store'})).json()).scorecard||[]; }
+                     catch(_){ localAll=[]; } }
+      const sorted=sortLocal(localAll);
+      total=sorted.length;
+      rows=sorted.slice(0, offset+LB_PAGE);
+    }
+    loading=false;
+  }
   const dlg=openDialog({ title:'🏆 リーダーボード',
-    tabs:LB_AXES.map(([k,l])=>({id:k,label:l+'順'})), tab:_lbKey,
-    onTab:(id,d)=>{ _lbKey=id; d.refresh(); },
+    tabs:LB_PERIODS.map(([k,l])=>({id:k,label:l})), tab:_lbPeriod,
+    onTab:async(id,d)=>{ _lbPeriod=id; rows=null; d.refresh(); await load(false); d.refresh(); },
     body:()=>{
-    if(!sc) return '<div class="cost">読み込み中…</div>';
-    const rows=[...sc].sort((a,b)=>{
-      const av=a[_lbKey], bv=b[_lbKey];
-      if(av==null&&bv==null) return b.lines-a.lines;
-      if(av==null) return 1; if(bv==null) return -1; return bv-av;
-    });
-    return `${NET.multi?`<div class="rowline">${LB_PERIODS.map(([k,l])=>
-        `<span class="sttab ${k===_lbPeriod?'on':''}" data-lbp="${k}" style="border-radius:8px">${l}</span>`).join('')}</div>`:''}
-      <div class="rowline" style="font-size:11px;color:#9fb0c0">
-        Claude Code の使い方を軸ごとに並べたもの。単一の合計点は出しません（1つに混ぜると誤った使い方が上位に来るため）。
-        上位の人にどう使っているか聞いてみよう。</div>
+    const ax=lbAxis(_lbKey);
+    const btns=`<div class="rowline">${LB_AXES.map(a=>
+      `<span class="sttab ${a.key===_lbKey?'on':''}" data-lbk="${a.key}" style="border-radius:8px">${a.label}順</span>`).join('')}</div>`;
+    const note=`<div class="rowline" style="font-size:11px;color:#9fb0c0;line-height:1.7">
+        <b style="color:#9fdcc6">${ax.label}順</b>${ax.desc}</div>`;
+    if(!rows) return btns+note+'<div class="cost">読み込み中…</div>';
+    /* 工場名の出し方。
+       マルチユーザー版: サーバ(DB)の factories.name が factoryName で来る。
+       単一ユーザー版  : DBが無いので、活動量が最大の識別子を本人とみなして
+                         自分の工場名(G.factoryName)を当て、他は「◯◯の工場」。 */
+    const meId = NET.multi ? null
+      : ([...(localAll||[])].sort((a,b)=>(b.lines||0)-(a.lines||0))[0]||{}).id;
+    const fname = (u)=> u.factoryName
+      || (!NET.multi && u.id===meId && G.factoryName)
+      || `${String(u.name||u.id||'').split('@')[0]}の工場`;
+    const more = rows.length<total
+      ? `<div class="rowline" style="justify-content:center">
+           <button class="dbtn ghost" id="lbMore">もっとみる（${rows.length} / ${total}）</button></div>` : '';
+    return btns+note+`
       <table style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead><tr style="color:#9fb0c0;text-align:right">
-          <th style="text-align:left">#</th><th style="text-align:left">識別子</th>
-          <th>効率</th><th>PR</th><th>コミット</th><th>追加行</th><th>Skill</th><th>Agent</th><th>自作</th><th>委譲率</th><th>稼働日</th>
+        <thead><tr style="color:#9fb0c0">
+          <th style="text-align:left;width:34px">#</th><th style="text-align:left">工場</th>
+          <th style="text-align:right">${ax.col}</th>
         </tr></thead><tbody>${rows.length?rows.map((u,i)=>`
-          <tr style="text-align:right;border-top:1px solid #22322e">
-            <td style="text-align:left">${i+1}</td><td style="text-align:left;color:#eafff4">${u.name||u.id}</td>
-            <td><b style="color:var(--gold)">${u.efficiency==null?'—':u.efficiency}</b></td>
-            <td>${u.prs}</td><td>${u.commits}</td><td>${u.linesAdded}</td>
-            <td>${u.skill}</td><td>${u.agent}</td><td>${u.customAgent}</td>
-            <td>${u.delegationPct}%</td><td>${u.activeDays}</td></tr>`).join('')
-          :'<tr><td colspan="11" style="color:#9fb0c0;padding:10px">データがありません（OTelの設定を確認）</td></tr>'}</tbody></table>
-      <div class="rowline" style="font-size:10px;color:#9fb0c0">
-        効率 = (追加行 + 削除行×0.3 + PR×150) ÷ output_tokens × 1000 ／ PR1件・100行以上でランク対象。
-        効率は難易度を補正しないので絶対量と併せて見ること。</div>`;
+          <tr style="border-top:1px solid #22322e">
+            <td style="text-align:left;color:#9fb0c0" title="${i+1}位">${LB_MEDAL[i]
+              ? `<span style="font-size:15px;line-height:1">${LB_MEDAL[i]}</span>` : i+1}</td>
+            <td style="text-align:left;color:#eafff4" title="${u.name||u.id||''}">🏭 ${fname(u)}</td>
+            <td style="text-align:right">${ax.fmt(u)}</td></tr>`).join('')
+          :'<tr><td colspan="3" style="color:#9fb0c0;padding:10px">データがありません（OTelの設定を確認）</td></tr>'}</tbody></table>
+      ${more}`;
   },
-  onRender:(p,d)=>{                        // 期間タブ（マルチユーザー版のみ）
-    p.querySelectorAll('[data-lbp]').forEach(el=>el.onclick=async()=>{
-      _lbPeriod=el.dataset.lbp; sc=null; d.refresh();
-      const x=await NET.call('GET',`/api/leaderboard?period=${_lbPeriod}`);
-      sc=(x&&x.scorecard)||[]; d.refresh();
+  onRender:(p,d)=>{
+    p.querySelectorAll('[data-lbk]').forEach(el=>el.onclick=async()=>{
+      if(el.dataset.lbk===_lbKey) return;
+      _lbKey=el.dataset.lbk; rows=null; d.refresh();      // 軸を変えたら1ページ目から取り直す
+      await load(false); d.refresh();
     });
+    const m=p.querySelector('#lbMore');
+    if(m) m.onclick=async()=>{
+      if(loading) return;
+      m.disabled=true; m.textContent='読み込み中…';
+      await load(true); d.refresh();
+    };
   } });
-  if(NET.multi){ const d=await NET.call('GET',`/api/leaderboard?period=${_lbPeriod}`); sc=(d&&d.scorecard)||[]; }
-  else { try{ sc=(await (await fetch('/api/otel',{cache:'no-store'})).json()).scorecard||[]; }catch(_){ sc=[]; } }
+  await load(false);
   dlg.refresh();   // 読み込み中に閉じられていれば refresh は何もしない
 }
 document.getElementById('lbBtn').addEventListener('click',openLb);
@@ -1450,7 +1528,9 @@ const MY_METRICS=[
 ];
 let _myKey='wp', _myData=null, _myEdit=false;
 const myMetric=()=>MY_METRICS.find(m=>m.id===_myKey)||MY_METRICS[0];
-const myDefaultName=()=>`${(_myData&&_myData.userName)||'あなた'}の工場`;
+// 既定名はサーバが決める（ユーザー名 → 無ければメールの @ より前 → 「◯◯の工場」）
+const myDefaultName=()=> (_myData&&_myData.defaultName)
+  || `${(_myData&&_myData.userName)||'あなた'}の工場`;
 const myName=()=> (_myData&&_myData.name) || myDefaultName();
 
 /* 目盛りの上限は 1/2/5×10^n に丸める（軸の数字が読みやすい値になる） */
@@ -1510,11 +1590,13 @@ function myBody(){
        <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:4px">24文字まで。空にすると「${myDefaultName()}」に戻ります。</div>`
     : `<div class="myname"><b>🏭 ${myName()}</b><span class="ed" id="myNameEdit">✏️ 編集</span></div>`;
   return `${head}
+    ${_myData.failed?`<div class="rowline" style="font-size:11px;color:#ff9f7a;margin-top:8px">
+      集計を取得できませんでした。サーバが古い可能性があります（<b>node server/index.mjs</b> を再起動してください）。</div>`:''}
     <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:10px">過去7日間</div>
     <div class="mystats">
       <div class="mystat"><div class="k">WP</div><div class="v">${Math.round(t.wp).toLocaleString()}<small>WP</small></div></div>
       <div class="mystat"><div class="k">製造個数</div><div class="v">${t.made.toLocaleString()}<small>個</small></div></div>
-      <div class="mystat"><div class="k">売上</div><div class="v">💰 ${Math.round(t.sales).toLocaleString()}</div></div>
+      <div class="mystat"><div class="k">売上</div><div class="v">${Math.round(t.sales).toLocaleString()}<small>💰</small></div></div>
     </div>
     <div class="rowline" style="margin-top:18px">
       <span style="font-size:11px;color:#9fb0c0;margin-right:2px">過去${_myData.days||MY_DAYS}日間</span>
@@ -1526,15 +1608,23 @@ function myBody(){
 /* 単一ユーザー版(server.mjs)向け。WPは /api/otel、製造と売上はローカルの記録から作る */
 async function myLocalData(days){
   const c=craftState();
-  let wpDaily={};
-  try{ wpDaily=(await (await fetch('/api/otel',{cache:'no-store'})).json()).wpDaily||{}; }catch(_){}
+  let wpDaily={}, who='';
+  try{
+    const j=await (await fetch('/api/otel',{cache:'no-store'})).json();
+    wpDaily=j.wpDaily||{};
+    /* 単一ユーザー版はログインが無いので名前が引けない。テレメトリに出てくる識別子のうち
+       もっとも活動量が多いものを本人とみなす（複数人で使うならマルチユーザー版を使う） */
+    const top=(j.scorecard||[]).slice().sort((a,b)=>(b.lines||0)-(a.lines||0))[0];
+    who=String((top&&(top.name||top.email||top.id))||'').split('@')[0];
+  }catch(_){}
   const made={};
   for(const m of (c.log||[])){ const d=jstDayOf(m.at); made[d]=(made[d]||0)+1; }
   const series=[];
   for(let i=days-1;i>=0;i--){ const day=jstDayOf(Date.now()-i*86400000);
     series.push({day, wp:Math.round(wpDaily[day]||0), made:made[day]||0, sales:Math.round(c.sales[day]||0)}); }
   const sum=(l,k)=>l.reduce((a,d)=>a+d[k],0), last7=series.slice(-7);
-  return { name:G.factoryName||'', userName:'あなた', days, series,
+  return { name:G.factoryName||'', userName:who||'あなた', defaultName:`${who||'あなた'}の工場`,
+           days, series,
            totals7:{wp:sum(last7,'wp'), made:sum(last7,'made'), sales:sum(last7,'sales')} };
 }
 async function saveFactoryName(name,dlg){
@@ -1561,8 +1651,13 @@ async function openMyPage(){
         inp.focus(); inp.select(); }
     } });
   _myData = NET.multi ? await NET.call('GET',`/api/mypage?days=${MY_DAYS}`) : await myLocalData(MY_DAYS);
-  if(!_myData) _myData={name:G.factoryName||'',userName:'あなた',days:MY_DAYS,
-    series:[],totals7:{wp:0,made:0,sales:0}};
+  // 取得に失敗したときは 0 を並べて黙らない。名前だけはポーリングの me から作れる
+  if(!_myData){
+    const me=(NET.last&&NET.last.me)||{};
+    const who=String(me.name||'').trim()||String(me.email||'').split('@')[0]||'あなた';
+    _myData={ name:G.factoryName||'', userName:who, defaultName:`${who}の工場`,
+      days:MY_DAYS, series:[], totals7:{wp:0,made:0,sales:0}, failed:true };
+  }
   dlg.refresh();   // 読み込み中に閉じられていれば refresh は何もしない
 }
 document.getElementById('myBtn').addEventListener('click',openMyPage);

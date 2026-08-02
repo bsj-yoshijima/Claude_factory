@@ -289,10 +289,21 @@ try {
     ok(!!mine, '自分が載っている');
     ok(mine.wp > 0, 'WP が入っている', `wp=${mine.wp}`);
     eq(mine.efficiency, null, 'PR も行数も足りないので効率はランク外（最低成果フィルタ）');
-    for (const p of ['today', 'week', 'month', 'all']) {
+    for (const p of ['today', 'week', 'month', 'year', 'all']) {
       const x = await a('GET', `/api/leaderboard?period=${p}`);
       ok(x.status === 200 && x.json.period === p, `period=${p} が引ける`, `${x.json.from}〜${x.json.to}`);
     }
+    // 軸ごとの並べ替えとページング（画面は20件ずつ「もっとみる」で伸ばす）
+    const p1 = await a('GET', '/api/leaderboard?period=all&metric=commits&limit=2&offset=0');
+    ok(p1.json.metric === 'commits' && p1.json.scorecard.length <= 2,
+      '軸を指定して20件ずつ切り出せる', `total=${p1.json.total} 返り=${p1.json.scorecard.length}`);
+    ok(p1.json.scorecard.every((u, i, arr) => i === 0 || arr[i - 1].commits >= u.commits),
+      '指定した軸の降順で並ぶ');
+    const p2 = await a('GET', '/api/leaderboard?period=all&metric=commits&limit=2&offset=2');
+    ok(p1.json.scorecard.every((u) => !p2.json.scorecard.some((v) => v.id === u.id)),
+      'offset で次のページが取れる（重複しない）');
+    const bad = await a('GET', '/api/leaderboard?period=all&metric=__evil__&limit=1');
+    eq(bad.json.metric, 'efficiency', '未知の軸は既定（効率）に落とす');
   }
 
   console.log('\n[8] ポーリングの軽量化');

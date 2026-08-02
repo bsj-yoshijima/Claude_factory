@@ -4,9 +4,13 @@ import { totalWp, todayWp, dailyWp, capStats, jstDay, WP } from './wp.mjs';
 import { activeAgents } from './ingest-hooks.mjs';
 import { tick, claim, pendingCount, madeBetween } from './craft.mjs';
 import * as GD from './game-data.mjs';
+import { displayName, defaultFactoryName, normalizeFactoryName } from './names.mjs';
 
 const jsonOk = (body) => ({ status: 200, body });
 const bad = (msg, status = 400) => ({ status, body: { error: msg } });
+
+/* 工場名は factories.name（DB）が唯一の真実。アカウント作成時に既定名が入っているので、
+   表示側で組み立て直さない。ここで使うのは「空にされたときに戻す既定値」だけ。 */
 
 /* 工場の「形」（配置・在庫・所持品・💰・内装）が変わったら版番号を上げる。
    ポーリングはこの rev を見て、factory 一式を送るかどうかを決める。
@@ -285,20 +289,24 @@ export async function getDex(user) {
 
 /* ============================= リーダーボード =============================
    WP.md §9 の原則どおり、単一の合計値は作らず多軸のまま返す。
-   期間フィルタ（日次 / 週次 / 月次）は旧実装に無かった機能（§8 ⑧）。 */
+   期間フィルタ（今日 / 今週 / 今月 / 今年）は旧実装に無かった機能（§8 ⑧）。 */
 const PERIODS = {
   today: () => [jstDay(), jstDay()],
   week: () => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() - 6);
     return [d.toISOString().slice(0, 10), jstDay()]; },
   month: () => [jstDay().slice(0, 8) + '01', jstDay()],
+  year: () => [jstDay().slice(0, 4) + '-01-01', jstDay()],
   all: () => ['1970-01-01', jstDay()],
 };
+/** 並べ替えできる軸。クライアントのボタンと1対1で対応する */
+const LB_METRICS = ['efficiency', 'prs', 'commits', 'lines', 'skill', 'agent',
+  'customAgent', 'delegationPct', 'activeDays'];
 
 export async function getLeaderboard(_user, query) {
   const period = PERIODS[query.get('period')] ? query.get('period') : 'week';
   const [from, to] = PERIODS[period]();
   const rows = await all(
-    `SELECT u.id, u.email, u.name,
+    `SELECT u.id, u.email, u.name, COALESCE(fa.name,'') AS factory_name,
             SUM(s.lines_added) AS lines_added, SUM(s.lines_removed) AS lines_removed,
             SUM(s.commits) AS commits, SUM(s.prs) AS prs,
             SUM(s.output_tokens) AS output_tokens,
@@ -309,8 +317,9 @@ export async function getLeaderboard(_user, query) {
             COALESCE((SELECT SUM(wp) FROM wp_daily w
                        WHERE w.user_id=u.id AND w.day BETWEEN $1 AND $2), 0) AS wp
        FROM scorecard_daily s JOIN users u ON u.id = s.user_id
+                              LEFT JOIN factories fa ON fa.user_id = u.id
       WHERE s.day BETWEEN $1 AND $2
-      GROUP BY u.id`, [from, to]);
+      GROUP BY u.id, fa.name`, [from, to]);
 
   // 効率スコア。最低成果フィルタが無いと「3行しか書いていない人」が1位になる（WP.md §9）
   const EFF = { removed: 0.3, prLines: 150, scale: 1000, minPrs: 1, minLines: 100 };
@@ -322,7 +331,9 @@ export async function getLeaderboard(_user, query) {
     const eligible = prs >= EFF.minPrs && lines >= EFF.minLines;
     const toolsOk = Number(r.tools_ok), subUses = Number(r.sub_tool_uses);
     return {
-      id: r.id, email: r.email, name: r.name || r.email.split('@')[0],
+      id: r.id, email: r.email, name: displayName(r),
+      // リーダーボードに出す名前は DB の工場名をそのまま（作成時に既定名が入っている）
+      factoryName: r.factory_name || defaultFactoryName(r),   // 空は古い行の保険
       linesAdded, linesRemoved, lines, commits: Number(r.commits), prs,
       skill: Number(r.skill), agent: Number(r.agent), customAgent: Number(r.custom_agent),
       delegationPct: toolsOk ? +(subUses / toolsOk * 100).toFixed(1) : 0,
@@ -333,7 +344,26 @@ export async function getLeaderboard(_user, query) {
       eligible,
     };
   });
-  return jsonOk({ period, from, to, scorecard: sc, config: EFF });
+  // 並べ替えとページング。limit を渡されたときだけ切る（渡さなければ全件＝旧来の挙動）
+  const metric = LB_METRICS.includes(query.get('metric')) ? query.get('metric') : 'efficiency';
+  const sorted = [...sc].sort((a, b) => {
+    const av = a[metric], bv = b[metric];
+    if (av == null && bv == null) return b.lines - a.lines;   // 効率ランク外どうしは変更行で
+    if (av == null) return 1;                                 // ランク外は必ず後ろ
+    if (bv == null) return -1;
+    return bv - av || b.lines - a.lines;                      // 降順（1位が最上位）
+  });
+  const rawLimit = query.get('limit');
+  const limit = rawLimit == null ? null : Math.min(200, Math.max(1, Number(rawLimit) || 20));
+  const offset = Math.max(0, Number(query.get('offset')) || 0);
+  const page = limit == null ? sorted : sorted.slice(offset, offset + limit);
+
+  return jsonOk({
+    period, from, to, metric,
+    total: sorted.length, offset, limit,
+    scorecard: page,
+    config: EFF,
+  });
 }
 
 /* ============================== マイページ ============================== */
@@ -403,17 +433,20 @@ export async function getMyPage(user, query) {
   const last7 = series.slice(-7);
 
   return jsonOk({
-    name: f?.name || '',
-    userName: user.name || String(user.email || '').split('@')[0],
+    // DB の工場名をそのまま返す（アカウント作成時に既定名が入っている）。
+    // 万一 name が空の古い行に当たったときだけ既定名で埋める
+    name: f?.name || defaultFactoryName(user),
+    userName: displayName(user),
+    defaultName: defaultFactoryName(user),   // 「空にすると戻る」先を画面に出すため
     from, to, days,
     series,
     totals7: { wp: sum(last7, 'wp'), made: sum(last7, 'made'), sales: sum(last7, 'sales') },
   });
 }
 
-/** 工場名の変更。空文字にすると既定表示（◯◯の工場）に戻る */
+/** 工場名の変更。空にすると既定名（◯◯の工場）に戻す。DB に名前なしの工場は作らない */
 export async function putFactoryName(user, body) {
-  const name = String(body?.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  const name = normalizeFactoryName(body?.name, user);
   await q(`UPDATE factories SET name=$2 WHERE user_id=$1`, [user.id, name]);
   return jsonOk({ ok: true, name });
 }

@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS factories (
 );
 -- 既存DB向け（CREATE TABLE は IF NOT EXISTS なので後から足した列はここで追加する）
 ALTER TABLE factories ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '';
+-- 列を足す前に作られた工場に既定名を入れる（名前なしの工場を残さない）。
+-- 既定名の作り方は server/names.mjs と同じ: users.name → 無ければメールの @ より前。
+UPDATE factories f
+   SET name = COALESCE(NULLIF(u.name, ''), split_part(u.email, '@', 1)) || 'の工場'
+  FROM users u
+ WHERE u.id = f.user_id AND f.name = '';
 ALTER TABLE factories ADD COLUMN IF NOT EXISTS rev bigint NOT NULL DEFAULT 0;
 
 -- 製造機だけは行にする（running / wp を機械ごとに持つため）。

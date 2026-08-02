@@ -8,6 +8,7 @@
 //   キーは必ずトークンから引いた user_id にする。食い違いは identity_mismatches に残す。
 import crypto from 'node:crypto';
 import { q, one, tx } from './db.mjs';
+import { defaultFactoryName } from './names.mjs';
 
 const DAY = 86400e3;
 export const SESSION_TTL_MS = 30 * DAY;
@@ -37,11 +38,13 @@ export async function upsertUser({ email, googleSub = null, name = '' }) {
              name       = CASE WHEN EXCLUDED.name <> '' THEN EXCLUDED.name ELSE users.name END
        RETURNING *`,
       [mail, googleSub, name])).rows[0];
-    // 工場を1つ持たせる（最初の1台＝2マス機は在庫に入れておく）
+    // 工場を1つ持たせる（最初の1台＝2マス機は在庫に入れておく）。
+    // 工場名は作成時に「◯◯の工場」を入れておく。以後 DB の値がそのまま唯一の真実で、
+    // マイページもリーダーボードも組み立て直さずにこれを表示する。
     await c.query(
-      `INSERT INTO factories(user_id, stock)
-       VALUES ($1, '{"machine":{"s2":1},"prop":{},"deco":{}}'::jsonb)
-       ON CONFLICT (user_id) DO NOTHING`, [u.id]);
+      `INSERT INTO factories(user_id, name, stock)
+       VALUES ($1, $2, '{"machine":{"s2":1},"prop":{},"deco":{}}'::jsonb)
+       ON CONFLICT (user_id) DO NOTHING`, [u.id, defaultFactoryName(u)]);
     return u;
   });
 }
