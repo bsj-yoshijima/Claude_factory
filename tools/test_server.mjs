@@ -295,7 +295,38 @@ try {
     }
   }
 
-  console.log('\n[8] 重みの変更で過去が再集計されること（WP.md §6 の性質）');
+  console.log('\n[8] ポーリングの軽量化');
+  {
+    const full = await a('GET', '/api/state');
+    const rev = full.json.rev;
+    ok(!!full.json.factory, '初回（rev未知）は factory 一式が返る');
+    const fullBytes = Buffer.byteLength(JSON.stringify(full.json));
+
+    const slim = await a('GET', `/api/state?rev=${rev}`);
+    ok(!slim.json.factory, '同じ rev を送ると factory は省略される');
+    ok(Array.isArray(slim.json.machines), '機械の進捗（wp/running）は毎回返る');
+    eq(slim.json.rev, rev, 'rev は毎回返る（変わったらクライアントが取り直せる）');
+    const slimBytes = Buffer.byteLength(JSON.stringify(slim.json));
+    ok(slimBytes < fullBytes, `ペイロードが小さくなる`,
+      `${fullBytes}B → ${slimBytes}B (-${Math.round((1 - slimBytes / fullBytes) * 100)}%)`);
+
+    // 工場の形が変わったら rev が上がり、次のポーリングで一式が届く
+    await a('POST', '/api/shop/buy', { body: { kind: 'bg', id: 'auto' } });
+    const after = await a('GET', `/api/state?rev=${rev}`);
+    ok(after.json.rev !== rev, '購入すると rev が上がる');
+    ok(!!after.json.factory, 'rev が変わったら factory が再送される');
+
+    // tick の空振り: WP が増えていないポーリングは factories に書き込まない
+    const { pool: p2 } = await import('../server/db.mjs');
+    const tickAt = async () => (await p2.query(
+      `SELECT last_tick_at FROM factories f JOIN users u ON u.id=f.user_id WHERE u.email=$1`,
+      [EMAIL])).rows[0].last_tick_at.getTime();
+    const t0 = await tickAt();
+    for (let i = 0; i < 3; i++) await a('GET', `/api/state?rev=${after.json.rev}`);
+    eq(await tickAt(), t0, 'WPが増えていないポーリングは書き込みを起こさない（空振りtickの廃止）');
+  }
+
+  console.log('\n[9] 重みの変更で過去が再集計されること（WP.md §6 の性質）');
   {
     const before = (await a('GET', '/api/state')).json.wp.total;
     const { pool } = await import('../server/db.mjs');

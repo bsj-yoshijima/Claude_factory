@@ -283,7 +283,8 @@ async function handle(req, res) {
       const body = ['POST', 'PUT', 'PATCH'].includes(method) ? await readJson(req) : null;
       let r;
       switch (`${method} ${route}`) {
-        case 'GET /api/state':        r = await API.getState(user); break;
+        case 'GET /api/state':        r = await API.getState(user, url.searchParams); break;
+        case 'GET /api/factory':      r = await API.getFactory(user); break;
         case 'POST /api/claim':       r = await API.postClaim(user); break;
         case 'POST /api/shop/buy':    r = await API.postBuy(user, body); break;
         case 'POST /api/shop/sell':   r = await API.postSell(user, body); break;
@@ -296,6 +297,8 @@ async function handle(req, res) {
         case 'GET /api/leaderboard':  r = await API.getLeaderboard(user, url.searchParams); break;
         case 'GET /api/made':         r = await API.getMade(user, url.searchParams); break;
         case 'GET /api/me':           r = await API.getMe(user, await Auth.ensureIngestToken(user.id)); break;
+        case 'GET /api/mypage':       r = await API.getMyPage(user, url.searchParams); break;
+        case 'PUT /api/factory/name': r = await API.putFactoryName(user, body); break;
         case 'GET /api/skins':        r = { status: 200, body: { skins: await API.skinsOf(user.id) } }; break;
         case 'GET /api/setup.json':   r = { status: 200, body: { note: '/setup の内容と同じ' } }; break;
         default: r = { status: 404, body: { error: `no route: ${method} ${route}` } };

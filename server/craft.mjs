@@ -24,6 +24,18 @@ const jstDay = (t = Date.now()) => new Date(t + 9 * 3600 * 1000).toISOString().s
 export async function tick(userId) {
   const wpNow = await totalWp(userId);
 
+  /* 空振りの早期リターン。
+     ポーリングのほとんどは「前回から WP が1も増えていない」状態で来る
+     （OTLP の logs は5秒バッチなので、それより短い間隔で叩けば必ず空振りする）。
+     ここでトランザクションを張ると、何も起きていないのに毎回 1 write が発生する。
+     ロックを取らない SELECT で先に判定して、増えていなければ即座に返す。 */
+  const peek = await one(
+    `SELECT wp_mark, wp_mark_init FROM factories WHERE user_id=$1`, [userId]);
+  if (!peek) return { delta: 0, produced: [], capped: 0 };
+  if (peek.wp_mark_init && wpNow <= Number(peek.wp_mark)) {
+    return { delta: 0, produced: [], capped: 0, noop: true };
+  }
+
   return tx(async (c) => {
     const f = (await c.query(
       `SELECT wp_mark, wp_mark_init FROM factories WHERE user_id=$1 FOR UPDATE`,
@@ -38,11 +50,9 @@ export async function tick(userId) {
       return { delta: 0, produced: [], capped: 0 };
     }
 
+    // ロック取得までの間に他のリクエストが先に進めていたら何もしない
     const delta = Math.max(0, wpNow - Number(f.wp_mark));
-    if (delta <= 0) {
-      await c.query(`UPDATE factories SET last_tick_at=now() WHERE user_id=$1`, [userId]);
-      return { delta: 0, produced: [], capped: 0 };
-    }
+    if (delta <= 0) return { delta: 0, produced: [], capped: 0, noop: true };
 
     const machines = (await c.query(
       `SELECT m.id, m.sub, m.wp,
@@ -124,7 +134,9 @@ export async function claim(userId) {
         [userId, pid, n]);
     }
     if (gain) {
-      await c.query(`UPDATE factories SET money = money + $2 WHERE user_id=$1`, [userId, gain]);
+      // rev も上げる: 💰が変わったのでポーリング側に factory を送り直させる
+      await c.query(`UPDATE factories SET money = money + $2, rev = rev + 1 WHERE user_id=$1`,
+        [userId, gain]);
       await c.query(
         `INSERT INTO sales_daily(user_id, day, amount) VALUES ($1,$2,$3)
          ON CONFLICT (user_id, day) DO UPDATE SET amount = sales_daily.amount + EXCLUDED.amount`,

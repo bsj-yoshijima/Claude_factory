@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS identity_mismatches (
 -- ============================== 工場 ==============================
 CREATE TABLE IF NOT EXISTS factories (
   user_id      bigint PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  -- 工場名。空文字なら画面側で「◯◯の工場」を既定表示にする
+  name         text NOT NULL DEFAULT '',
   money        bigint NOT NULL DEFAULT 0,
   bg           text NOT NULL DEFAULT 'auto',
   floor        text NOT NULL DEFAULT 'wood',
@@ -60,8 +62,15 @@ CREATE TABLE IF NOT EXISTS factories (
   -- 製造の進み。wp_mark = 前回 tick 時点の「その人の累計WP」
   wp_mark      double precision NOT NULL DEFAULT 0,
   wp_mark_init boolean NOT NULL DEFAULT false,   -- 初回は遡らない（基準を取るだけ）
-  last_tick_at timestamptz NOT NULL DEFAULT now()
+  last_tick_at timestamptz NOT NULL DEFAULT now(),
+  -- 工場の「形」が変わるたびに +1 する版番号。ポーリングの度に配置・在庫・所持品を
+  -- 送り直さないための仕組み（実測でレスポンスの 67% がこの不変部分だった）。
+  -- クライアントは自分が持っている rev を送り、一致していればサーバは factory を省略する。
+  rev          bigint NOT NULL DEFAULT 0
 );
+-- 既存DB向け（CREATE TABLE は IF NOT EXISTS なので後から足した列はここで追加する）
+ALTER TABLE factories ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '';
+ALTER TABLE factories ADD COLUMN IF NOT EXISTS rev bigint NOT NULL DEFAULT 0;
 
 -- 製造機だけは行にする（running / wp を機械ごとに持つため）。
 -- ★ id はクライアントが生成するレイアウトIDなので、主キーは必ず (user_id, id)。

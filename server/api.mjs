@@ -8,6 +8,13 @@ import * as GD from './game-data.mjs';
 const jsonOk = (body) => ({ status: 200, body });
 const bad = (msg, status = 400) => ({ status, body: { error: msg } });
 
+/* 工場の「形」（配置・在庫・所持品・💰・内装）が変わったら版番号を上げる。
+   ポーリングはこの rev を見て、factory 一式を送るかどうかを決める。
+   製造の tick は機械の wp しか動かさないので rev は上げない。 */
+const bumpRev = (c, userId) =>
+  (c || { query: (t, p) => q(t, p) }).query(
+    `UPDATE factories SET rev = rev + 1 WHERE user_id=$1`, [userId]);
+
 /* ============================ 工場の現在値 ============================ */
 async function factoryOf(userId) {
   const f = await one(`SELECT * FROM factories WHERE user_id=$1`, [userId]);
@@ -18,7 +25,9 @@ async function factoryOf(userId) {
        FROM machines m LEFT JOIN machine_slots s ON s.user_id=m.user_id AND s.machine_id=m.id
       WHERE m.user_id=$1 GROUP BY m.user_id, m.id ORDER BY m.id`, [userId]);
   return {
+    rev: Number(f.rev),
     money: Number(f.money),
+    name: f.name || '',
     bg: f.bg, floor: f.floor,
     bgOwned: f.bg_owned, floorOwned: f.floor_owned, seriesOwned: f.series_owned,
     props: f.props, stock: f.stock, emojiDecos: f.emoji_decos,
@@ -33,36 +42,54 @@ async function factoryOf(userId) {
 
 /**
  * ポーリングの唯一の入口。
+ *
  * 旧実装は /api/sessions(1.5秒) と /api/otel(3秒) の2本を叩いていた。実測すると
- * ブラウザのポーリングがテレメトリ受信の30倍のリクエストを生むので、1本に統合して
- * 間隔も2秒に落とす。クライアント側は document.visibilityState で止める。
+ * ブラウザのポーリングはテレメトリ受信の30倍のリクエストを生むので1本にまとめ、
+ * さらに次の3つで削っている:
+ *   1. factory（配置・在庫・所持品）は rev が変わったときだけ積む
+ *      … 実測でレスポンス 3,499B のうち 2,351B がこの「変わらない部分」だった
+ *   2. 間隔は5秒。OTLP の logs バッチが5秒なので、それより速く叩いても新しい値は無い
+ *   3. tick は WP が増えていなければトランザクションを張らない（空振りの書き込みを止める）
+ * クライアント側は document.visibilityState が hidden の間ポーリングを止める。
  */
-export async function getState(user) {
+export async function getState(user, query) {
   const t = await tick(user.id);                 // 遅延評価: 開いていない間の分もここで進む
-  const [wpTotal, wpToday, agents, pending, factory, sales] = await Promise.all([
+  const knownRev = Number(query?.get('rev') ?? -1);
+
+  const [wpTotal, wpToday, agents, pending, head, sales, madeToday, live] = await Promise.all([
     totalWp(user.id), todayWp(user.id), activeAgents(user.id), pendingCount(user.id),
-    factoryOf(user.id),
+    one(`SELECT rev, money FROM factories WHERE user_id=$1`, [user.id]),
     one(`SELECT COALESCE(amount,0) AS a FROM sales_daily WHERE user_id=$1 AND day=$2`,
       [user.id, jstDay()]),
+    one(`SELECT COUNT(*)::int AS n FROM products_made
+          WHERE user_id=$1 AND (made_at AT TIME ZONE 'Asia/Tokyo')::date = $2`,
+      [user.id, jstDay()]),
+    // 毎回変わりうるのは機械の進捗だけ（実測 387B）。定義や配置は factory 側にある
+    all(`SELECT id, wp, running FROM machines WHERE user_id=$1 ORDER BY id`, [user.id]),
   ]);
-  const madeToday = await one(
-    `SELECT COUNT(*)::int AS n FROM products_made
-      WHERE user_id=$1 AND (made_at AT TIME ZONE 'Asia/Tokyo')::date = $2`,
-    [user.id, jstDay()]);
+  const rev = Number(head?.rev || 0);
 
-  return jsonOk({
+  const body = {
     ts: Date.now(),
+    rev,
     me: { id: user.id, email: user.email, name: user.name },
     wp: { total: wpTotal, today: wpToday },
     today: { made: Number(madeToday?.n || 0), sales: Number(sales?.a || 0) },
+    money: Number(head?.money || 0),
+    machines: live.map((m) => ({ id: m.id, wp: Number(m.wp), running: m.running })),
     pending,
     justProduced: t.produced.length,
     agents,
     busy: agents.filter((a) => a.working).length,
     idle: agents.filter((a) => !a.working).length,
-    factory,
-  });
+  };
+  // クライアントが持っている版が古いときだけ工場一式を積む
+  if (knownRev !== rev) body.factory = await factoryOf(user.id);
+  return jsonOk(body);
 }
+
+/** 工場一式を明示的に取り直す（クライアントの復旧用） */
+export const getFactory = async (user) => jsonOk({ factory: await factoryOf(user.id) });
 
 /* ============================== 🎁完成品 ============================== */
 export async function postClaim(user) {
@@ -102,6 +129,7 @@ export async function postBuy(user, body) {
                   floor_owned = CASE WHEN $3 = ANY(floor_owned) THEN floor_owned ELSE array_append(floor_owned, $3) END
             WHERE user_id=$1`, [user.id, S.sky, S.floor]);
       }
+      await bumpRev(c, user.id);
       return jsonOk({ ok: true, factory: await factoryOf(user.id) });
     }
 
@@ -112,6 +140,7 @@ export async function postBuy(user, body) {
     stock[kind][id] = (stock[kind][id] || 0) + 1;
     await c.query(`UPDATE factories SET money = money - $2, stock = $3 WHERE user_id=$1`,
       [user.id, price, JSON.stringify(stock)]);
+    await bumpRev(c, user.id);
     return jsonOk({ ok: true, factory: await factoryOf(user.id) });
   });
 }
@@ -135,6 +164,7 @@ export async function postSell(user, body) {
       `INSERT INTO sales_daily(user_id, day, amount) VALUES ($1,$2,$3)
        ON CONFLICT (user_id, day) DO UPDATE SET amount = sales_daily.amount + EXCLUDED.amount`,
       [user.id, jstDay(), gain]);
+    await bumpRev(c, user.id);
     return jsonOk({ ok: true, gain, factory: await factoryOf(user.id) });
   });
 }
@@ -151,6 +181,7 @@ export async function postLevelUp(user, body) {
     if (Number(f.money) < cost) return bad('💰が足りません');
     await c.query(`UPDATE factories SET money = money - $2 WHERE user_id=$1`, [user.id, cost]);
     await c.query(`UPDATE machines SET lvl = lvl + 1 WHERE user_id=$1 AND id=$2`, [user.id, id]);
+    await bumpRev(c, user.id);
     return jsonOk({ ok: true, factory: await factoryOf(user.id) });
   });
 }
@@ -191,6 +222,7 @@ export async function putLayout(user, body) {
     }
     await c.query(`UPDATE factories SET props=$2 WHERE user_id=$1`,
       [user.id, JSON.stringify(props)]);
+    await bumpRev(c, user.id);
     return jsonOk({ ok: true, factory: await factoryOf(user.id) });
   });
 }
@@ -209,6 +241,7 @@ export async function putSlots(user, body) {
       await c.query(`INSERT INTO machine_slots(user_id, machine_id, idx, mat_id) VALUES ($1,$2,$3,$4)`,
         [user.id, id, i, mat]);
     }
+    await bumpRev(c, user.id);
   });
   return jsonOk({ ok: true, factory: await factoryOf(user.id) });
 }
@@ -218,6 +251,7 @@ export async function putRunning(user, body) {
   const r = await q(`UPDATE machines SET running=$3 WHERE id=$1 AND user_id=$2`,
     [id, user.id, !!body?.running]);
   if (!r.rowCount) return bad('その製造機がありません');
+  await bumpRev(null, user.id);
   return jsonOk({ ok: true, factory: await factoryOf(user.id) });
 }
 
@@ -322,6 +356,66 @@ export async function getMe(user, ingestToken) {
     dex: { unique: Number(dexN?.n || 0), total: Number(dexN?.total || 0), all: GD.PRODS.length },
     salesDaily: sales, madeDaily: made,
   });
+}
+
+/* ============================ マイページ(工場) ============================
+   ハンバーガーメニューの 🏠マイページ が読む。
+   直近 N 日（JST）の WP / 製造個数 / 売上を「日が抜けない」形にして返す。
+   グラフは0の日も点として要るので、日付の穴埋めはここでやる（クライアントに任せない）。 */
+const MYPAGE_MAX_DAYS = 90;
+
+export async function getMyPage(user, query) {
+  const days = Math.min(MYPAGE_MAX_DAYS,
+    Math.max(2, Number(query?.get('days')) || 14));
+  const to = jstDay();
+  const from = jstDay(Date.now() - (days - 1) * 86400e3);
+
+  const [f, wp, sales, made] = await Promise.all([
+    one(`SELECT name FROM factories WHERE user_id=$1`, [user.id]),
+    dailyWp(user.id, from, to),
+    all(`SELECT day, amount FROM sales_daily WHERE user_id=$1 AND day BETWEEN $2 AND $3`,
+      [user.id, from, to]),
+    all(`SELECT (made_at AT TIME ZONE 'Asia/Tokyo')::date AS day, COUNT(*)::int AS n
+           FROM products_made
+          WHERE user_id=$1
+            AND (made_at AT TIME ZONE 'Asia/Tokyo')::date BETWEEN $2 AND $3
+          GROUP BY 1`, [user.id, from, to]),
+  ]);
+
+  // date 型は pg が Date で返すので、必ず JST の 'YYYY-MM-DD' に揃えてから突き合わせる
+  const key = (d) => (typeof d === 'string' ? d.slice(0, 10) : jstDay(d.getTime()));
+  const byDay = (rows, val) => Object.fromEntries(rows.map((r) => [key(r.day), Number(val(r))]));
+  const wpMap = byDay(wp, (r) => r.wp);
+  const salesMap = byDay(sales, (r) => r.amount);
+  const madeMap = byDay(made, (r) => r.n);
+
+  const series = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const day = jstDay(Date.now() - i * 86400e3);
+    series.push({
+      day,
+      wp: Math.round(wpMap[day] || 0),
+      made: madeMap[day] || 0,
+      sales: salesMap[day] || 0,
+    });
+  }
+  const sum = (list, k) => list.reduce((a, d) => a + d[k], 0);
+  const last7 = series.slice(-7);
+
+  return jsonOk({
+    name: f?.name || '',
+    userName: user.name || String(user.email || '').split('@')[0],
+    from, to, days,
+    series,
+    totals7: { wp: sum(last7, 'wp'), made: sum(last7, 'made'), sales: sum(last7, 'sales') },
+  });
+}
+
+/** 工場名の変更。空文字にすると既定表示（◯◯の工場）に戻る */
+export async function putFactoryName(user, body) {
+  const name = String(body?.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  await q(`UPDATE factories SET name=$2 WHERE user_id=$1`, [user.id, name]);
+  return jsonOk({ ok: true, name });
 }
 
 export async function getMade(user, query) {
