@@ -547,7 +547,7 @@ def synth_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
         res.save(os.path.join(OUT, f'mach-{theme}-s{n}.png'))
         ax, ay = o[0] * scale / ow, o[1] * scale / oh
         out_fit[str(n)] = {'ax': round(ax, 4), 'ay': round(ay, 4),
-                           'step': round(Dx * scale, 3), 'src': 'synth'}
+                           'step': round(Dx * scale, 3), 'stepY': round(Py * scale, 3), 'src': 'synth'}
         print(f'   s{n}: 合成 {im.width}x{im.height} → {ow}x{oh}  '
               f'送り ({Dx*scale:.3f}, {Py*scale:.3f})px  アンカー ({ax:.4f}, {ay:.4f})')
     dy_err = abs(Py * scale - step_y)
@@ -584,12 +584,23 @@ def direct_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
         own = (cs[-1][0] - cs[0][0]) / (k - 1)
         if own < 4:
             continue
+        # 絵のアイソメ角はゲームと微妙に違う(シートは 0.53〜0.55、ゲームは uy/ux)。
+        # そのまま使うと5マス機の端で数pxずれ、床に対して角度が合って見えない。
+        # 列ごとの縦シフト(せん断)で角度だけ直す。垂直線は垂直のまま、横幅も変わらない。
+        dy = (cs[-1][1] - cs[0][1]) / (k - 1)
+        want = own * step_y / step_x
+        r = (want - dy) / own
+        if abs(r) > 1e-4:
+            sp, pad = shear_y(sp, r)
+            cs = [(c[0], c[1] + pad + round(r * c[0])) for c in cs]
+            print(f'   s{k}: 絵の傾き {abs(dy)/own:.3f} → ゲームの {step_y/step_x:.3f} にせん断'
+                  f' (列あたり {r:+.4f}px)')
         sc = step_x / own
         ow, oh = max(1, round(sp.width * sc)), max(1, round(sp.height * sc))
         sp.resize((ow, oh), Image.LANCZOS).save(os.path.join(OUT, f'mach-{theme}-s{k}.png'))
         ax, ay = cs[0][0] * sc / ow, cs[0][1] * sc / oh
         out[str(k)] = {'ax': round(ax, 4), 'ay': round(ay, 4),
-                       'step': round(own * sc, 3), 'src': 'direct'}
+                       'step': round(own * sc, 3), 'stepY': round(want * sc, 3), 'src': 'direct'}
         print(f'   s{k}: そのまま切取 {sp.width}x{sp.height} → {ow}x{oh}  '
               f'送り ({own*sc:.3f}, {own*sc*step_y/step_x:.3f})px  アンカー ({ax:.4f}, {ay:.4f})')
     return out

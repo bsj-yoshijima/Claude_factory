@@ -36,7 +36,9 @@ const textures = {
   exists:(k)=>['dec_crate','dec_plant','m_red','m_blue','m_green','m_yellow','item_box','shadow','spark'].includes(k)
     || (machTexOn && !!MACH_PNG[k]) || !!canvasTex[k],
   remove(k){ delete canvasTex[k]; }, addCanvas(k,cv){ canvasTex[k]=cv; },
-  get:(k)=>({ getSourceImage:()=> canvasTex[k] || MACH_PNG[k] || {width:64,height:64} }) };
+  get:(k)=>({ getSourceImage:()=> canvasTex[k] || MACH_PNG[k] || {width:64,height:64} }),
+  // 土台の色は絵の下端から拾う。スタブでは常に不透明・単色として返す
+  getPixelAlpha:()=>255, getPixel:()=>({red:0x2c,green:0x47,blue:0x40}) };
 
 const Phaser = {
   AUTO:0, BlendModes:{ADD:1,NORMAL:0,MULTIPLY:2},

@@ -394,6 +394,18 @@ class Main extends Phaser.Scene {
       const cg=cv.getContext('2d'); cg.translate(cv.width,0); cg.scale(-1,1); cg.drawImage(src,0,0);
       this.textures.addCanvas(fk,cv); }
     return fk; }
+  /* 絵の下端(接地している縁)の色。土台をこの色で塗ると床との継ぎ目が目立たない。
+     テクスチャ読みは重いのでテーマ+サイズごとに1回だけ測って覚える。 */
+  _machFootColor(key, sx, ih, fallback){
+    this._footCol = this._footCol || {};
+    if(key in this._footCol) return this._footCol[key];
+    let col=fallback;
+    for(let y=ih-1; y>=Math.max(0,ih-40); y--){
+      if(this.textures.getPixelAlpha(sx,y,key)>200){
+        const c=this.textures.getPixel(sx,y,key);
+        if(c) col=(c.red<<16)|(c.green<<8)|c.blue;
+        break; } }
+    this._footCol[key]=col; return col; }
   /* 製造機は複数マスを一直線に占有するので、深度を1つしか持たせるとマスごとの前後関係が壊れる
      (手前のマスに立ったキャラが機械の裏へ回る)。絵を「1マスぶんの縦帯」に切り、帯 i をマス i の深度で描く。 */
   _makeMachine(e, objs){
@@ -450,13 +462,16 @@ class Main extends Phaser.Scene {
       // 土台も絵と同じだけ縮める。原点は接地点(足元の中央)。
       const fx=(bx0+bx1)/2, fy=by1;
       const shrink=(p)=>({x:fx+(p.x-fx)*S, y:fy+(p.y-fy)*S});
+      // 土台をテーマ色で塗ると、絵の下に暗い帯が出て「床との間に隙間がある」ように見える。
+      // 絵の下端の色を拾って塗れば、機械の裾がそのまま床まで続いているように見える。
+      const foot=this._machFootColor(key, Math.round((ax||0.5)*iw), ih, sk.edge);
       cells.forEach((q,i)=>{
         // 絵の本体の奥行はゲームの1マスより浅いことがあり、占有マスの手前側に床が残る。
-        // そこに後ろのキャラが覗くので、マスごとの暗い土台で塞いでから帯を重ねる。
+        // そこに後ろのキャラが覗くので、マスごとの土台で塞いでから帯を重ねる。
         const qd=quads[i].map(shrink);
         const bg=this.add.graphics().setDepth(dep[i]-0.3); objs.push(bg);
-        bg.fillStyle(sk.edge,1); bg.fillPoints(qd,true);
-        bg.lineStyle(2,sk.side,1); this._strokeOuter(bg,qd,i,n,e.dir);
+        bg.fillStyle(foot,1); bg.fillPoints(qd,true);
+        bg.lineStyle(2,foot,1); this._strokeOuter(bg,qd,i,n,e.dir);
         const x0 = asc ? (i===0?0:cut[i-1]) : (i===n-1?0:cut[i]);
         const x1 = asc ? (i===n-1?iw:cut[i]) : (i===0?iw:cut[i-1]);
         const im=this.add.image(imx, by1, key).setOrigin(0.5,1).setDepth(dep[i]).setTint(tint);
