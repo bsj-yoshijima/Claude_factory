@@ -610,6 +610,78 @@ def direct_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
               f'送り ({own*sc:.3f}, {own*sc*step_y/step_x:.3f})px  アンカー ({ax:.4f}, {ay:.4f})')
     return out
 
+
+# ---- 1マスモジュールを並べて N マス機を作る ----------------------------------
+# 生成側に守らせるのは「1マス・ホッパー1つ・側面に取り付け物なし・底面から垂れ物なし」だけ。
+# 菱形の比率(2:1)は守られない(実測 0.552/0.554/0.557 と3回直させても動かない)ので、
+# ここで縦に潰して厳密に合わせる。1タイルの縦圧縮は横を触らないので歪みが出ない。
+
+def base_diamond(sp):
+    """底面菱形の (幅, 高さ, 下角のy) を測る。
+    左右の角は「最左列/最右列の最下点」、下角は絵全体の最下点。"""
+    a = np.asarray(sp.convert('RGBA'))
+    h, w = a.shape[0], a.shape[1]
+    op = a[:, :, 3] > 128
+    xs = [x for x in range(w) if op[:, x].any()]
+    if not xs:
+        return w, w / 2, h - 1
+    xL, xR = xs[0], xs[-1]
+    yL = int(np.nonzero(op[:, xL])[0][-1])
+    yR = int(np.nonzero(op[:, xR])[0][-1])
+    yB = max(y for y in range(h) if op[y].any())
+    return xR - xL + 1, 2 * (yB - (yL + yR) / 2), yB
+
+
+def hopper_center(sp, test):
+    """ホッパーの口の中心。上半分でいちばん大きい「楕円らしい塊」を採る。"""
+    cands = [c for c in spot_blobs(sp, test) if c[0][1] < sp.height * 0.7]
+    if not cands:
+        return None
+    return max(cands, key=lambda t: t[1])[0]
+
+
+def module_fit(theme, sp, W, H, GU, GV, iso, draw=1.0):
+    """1マスモジュールから 2〜5マス機を作る。{'2':{...},...} を返す。無理なら None"""
+    step_x = abs(iso['ux'] * W / GU) * draw
+    step_y = abs(iso['uy'] * H / GU) * draw
+    tile_w = (abs(iso['ux'] * W / GU) + abs(iso['vx'] * W / GV)) * draw   # 1マスの菱形の横幅
+    dw, dh, _yb = base_diamond(sp)
+    if dw < 8:
+        return None
+    # 1) 縦を潰して菱形を厳密な 2:1 にする
+    vs = (dw / 2) / dh
+    if abs(vs - 1) > 0.002:
+        sp = sp.resize((sp.width, max(1, round(sp.height * vs))), Image.LANCZOS)
+        print(f'   菱形 {dw}x{dh:.0f} (比 {dh/dw:.3f}) → 縦を {vs:.4f} 倍して 2:1 に補正')
+    # 2) ゲームの1マスの大きさへ
+    sc = tile_w / dw
+    ow, oh = max(1, round(sp.width * sc)), max(1, round(sp.height * sc))
+    mod = sp.resize((ow, oh), Image.LANCZOS)
+    hc = hopper_center(mod, SPOT_TEST.get(theme) or (lambda p: p[3] > 128 and max(p[:3]) < 45))
+    if hc is None:
+        print('   !! ホッパーの口を検出できないのでスキップ'); return None
+    print(f'   モジュール {ow}x{oh}  1マス送り ({step_x:.3f}, {step_y:.3f})px  口の中心 ({hc[0]:.1f}, {hc[1]:.1f})')
+    out = {}
+    for n in SIZES:
+        # 奥から手前へ 1マスぶんずつずらして重ねる。手前のコピーが奥の前面を覆うので
+        # 端の面は両端にだけ残り、1本の機械に見える。
+        offs = [(round(step_x * i), round(step_y * i)) for i in range(n)]
+        cw = ow + offs[-1][0]
+        ch = oh + offs[-1][1]
+        im = Image.new('RGBA', (cw, ch), (0, 0, 0, 0))
+        for dx, dy in offs:
+            im.alpha_composite(mod, (dx, dy))
+        bb = im.getbbox() or (0, 0, cw, ch)
+        im = im.crop(bb)
+        im.save(os.path.join(OUT, f'mach-{theme}-s{n}.png'))
+        ax = (hc[0] - bb[0]) / im.width
+        ay = (hc[1] - bb[1]) / im.height
+        gy = (oh - 1 - bb[1]) / im.height          # モジュールの最下点 = 接地線
+        out[str(n)] = {'ax': round(ax, 4), 'ay': round(ay, 4), 'gy': round(gy, 4),
+                       'step': round(step_x, 3), 'stepY': round(step_y, 3), 'src': 'module'}
+        print(f'   s{n}: モジュール{n}個を並べて {im.width}x{im.height}  アンカー ({ax:.4f}, {ay:.4f})')
+    return out
+
 def main():
     import json
     W, H, GU, GV, iso, IN, DRAW = main_js_consts()
@@ -617,7 +689,15 @@ def main():
     step_y = abs(iso['uy'] * H / GU)
     print(f'ゲームの1マス送り = ({step_x:.4f}, {step_y:.4f})px  (game/main.js の ISO/W/H/GU より)')
     fit = {}
-    for f in sorted(os.listdir(SHEETS)):
+    files = sorted(os.listdir(SHEETS))
+    # `_module_<theme>.png` があるテーマは、そのモジュールを並べて作る方が確実なので
+    # 同名の 4台シート `<theme>.png` は無視する(処理順で上書きされる事故を防ぐ)
+    by_module = {f[len('_module_'):-4] for f in files if f.startswith('_module_') and f.endswith('.png')}
+    if by_module:
+        print(f'1マスモジュールを使うテーマ: {", ".join(sorted(by_module))}')
+    for f in files:
+        if not f.startswith('_module_') and f[:-4] in by_module:
+            continue
         if not f.lower().endswith('.png'):
             continue
         theme = os.path.splitext(f)[0]
@@ -626,6 +706,14 @@ def main():
         picks = split_machines(sheet)
         if not picks:
             print('   !! 機械を検出できませんでした。スキップ'); continue
+
+        # `_module_<theme>.png` は1マスモジュール。並べて4サイズを作る(いちばん確実)。
+        if theme.startswith('_module_'):
+            th = theme[len('_module_'):]
+            got = module_fit(th, isolate(sheet, picks[0]), W, H, GU, GV, iso, DRAW)
+            if got:
+                fit[th] = got
+            continue
         if len(picks) == 1:
             # 1台だけのシート。合成に要るのは「投入口が2つ以上ある台」1つだけなので、
             # むしろこれが理想形(4台あると生成側が全体幅を揃えようとして送りが崩れる)。
