@@ -433,9 +433,6 @@ export async function getMyPage(user, query) {
       sales: salesMap[day] || 0,
     });
   }
-  const sum = (list, k) => list.reduce((a, d) => a + d[k], 0);
-  const last7 = series.slice(-7);
-
   return jsonOk({
     // DB の工場名をそのまま返す（アカウント作成時に既定名が入っている）。
     // 万一 name が空の古い行に当たったときだけ既定名で埋める
@@ -443,8 +440,8 @@ export async function getMyPage(user, query) {
     userName: displayName(user),
     defaultName: defaultFactoryName(user),   // 「空にすると戻る」先を画面に出すため
     from, to, days,
+    // 日次/週次の集計はクライアント側で series からまとめる（週の境界=日曜00:00〜土曜23:59）
     series,
-    totals7: { wp: sum(last7, 'wp'), made: sum(last7, 'made'), sales: sum(last7, 'sales') },
   });
 }
 

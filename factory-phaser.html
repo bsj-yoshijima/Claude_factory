@@ -229,7 +229,7 @@
   .pcard.miss{opacity:.28}
   .pcard .new{position:absolute;top:-5px;left:-4px;background:#ff5d6c;color:#fff;font-size:8px;
               font-weight:700;padding:1px 5px;border-radius:99px;transform:rotate(-8deg)}
-  /* マイページ（工場名 / 直近7日のサマリ / 直近14日の折れ線） */
+  /* マイページ（工場名 / 選択した日・週のサマリ / WPの折れ線） */
   .myname{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .myname b{font-size:20px;color:var(--gold);line-height:1.3}
   .myname input{background:#0e1518;border:1px solid var(--edge);color:var(--ink);border-radius:8px;
@@ -237,7 +237,8 @@
   .myname .ed{background:#141b20;border:1px solid var(--edge);border-radius:8px;padding:4px 9px;
               font-size:11px;color:#9fdcc6;cursor:pointer}
   .myname .ed:hover{border-color:var(--mint);color:var(--gold)}
-  .mystats{display:flex;gap:26px;flex-wrap:wrap;margin:16px 0 2px}
+  .myperiod{font-size:19px;font-weight:700;color:#eafff4;margin-top:12px;line-height:1.3}
+  .mystats{display:flex;gap:26px;flex-wrap:wrap;margin:12px 0 2px}
   .mystat{min-width:104px}
   .mystat .k{font-size:11px;color:#9fb0c0;line-height:1.6}
   .mystat .v{font-size:26px;font-weight:700;color:#eafff4;line-height:1.25;white-space:nowrap}
@@ -245,7 +246,10 @@
   .mystat .v small{display:inline-block;font-size:12px;line-height:1;color:#9fb0c0;
                    font-weight:400;margin-left:3px;vertical-align:baseline}
   .mychart{margin-top:6px}
-  .mychart svg{width:100%;height:auto;display:block}
+  .mychart svg{width:100%;height:auto;display:block;touch-action:manipulation}
+  .mychart .myhit{cursor:pointer}
+  .mychart .myhit:focus{outline:none}
+  .mychart .myhit:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
 </style>
 </head>
 <body>
@@ -1545,17 +1549,14 @@ async function openLb(){
 document.getElementById('lbBtn').addEventListener('click',openLb);
 
 /* =========================================================================
-   マイページ — 工場名 / 直近7日の合計 / 直近14日の推移
-   グラフは1本ずつ切り替えて見る（3本重ねると単位が違って読めない）。
+   マイページ — 工場名 / 選んだ日・週のWP・製造個数・売上 / WPの推移グラフ
+   粒度は日次(00:00-23:59)と週次(日曜00:00-土曜23:59)の2つ。折れ線はWPだけ引き、
+   点をクリックするとその日・週の3指標に切り替わる（3本重ねると単位が違って読めない）。
    ========================================================================= */
-const MY_DAYS=14;
-const MY_METRICS=[
-  {id:'wp',   label:'WP',     color:'#9fdcc6', fmt:v=>Math.round(v).toLocaleString(),  unit:'WP'},
-  {id:'made', label:'製造個数', color:'#7fe6ff', fmt:v=>v.toLocaleString(),             unit:'個'},
-  {id:'sales',label:'売上',    color:'#ffd27a', fmt:v=>'💰 '+Math.round(v).toLocaleString(), unit:''},
-];
-let _myKey='wp', _myData=null, _myEdit=false;
-const myMetric=()=>MY_METRICS.find(m=>m.id===_myKey)||MY_METRICS[0];
+const MY_DAYS=90;                      // 週次12週分を作るのに必要な日数。日次は末尾14日だけ使う
+const MY_DAILY_N=14, MY_WEEK_N=12;
+const MY_COLOR='#9fdcc6';              // 折れ線はWPの1本だけ
+let _myRange='day', _mySel=null, _myData=null, _myEdit=false;
 // 既定名はサーバが決める（ユーザー名 → 無ければメールの @ より前 → 「◯◯の工場」）
 const myDefaultName=()=> (_myData&&_myData.defaultName)
   || `${(_myData&&_myData.userName)||'あなた'}の工場`;
@@ -1570,50 +1571,89 @@ function niceMax(v){
   const e=Math.pow(10,Math.floor(Math.log10(v))), f=v/e;
   return (f<=1?1:f<=2?2:f<=5?5:10)*e;
 }
-/* 折れ線＋塗り。Strava の週次グラフと同じで「点＋面」で推移だけ見せる */
-function myChartSvg(series,metric){
-  const W=620,H=210,PL=26,PR=52,PT=16,PB=26;   // PL は左端の日付ラベルが切れない幅
-  const n=series.length;
+/* 日付ユーティリティ。'YYYY-MM-DD' は UTC 正午ではなく 00:00 として素直に足し引きする */
+const myDayMs=(d)=>Date.parse(d+'T00:00:00Z');
+const myDayStr=(ms)=>new Date(ms).toISOString().slice(0,10);
+const myMd=(d)=>d.slice(5).replace('-','/');                      // 07/19（年は出さない）
+
+/* 表示中の粒度でバケツを作る。日次=1日、週次=日曜00:00〜土曜23:59 */
+function myBuckets(){
+  const series=(_myData&&_myData.series)||[];
+  if(_myRange!=='week'){
+    return series.slice(-MY_DAILY_N).map(d=>({
+      key:d.day, wp:d.wp, made:d.made, sales:d.sales,
+      title:myMd(d.day), x:myMd(d.day) }));
+  }
+  const by=new Map();
+  for(const d of series){
+    const t=myDayMs(d.day);
+    const start=myDayStr(t-new Date(t).getUTCDay()*86400000);      // 直前の日曜
+    let b=by.get(start);
+    if(!b) by.set(start,b={key:start,n:0,wp:0,made:0,sales:0});
+    b.n++; b.wp+=d.wp; b.made+=d.made; b.sales+=d.sales;
+  }
+  const list=[...by.values()].sort((a,b)=>a.key<b.key?-1:1);
+  // 先頭は取得範囲の途中から始まる欠けた週。合計が過小に出るので落とす
+  if(list.length>1&&list[0].n<7) list.shift();
+  return list.slice(-MY_WEEK_N).map(b=>({ ...b,
+    title:`${myMd(b.key)} - ${myMd(myDayStr(myDayMs(b.key)+6*86400000))}`,
+    x:myMd(b.key) }));
+}
+const mySelIdx=(b)=> b.length ? Math.min(Math.max(_mySel==null?b.length-1:_mySel,0),b.length-1) : -1;
+
+/* WPの折れ線＋塗り。各ポイントをクリックするとその日/週の数値に切り替わる */
+function myChartSvg(buckets,sel){
+  const W=620,H=210,PL=26,PR=76,PT=16,PB=26;   // PL は左端の日付ラベル、PR は右端の「n WP」が切れない幅
+  const n=buckets.length;
   if(!n) return '<div class="cost">まだ記録がありません</div>';
-  const max=niceMax(Math.max(...series.map(d=>d[metric.id]),0));
+  const max=niceMax(Math.max(...buckets.map(d=>d.wp),0));
   const X=i=> n<2 ? PL : PL+i*(W-PL-PR)/(n-1);
   const Y=v=> PT+(1-v/max)*(H-PT-PB);
-  const pts=series.map((d,i)=>[X(i),Y(d[metric.id])]);
+  const pts=buckets.map((d,i)=>[X(i),Y(d.wp)]);
   const line=pts.map((p,i)=>`${i?'L':'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
   const area=`${line} L${pts[pts.length-1][0].toFixed(1)},${Y(0)} L${pts[0][0].toFixed(1)},${Y(0)} Z`;
-  const gid='myg_'+metric.id;
   // 目盛りは 0 / 中間 / 上限。丸めた結果ラベルが重複したら線だけ引く（0が並ぶのを防ぐ）
   const seen=new Set();
-  const axisFmt=v=>Math.round(v).toLocaleString();   // 軸は数字だけ（💰 や単位はツールチップ側）
   const grid=[max,max/2,0].map(v=>{      // 上限を先に見て、丸めがぶつかったら中間を落とす
-    const t=axisFmt(v), dup=seen.has(t); seen.add(t);
+    const t=Math.round(v).toLocaleString(), dup=seen.has(t); seen.add(t);
     return `<line x1="${PL}" x2="${W-PR}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#22322e" stroke-width="1"/>`
-      +(dup?'':`<text x="${W-PR+8}" y="${(Y(v)+4).toFixed(1)}" fill="#9fb0c0" font-size="11">${t}</text>`);
+      +(dup?'':`<text x="${W-PR+8}" y="${(Y(v)+4).toFixed(1)}" fill="#9fb0c0" font-size="11">${t}<tspan
+              fill="#7d8f9c" font-size="9"> WP</tspan></text>`);
   }).join('');
-  // x軸ラベルは端と中間だけ（14点すべて出すと潰れる）
+  // x軸ラベルは端と中間だけ（全点出すと潰れる）。選択中の点は必ず出す
   const every=Math.max(1,Math.ceil(n/5));
-  const xlab=series.map((d,i)=> (i%every===0||i===n-1)
-    ? `<text x="${X(i).toFixed(1)}" y="${H-7}" fill="#9fb0c0" font-size="10" text-anchor="middle">${d.day.slice(5).replace('-','/')}</text>` : '').join('');
-  const dots=series.map((d,i)=>{
-    const last=i===n-1;
-    return `<circle cx="${pts[i][0].toFixed(1)}" cy="${pts[i][1].toFixed(1)}" r="${last?5:3.6}"
-              fill="${last?metric.color:'#10171b'}" stroke="${metric.color}" stroke-width="2">
-              <title>${d.day} ${metric.fmt(d[metric.id])}${metric.unit}</title></circle>`;}).join('');
+  const xlab=buckets.map((d,i)=> (i%every===0||i===n-1||i===sel)
+    ? `<text x="${X(i).toFixed(1)}" y="${H-7}" fill="${i===sel?'#eafff4':'#9fb0c0'}" font-size="10"
+             text-anchor="middle">${d.x}</text>` : '').join('');
+  const cursor=(sel>=0&&sel<n)
+    ? `<line x1="${pts[sel][0].toFixed(1)}" x2="${pts[sel][0].toFixed(1)}" y1="${PT}" y2="${H-PB}"
+             stroke="#eafff4" stroke-width="1.5" opacity=".8"/>
+       <circle cx="${pts[sel][0].toFixed(1)}" cy="${pts[sel][1].toFixed(1)}" r="10"
+               fill="${MY_COLOR}" opacity=".22"/>` : '';
+  const dots=buckets.map((d,i)=>{
+    const on=i===sel;
+    return `<circle cx="${pts[i][0].toFixed(1)}" cy="${pts[i][1].toFixed(1)}" r="${on?5.5:3.6}"
+              fill="${on?MY_COLOR:'#10171b'}" stroke="${MY_COLOR}" stroke-width="2"/>`;}).join('');
+  // 当たり判定は別に大きめの透明円を置く（半径3.6の点は指でもマウスでも押しにくい）
+  const hits=buckets.map((d,i)=>
+    `<circle class="myhit" cx="${pts[i][0].toFixed(1)}" cy="${pts[i][1].toFixed(1)}" r="16"
+             fill="transparent" data-myi="${i}" role="button" tabindex="0"
+             aria-label="${d.title}"><title>${d.title}</title></circle>`).join('');
   return `<div class="mychart"><svg viewBox="0 0 ${W} ${H}" role="img"
-      aria-label="直近${n}日の${metric.label}の推移">
-    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${metric.color}" stop-opacity=".38"/>
-      <stop offset="100%" stop-color="${metric.color}" stop-opacity=".03"/></linearGradient></defs>
+      aria-label="${_myRange==='week'?`直近${n}週`:`直近${n}日`}のWPの推移">
+    <defs><linearGradient id="myg_wp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${MY_COLOR}" stop-opacity=".38"/>
+      <stop offset="100%" stop-color="${MY_COLOR}" stop-opacity=".03"/></linearGradient></defs>
     ${grid}
-    <path d="${area}" fill="url(#${gid})"/>
-    <path d="${line}" fill="none" stroke="${metric.color}" stroke-width="2.4"
+    <path d="${area}" fill="url(#myg_wp)"/>
+    <path d="${line}" fill="none" stroke="${MY_COLOR}" stroke-width="2.4"
           stroke-linejoin="round" stroke-linecap="round"/>
-    ${dots}${xlab}
+    ${cursor}${dots}${xlab}${hits}
   </svg></div>`;
 }
 function myBody(){
   if(!_myData) return '<div class="cost">読み込み中…</div>';
-  const t=_myData.totals7||{wp:0,made:0,sales:0};
+  const b=myBuckets(), sel=mySelIdx(b), t=b[sel]||{wp:0,made:0,sales:0,title:'—'};
   const head=_myEdit
     // 編集は「いま表示されている名前」から始める。空欄＋プレイスホルダだと
     // 消したのか未設定なのか分からないし、一文字だけ直したいときに打ち直しになる
@@ -1625,18 +1665,21 @@ function myBody(){
   return `${head}
     ${_myData.failed?`<div class="rowline" style="font-size:11px;color:#ff9f7a;margin-top:8px">
       集計を取得できませんでした。サーバが古い可能性があります（<b>node server/index.mjs</b> を再起動してください）。</div>`:''}
-    <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:10px">過去7日間</div>
+    <div class="rowline" style="margin-top:14px">
+      ${[['day','日次'],['week','週次']].map(([id,label])=>
+        `<span class="sttab ${id===_myRange?'on':''}" data-myrange="${id}"
+               style="border-radius:8px">${label}</span>`).join('')}
+    </div>
+    <div class="myperiod">${t.title}</div>
     <div class="mystats">
       <div class="mystat"><div class="k">WP</div><div class="v">${Math.round(t.wp).toLocaleString()}<small>WP</small></div></div>
       <div class="mystat"><div class="k">製造個数</div><div class="v">${t.made.toLocaleString()}<small>個</small></div></div>
       <div class="mystat"><div class="k">売上</div><div class="v">${Math.round(t.sales).toLocaleString()}<small>💰</small></div></div>
     </div>
-    <div class="rowline" style="margin-top:18px">
-      <span style="font-size:11px;color:#9fb0c0;margin-right:2px">過去${_myData.days||MY_DAYS}日間</span>
-      ${MY_METRICS.map(m=>`<span class="sttab ${m.id===_myKey?'on':''}" data-myk="${m.id}"
-         style="border-radius:8px">${m.label}</span>`).join('')}
+    <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:14px">
+      ※グラフの点をクリックで切り替え
     </div>
-    ${myChartSvg(_myData.series||[],myMetric())}`;
+    ${myChartSvg(b,sel)}`;
 }
 /* 単一ユーザー版(server.mjs)向け。WPは /api/otel、製造と売上はローカルの記録から作る */
 async function myLocalData(days){
@@ -1655,10 +1698,8 @@ async function myLocalData(days){
   const series=[];
   for(let i=days-1;i>=0;i--){ const day=jstDay(Date.now()-i*86400000);
     series.push({day, wp:Math.round(wpDaily[day]||0), made:made[day]||0, sales:Math.round(c.sales[day]||0)}); }
-  const sum=(l,k)=>l.reduce((a,d)=>a+d[k],0), last7=series.slice(-7);
   return { name:G.factoryName||'', userName:who||'あなた', defaultName:`${who||'あなた'}の工場`,
-           days, series,
-           totals7:{wp:sum(last7,'wp'), made:sum(last7,'made'), sales:sum(last7,'sales')} };
+           days, series };
 }
 async function saveFactoryName(name,dlg){
   name=String(name||'').replace(/\s+/g,' ').trim().slice(0,24);
@@ -1671,10 +1712,17 @@ async function saveFactoryName(name,dlg){
   toast('工場名を変更しました');
 }
 async function openMyPage(){
-  _myEdit=false; _myData=null;
+  _myEdit=false; _myData=null; _mySel=null; _myRange='day';
   const dlg=openDialog({ title:'🏠 マイページ', body:myBody,
     onRender:(p,d)=>{
-      p.querySelectorAll('[data-myk]').forEach(el=>el.onclick=()=>{ _myKey=el.dataset.myk; d.refresh(); });
+      p.querySelectorAll('[data-myrange]').forEach(el=>el.onclick=()=>{
+        _myRange=el.dataset.myrange; _mySel=null; d.refresh();   // 粒度を変えたら最新の点に戻す
+      });
+      p.querySelectorAll('[data-myi]').forEach(el=>{
+        const pick=()=>{ _mySel=+el.dataset.myi; d.refresh(); };
+        el.onclick=pick;
+        el.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); } };
+      });
       const ed=p.querySelector('#myNameEdit'); if(ed) ed.onclick=()=>{ _myEdit=true; d.refresh(); };
       const cancel=p.querySelector('#myNameCancel'); if(cancel) cancel.onclick=()=>{ _myEdit=false; d.refresh(); };
       const save=p.querySelector('#myNameSave'), inp=p.querySelector('#myNameIn');
@@ -1689,7 +1737,7 @@ async function openMyPage(){
     const me=(NET.last&&NET.last.me)||{};
     const who=String(me.name||'').trim()||String(me.email||'').split('@')[0]||'あなた';
     _myData={ name:G.factoryName||'', userName:who, defaultName:`${who}の工場`,
-      days:MY_DAYS, series:[], totals7:{wp:0,made:0,sales:0}, failed:true };
+      days:MY_DAYS, series:[], failed:true };
   }
   dlg.refresh();   // 読み込み中に閉じられていれば refresh は何もしない
 }
