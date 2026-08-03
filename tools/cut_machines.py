@@ -536,11 +536,14 @@ def main():
         sheet = key_out(Image.open(os.path.join(SHEETS, f)))
         print(f'== {f} ({sheet.width}x{sheet.height})')
         picks = split_machines(sheet)
-        if len(picks) < 2:
-            print(f'   !! 機械を{len(picks)}台しか検出できませんでした。スキップ'); continue
-        if len(picks) < len(SIZES):
+        if not picks:
+            print('   !! 機械を検出できませんでした。スキップ'); continue
+        if len(picks) == 1:
+            # 1台だけのシート。合成に要るのは「投入口が2つ以上ある台」1つだけなので、
+            # むしろこれが理想形(4台あると生成側が全体幅を揃えようとして送りが崩れる)。
+            print('   ※1台だけのシート。この絵から4サイズを合成する')
+        elif len(picks) < len(SIZES):
             # 隣り合う台が触れていると連結成分がくっついて4台に割れない。
-            # 合成に要るのは「投入口が2つ以上ある台」1つだけなので、そのまま続ける。
             print(f'   ※台が{len(picks)}個にしか割れなかった(隣とくっついている)。'
                   f'合成元が取れれば問題ない')
         test = SPOT_TEST.get(theme) or (lambda p: False) if theme in SPOT_HINT else SPOT_TEST.get(theme)
@@ -575,8 +578,31 @@ def main():
     print('\nwrote assets/mach-fit.json')
 
 
+def axis_slope(sp):
+    """長軸の向きを測る。列ごとに「不透明な最初のy」を取り、左端1/6と右端1/6の平均を比べる。
+    正 = 右へ行くほど下がる = ↘(+u、ゲームが期待する向き)。負なら左右反転が必要。
+    tools/mach_axis.mjs と同じ判定をこちらでも持つ(切り出しの時点で揃えてしまう)。"""
+    a = np.asarray(sp.convert('RGBA'))
+    h, w = a.shape[0], a.shape[1]
+    top = []
+    for x in range(w):
+        col = np.nonzero(a[:, x, 3] > 128)[0]
+        top.append(col[0] if len(col) else None)
+    k = max(1, w // 6)
+    L = [t for t in top[:k] if t is not None]
+    R = [t for t in top[-k:] if t is not None]
+    if not L or not R:
+        return 0.0
+    return sum(R) / len(R) - sum(L) / len(L)
+
+
 def legacy_fit(theme, found, W, H, GU, GV, iso, IN, draw=1.0):
-    """投入口を検出できないテーマ用。占有外周の幅に合わせ、筐体高を4台で揃える従来方式"""
+    """投入口を検出できないテーマ用。占有外周の幅に合わせ、筐体高を4台で揃える従来方式.
+    投入口が無いぶん向きも測れないので、長軸のシルエットから判定して必要なら反転する。"""
+    # 判定はいちばん長い台で行う(長いほど長軸の傾きがはっきり出る。短い台は符号が不安定)
+    if found and axis_slope(found[-1][1]) < 0:
+        print('   ※長軸が右斜め上なので左右反転してゲームの向きに揃えた')
+        found = [(n, sp.transpose(Image.FLIP_LEFT_RIGHT), sel) for n, sp, sel in found]
     cut = []
     for n, sp, _ in found:
         tw = target_width(n, W, H, GU, GV, iso, IN) * draw
