@@ -35,7 +35,7 @@ ok(await ev(`document.getElementById('menu').classList.contains('show')`), 'メ�
 await ev(`document.getElementById('menuBtn').click()`); await sleep(200);
 ok(!(await ev(`document.getElementById('menu').classList.contains('show')`)), 'もう一度押すと閉じる');
 
-await ev(`document.getElementById('editFab').click()`); await sleep(400);
+await ev(`document.getElementById('editFab').click()`); await sleep(700);   // 寄せのトランジション(0.42s)が終わるまで待つ
 ok(await ev(`window.__scene.editMode===true`), 'レイアウト編集ボタン → 編集モードON');
 ok(await ev(`document.getElementById('palette').classList.contains('show')`), '編集パレットが出る');
 
@@ -275,7 +275,7 @@ ok((await ev(`document.querySelectorAll('#menu .msep').length`))>=2, 'メニュ�
 for(const idn of ['craftBtn','shopBtn','collectionBtn','lbBtn','agentsBtn','editMenuBtn'])
   ok(await ev(`!!document.getElementById('${idn}')`), `メニュー項目 #${idn} がある`);
 console.log('\n=== 編集パレットの案内文（実態に合わせる） ===');
-await ev(`document.getElementById('editFab').click()`); await sleep(400);
+await ev(`document.getElementById('editFab').click()`); await sleep(700);   // 寄せのトランジション(0.42s)が終わるまで待つ
 await ev(`document.querySelector('#palette .c[data-cat="machine"]').click()`); await sleep(250);
 const mh=await ev(`document.querySelector('#palette .phint').textContent`);
 ok(String(mh).includes('ドラッグ')&&String(mh).includes('ゴミ箱'), `製造機の案内が D&D 移動/撤去になっている → ${mh}`);
