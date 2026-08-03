@@ -73,6 +73,38 @@
 
 ---
 
+## 意匠のルール（2026-08-03 決定）
+
+**側面・端面には物を付けない。装飾は天板に置く。**
+
+| 面 | 許可 | 禁止 |
+|---|---|---|
+| 側面・端面 | 浅い凹凸だけ。ステップごとのパネル継ぎ目、鋲の列、少し窪んだパネル、**面一に嵌まった**点検窓（発光可） | 突き出す物すべて。圧力計・配管・ベルト・弁ハンドル・ホース・木箱・バンパー・排出シュート |
+| 天板 | 物を置いてよい。排気筒・計器盤・巻いたホース・小さな木箱・寝かせた弁ハンドルなど。**天板の奥半分**に置き、投入口を塞がない。上には伸ばしてよい | 台の両端より横へ張り出すこと |
+| 底面 | **一直線**。脚・足・シュート・スカートなど、底より下に垂れる物は一切なし | 垂れ下がり全般 |
+
+底面を一直線に縛るのは見た目だけの話ではない。**絵の最下端が接地線と一致していないと、
+ゲーム側が機械を持ち上げて置いてしまう**（垂れ下がったシュートを床に合わせるため）。
+`tools/cut_machines.py` は接地線を推定して `mach-fit.json` の `gy` に書き、`game/main.js`
+はそれを足元の四角形の手前の辺に合わせるが、そもそも垂れ下がりが無ければ推定が不要になる。
+
+プロンプトには次の3項を独立した見出しで入れる（本文中に混ぜると効かない）。
+
+```
+1. NOTHING IS ATTACHED TO THE SIDE FACES OR THE END FACES. The two visible faces carry only
+   SHALLOW RELIEF: panel seams at each step boundary, rows of small rivets, a slightly recessed
+   panel, and a row of small inspection windows set FLUSH into the face. Nothing sticks out from
+   a face, and nothing hangs below the machine.
+2. THE BOTTOM EDGE OF THE MACHINE IS ONE CLEAN STRAIGHT LINE. No legs, no feet, no chute, no
+   skirt, no protrusion of any kind dips below the base. The base is a plain straight
+   parallelogram sitting flat on the ground.
+3. OBJECTS ON THE TOP PLATE ARE ALLOWED. Put the machinery up there instead. They sit on the
+   BACK half of the top plate, behind the intakes, never covering an intake. They may rise
+   upward, but must not extend sideways past the ends of the base.
+```
+
+---
+
 ## いちばん確実な作り方: **うまくいったシートを種にして、テーマだけ差し替える**
 
 テキストだけで一から作らせると、**同じプロンプトでも出来が大きくブレる**（投入口の数が
