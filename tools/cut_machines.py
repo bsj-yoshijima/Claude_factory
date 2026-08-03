@@ -72,6 +72,14 @@ SPOT_TEST = {
     'space':     lambda p: p[3] > 128 and max(p[:3]) < 45,
     'ice':       lambda p: p[3] > 128 and max(p[:3]) < 45,
     'mushroom':  lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'undersea':   lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'fantasy':    lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'christmas':  lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'jungle':     lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'circuit':    lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'retrofuture':lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'cabin':      lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'dino':       lambda p: p[3] > 128 and max(p[:3]) < 45,
 }
 SPOT_MIN_AREA = 120
 SPOT_FILL = 0.40            # 塊が外接矩形をどれだけ埋めていれば「面」と見なすか(輪郭線を落とす)
@@ -273,6 +281,9 @@ def pick_spots(cands, n, score=None):
         g = [xs[i + 1] - xs[i] for i in range(n - 1)]
         if min(g) <= 2:
             continue
+        sl = [abs(ys[i + 1] - ys[i]) / g[i] for i in range(n - 1)]
+        if min(sl) < ISO_SLOPE[0] or max(sl) > ISO_SLOPE[1]:
+            continue                                   # アイソメの傾きから外れる = 投入口ではない
         gm = sum(g) / len(g)
         even = sum((q - gm) ** 2 for q in g) / len(g) / (gm * gm)
         x0, y0, x1, y1 = xs[0], ys[0], xs[-1], ys[-1]
@@ -288,6 +299,9 @@ def pick_spots(cands, n, score=None):
 
 
 GOOD_SPOTS = 0.35   # 「等間隔・一直線・同サイズ」の崩れがこの値未満なら投入口の並びと認める
+# シートは2:1アイソメで描かれるので、隣り合う投入口を結ぶ線の傾きは必ずこの範囲に入る。
+# 装飾(タイヤの山・排出シュート)を投入口と取り違えるのを防ぐ最後の砦。
+ISO_SLOPE = (0.40, 0.75)
 
 
 def best_spots(cands, hint):
@@ -489,7 +503,7 @@ def synth_fit(theme, found, W, H, GU, GV, iso):
     bad = deco_mask(sp, (Dx, Py))
     cln = clean_bay(sp, (Dx, Py), bad, org[0] + CUT * Dx)
     out_fit = {}
-    for n, _sp, _s in found:
+    for n in SIZES:                       # 台が4つに割れなくても、出力は必ず 2〜5 の4サイズ
         im, o = compose(sp, cln, org, (Dx, Py), n, m)
         ow, oh = max(1, round(im.width * scale)), max(1, round(im.height * scale))
         res = im.resize((ow, oh), Image.LANCZOS)
@@ -518,8 +532,13 @@ def main():
         sheet = key_out(Image.open(os.path.join(SHEETS, f)))
         print(f'== {f} ({sheet.width}x{sheet.height})')
         picks = split_machines(sheet)
+        if len(picks) < 2:
+            print(f'   !! 機械を{len(picks)}台しか検出できませんでした。スキップ'); continue
         if len(picks) < len(SIZES):
-            print(f'   !! 機械を{len(picks)}台しか検出できませんでした(4台必要)。スキップ'); continue
+            # 隣り合う台が触れていると連結成分がくっついて4台に割れない。
+            # 合成に要るのは「投入口が2つ以上ある台」1つだけなので、そのまま続ける。
+            print(f'   ※台が{len(picks)}個にしか割れなかった(隣とくっついている)。'
+                  f'合成元が取れれば問題ない')
         test = SPOT_TEST.get(theme) or (lambda p: False) if theme in SPOT_HINT else SPOT_TEST.get(theme)
 
         # 投入口を検出する。4台ぶん測るのは「生成された絵がどれだけ詰まっているか」をログに残すため
