@@ -56,11 +56,6 @@
                            margin:0 0 0 3px;color:#ffd27a}
   #board .m.hit{cursor:pointer}                     /* クリックで今日の製造を開く */
   #board .m.hit:hover{background:rgba(127,230,255,.09)}
-  /* 工場レイアウト編集は常時アクセスできるよう右下に固定 */
-  #editFab{position:absolute;right:12px;bottom:12px;z-index:9;cursor:pointer;font-size:12px;
-           background:var(--panel);border:1px solid var(--edge);border-radius:9px;padding:8px 13px;color:var(--mint);backdrop-filter:blur(3px)}
-  #editFab:hover{border-color:var(--mint)}
-  #editFab.on{background:#78d0a6;border-color:#78d0a6;color:#17251f;font-weight:700}
   /* 稼働/休憩は Claude君の絵で示す（稼働=作業ポーズ+火花 / 休憩=座り+☕）。
      常時見えるのはこのコンパクト表示だけ。クリックでエージェント一覧ダイアログを開く。 */
   #hud{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;gap:8px;background:var(--panel);
@@ -281,13 +276,9 @@
     <div class="mi" id="myBtn">🏠 マイページ</div>
     <div class="msep"></div>
     <div class="mh">工場</div>
-    <div class="mi" id="craftBtn">🏭 製造（原材料セット）</div>
     <div class="mi" id="recipeBtn">🧾 製造レシピ</div>
     <div class="mi" id="shopBtn">🏪 ショップ</div>
     <div class="mi" id="editMenuBtn">🔧 レイアウト編集</div>
-    <div class="msep"></div>
-    <div class="mh">仲間</div>
-    <div class="mi" id="agentsBtn">🧑‍🏭 エージェント（スキン変更）</div>
     <div class="msep"></div>
     <div class="mh">記録</div>
     <div class="mi" id="collectionBtn">📖 図鑑</div>
@@ -299,7 +290,6 @@
     <div id="craft"></div>
   </div>
   <div id="doneBtn">🎁 完成品 <span id="doneN"></span></div>
-  <div id="editFab">🔧 レイアウト編集</div>
   <div id="hud"></div>
   <div id="palette"></div>
   <div id="toast"></div>
@@ -1506,7 +1496,7 @@ function openCraft(){
     },
     onRender:bindMachRow });
 }
-document.getElementById('craftBtn').addEventListener('click',()=>openCraft());
+// 導線は上部の製造ボード(#craft)だけ。☰メニューからは外した（同じ物への入口が2つある必要はない）
 document.getElementById('craft').addEventListener('click',()=>openCraft());
 
 /* --- 原材料の選択（ピッカーは machRow の中にある。ここはセットの実体だけ） --- */
@@ -2008,7 +1998,7 @@ function openAgents(){
         toast(`${pj||'(無名)'} → ${skinName(el.dataset.skin)}`); d.refresh(); });
     } });
 }
-document.getElementById('agentsBtn').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openAgents(); });
+// 導線は左下の稼働/休憩HUDだけ。☰メニューの「仲間」節は外した（同じ物への入口が2つある必要はない）
 document.getElementById('hud').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openAgents(); });
 document.getElementById('hud').title='クリックでエージェント一覧';
 
@@ -2269,7 +2259,7 @@ window.__openMachine=(id)=>{
     // パネルが開いたままだと床をクリックできないので必ず閉じる。保存もシーン側(__layoutChanged)が行う。
     p.querySelectorAll('[data-move]').forEach(el=>el.onclick=()=>{
       if(!F.beginMoveMachine(id)){ toast('移動できません'); return; }
-      closeOverlay(); syncEditFab(); });   // 移動は必要なら編集モードをONにするので表示を合わせる
+      closeOverlay(); syncEditMode(); });   // 移動は必要なら編集モードをONにするので表示を合わせる
     // 撤去はドラッグ&ドロップ(🗑ゴミ箱)に一本化したのでボタンは持たない
   } });
   return dlg;
@@ -2286,16 +2276,18 @@ function slideGame(){
   const tick=()=>{ g.scale.refresh(); if(performance.now()-t0<620) requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 }
-/* 編集モードのON/OFF表示をシーンに合わせる。Eキーや「✥移動」でシーン側から切り替わることがある */
-function syncEditFab(){ const on=!!(window.__scene&&window.__scene.editMode), fab=document.getElementById('editFab');
-  if(fab.classList.contains('on')===on) return;              // 変化したときだけ描き直す
-  fab.classList.toggle('on',on); paletteEl.classList.toggle('show',on);
+/* 編集モードのON/OFF表示をシーンに合わせる。Eキーや「✥移動」でシーン側から切り替わることがある。
+   入口は ☰メニューの「🔧 レイアウト編集」だけ（盤面に常駐するボタンは置かない）ので、
+   ONかどうかはボタンの見た目ではなくこの変数で覚える。 */
+let _editOn=false;
+function syncEditMode(){ const on=!!(window.__scene&&window.__scene.editMode);
+  if(_editOn===on) return;                                   // 変化したときだけ描き直す
+  _editOn=on; paletteEl.classList.toggle('show',on);
   wrapEl.classList.toggle('editing',on); slideGame();
   if(on) renderPalette(); else { editSel=null; window.__editSel=null; } }
 function toggleEditMode(){ if(!window.__scene){ toast('準備中…'); return; }
-  const on=window.__scene.toggleEdit(); syncEditFab();
+  const on=window.__scene.toggleEdit(); syncEditMode();
   toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 設置済みはドラッグで移動・🗑へドラッグで撤去':'編集モードを終了'); }
-document.getElementById('editFab').addEventListener('click',toggleEditMode);
 document.getElementById('editMenuBtn').addEventListener('click',toggleEditMode);
 loadGame().then(async ()=>{
   G.lastT=Date.now();
@@ -2303,7 +2295,7 @@ loadGame().then(async ()=>{
   if(NET.multi){ const mi=document.getElementById('metricsMi'); if(mi) mi.remove(); }
   await waitScene(); applyOwned(); updateBadge();
   if(!NET.multi) setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
-  setInterval(syncEditFab, 1000); syncEditFab();   // Eキー・移動モードでの編集ON/OFFに追従
+  setInterval(syncEditMode, 1000); syncEditMode();   // Eキー・移動モードでの編集ON/OFFに追従
   // 製造: 原材料バッジを反映してからWPの取得を開始（3秒ごと = OTelのログ送信間隔に合わせる）
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
   updateDoneBtn(); renderCraft(); pollWp();
@@ -2324,7 +2316,7 @@ loadGame().then(async ()=>{
     for(const t of Object.keys(DECO)) G.stock.deco[t]=Math.max(3,G.stock.deco[t]||0);
     saveGame(); updateBadge(); toast('✅ 全背景・全アイテムを解放しました（在庫）');
   }
-  if(q.get('edit')){ paletteEl.classList.add('show'); document.getElementById('editFab').classList.add('on');
+  if(q.get('edit')){ paletteEl.classList.add('show'); _editOn=true;
     wrapEl.classList.add('editing'); slideGame(); renderPalette(); }
   if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop'));
 });
