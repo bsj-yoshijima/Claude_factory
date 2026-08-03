@@ -935,8 +935,20 @@ const PROD_PRICE = {1:60, 2:200, 3:700, 4:2600, 5:9000};
    ─ m の決め方（m がその製品の唯一のレシピ）─
      ・同ジャンルの原材料を 2〜5 個。製造機のマス数が2〜5なので6個以上は作れない
      ・m は製品ごとに1つ ＝ 違う組み合わせから同じ製品は出ない
-     ・別の製品とわざと同じ m にすると、その組み合わせからは複数の製品が
-       レア度の既定重み（RAR[r].w）で出る。「同じ組み合わせを何度も試す」動機になる枠
+     ・別の製品とわざと同じ m にすると「ガチャ枠」になる（下記）
+
+   ─ レア度の設計（マス数＝製造コストとレア度を一致させる）─
+     マス数ごとに基本レア度が決まっていて、単独レシピの製品は必ずその基本レア度。
+       2マス → N / 3マス → R / 4マス → SR / 5マス → SSR
+     例外は「ガチャ枠」＝ 2つの製品がわざと同じ m を共有する組み合わせ。
+     ここだけ 8割で基本レア度、2割で1段上が出る（w:80 / w:20 と書く）。
+       2マス 8割N・2割R ／ 3マス 8割R・2割SR ／ 4マス 8割SR・2割SSR ／ 5マス 8割SSR・2割UR
+     各ジャンル各マス数に ちょうど2組 置く。1組に入れる製品は2つまで（3つは作らない）。
+     ＝ UR は「5マスのガチャ枠を引き続ける」ことでしか手に入らない。
+
+   ─ 各ジャンルの構成（1ジャンル36製品 × 3ジャンル）─
+     2マス 12個 = 単独8 + ガチャ枠2組(4)   ／ 3マス 12個 = 単独8 + ガチャ枠2組(4)
+     4マス  6個 = 単独2 + ガチャ枠2組(4)   ／ 5マス  6個 = 単独2 + ガチャ枠2組(4)
    ========================================================================= */
 const GENRES = [
   {id:'food',e:'🍳',n:'食品'},
@@ -972,82 +984,132 @@ const MAT = Object.fromEntries(MATS.map(m=>[m.id,m]));
 
 // 製品（g は所属ジャンル / r は RAR と共通のレア度 1..5 / m はこの製品を作る組み合わせ＝レシピ）
 // m がレシピの正。RECIPES はこの m から組み立て、図鑑の材料アイコンも同じ m を出す。
+/* 並びは ジャンル → マス数 → 単独レシピ / ガチャ枠 の順。
+   ★ が付いた2行が同じ m を共有する「ガチャ枠」（w:80 が基本レア度 / w:20 が1段上）。 */
 const PRODS = [
-  // ── 🍳 食品 ──
-  {id:'bread',   g:'food',e:'🍞',n:'食パン',        r:1,m:['flour','butter','milk']},
-  {id:'onigiri', g:'food',e:'🍙',n:'おにぎり',      r:1,m:['rice','veg']},
-  {id:'cookie',  g:'food',e:'🍪',n:'クッキー',      r:1,m:['flour','butter','sugar']},
-  {id:'pancake', g:'food',e:'🥞',n:'パンケーキ',    r:1,m:['flour','egg','milk','sugar']},
-  {id:'omelet',  g:'food',e:'🍳',n:'オムレツ',      r:1,m:['egg','butter','cheese']},
-  {id:'salad',   g:'food',e:'🥗',n:'サラダ',        r:1,m:['veg','tomato','cheese']},
+  // ══════════════ 🍳 食品 ══════════════
+  // ── 2マス（基本 N）──
+  {id:'tkg',     g:'food',e:'🥣',n:'卵かけご飯',    r:1,m:['rice','egg']},
+  {id:'pretzel', g:'food',e:'🥨',n:'プレッツェル',  r:1,m:['flour','sugar']},
+  {id:'shake',   g:'food',e:'🥤',n:'チョコシェイク',r:1,m:['milk','choco']},
+  {id:'pancake', g:'food',e:'🥞',n:'パンケーキ',    r:1,m:['flour','egg']},
   {id:'fries',   g:'food',e:'🍟',n:'フライドポテト',r:1,m:['veg','butter']},
-  {id:'soup',    g:'food',e:'🍲',n:'スープ',        r:1,m:['veg','tomato','meat']},
-  {id:'pudding', g:'food',e:'🍮',n:'プリン',        r:2,m:['egg','milk','sugar']},
-  {id:'sandwich',g:'food',e:'🥪',n:'サンドイッチ',  r:2,m:['flour','veg','cheese','meat']},
+  {id:'kushi',   g:'food',e:'🍢',n:'串焼き',        r:1,m:['meat','veg']},
+  {id:'sandwich',g:'food',e:'🥪',n:'サンドイッチ',  r:1,m:['flour','cheese']},
+  {id:'croissant',g:'food',e:'🥐',n:'クロワッサン', r:1,m:['flour','butter']},
+  {id:'onigiri', g:'food',e:'🍙',n:'おにぎり',      r:1,m:['rice','veg'],   w:80},  // ★🍚🥬
+  {id:'sushi',   g:'food',e:'🍣',n:'寿司',          r:2,m:['rice','veg'],   w:20},  // ★
+  {id:'burger',  g:'food',e:'🍔',n:'ハンバーガー',  r:1,m:['flour','meat'], w:80},  // ★🌾🥩
+  {id:'taco',    g:'food',e:'🌮',n:'タコス',        r:2,m:['flour','meat'], w:20},  // ★
+  // ── 3マス（基本 R）──
+  {id:'bread',   g:'food',e:'🍞',n:'食パン',        r:2,m:['flour','butter','milk']},
+  {id:'omelet',  g:'food',e:'🍳',n:'オムレツ',      r:2,m:['egg','butter','cheese']},
+  {id:'salad',   g:'food',e:'🥗',n:'サラダ',        r:2,m:['veg','tomato','cheese']},
+  {id:'soup',    g:'food',e:'🍲',n:'スープ',        r:2,m:['veg','tomato','meat']},
   {id:'cupnoodle',g:'food',e:'🍜',n:'カップラーメン',r:2,m:['noodle','meat','veg']},
   {id:'pizza',   g:'food',e:'🍕',n:'ピザ',          r:2,m:['flour','cheese','tomato']},
-  {id:'donut',   g:'food',e:'🍩',n:'ドーナツ',      r:2,m:['flour','sugar','butter']},
-  {id:'croissant',g:'food',e:'🥐',n:'クロワッサン', r:2,m:['flour','butter']},
   {id:'pasta',   g:'food',e:'🍝',n:'パスタ',        r:2,m:['noodle','tomato','cheese']},
   {id:'curry',   g:'food',e:'🍛',n:'カレー',        r:2,m:['rice','meat','veg']},
-  {id:'burger',  g:'food',e:'🍔',n:'ハンバーガー',  r:2,m:['flour','meat','cheese','veg']},
-  {id:'taco',    g:'food',e:'🌮',n:'タコス',        r:2,m:['flour','meat','veg','tomato']},
-  {id:'cake',    g:'food',e:'🍰',n:'ショートケーキ',r:3,m:['flour','egg','sugar','butter','milk']},
-  {id:'icecream',g:'food',e:'🍨',n:'アイスクリーム',r:3,m:['milk','sugar','egg']},
-  {id:'cupcake', g:'food',e:'🧁',n:'カップケーキ',  r:3,m:['flour','egg','sugar','choco']},
-  {id:'sushi',   g:'food',e:'🍣',n:'寿司',          r:3,m:['rice','veg']},
-  {id:'ramen',   g:'food',e:'🍥',n:'特製ラーメン',  r:3,m:['noodle','meat','egg']},
-  {id:'crepe',   g:'food',e:'🫓',n:'クレープ',      r:3,m:['flour','milk','egg','sugar']},
+  {id:'cookie',  g:'food',e:'🍪',n:'クッキー',      r:2,m:['flour','butter','sugar'],w:80}, // ★🌾🧈🍬
+  {id:'donut',   g:'food',e:'🍩',n:'ドーナツ',      r:3,m:['flour','butter','sugar'],w:20}, // ★
+  {id:'pudding', g:'food',e:'🍮',n:'プリン',        r:2,m:['egg','milk','sugar'],   w:80},  // ★🥚🥛🍬
+  {id:'icecream',g:'food',e:'🍨',n:'アイスクリーム',r:3,m:['egg','milk','sugar'],   w:20},  // ★
+  // ── 4マス（基本 SR）──
   {id:'gratin',  g:'food',e:'🥘',n:'グラタン',      r:3,m:['cheese','milk','butter','veg']},
-  {id:'honeytoast',g:'food',e:'🍯',n:'ハニートースト',r:3,m:['flour','butter','sugar','milk']},
-  {id:'deco',    g:'food',e:'🎂',n:'デコレーションケーキ',r:4,m:['flour','egg','sugar','butter','choco']},
-  {id:'parfait', g:'food',e:'🍧',n:'豪華パフェ',    r:4,m:['milk','sugar','choco','egg']},
-  {id:'bento',   g:'food',e:'🍱',n:'特上弁当',      r:4,m:['rice','meat','veg','egg']},
-  {id:'course',  g:'food',e:'🏆',n:'伝説のフルコース',r:5,m:['meat','cheese','tomato','rice','veg']},
-  // ── ⚙️ 機械 ──
+  {id:'bento',   g:'food',e:'🍱',n:'特上弁当',      r:3,m:['rice','meat','veg','egg']},
+  {id:'crepe',   g:'food',e:'🫓',n:'クレープ',      r:3,m:['butter','flour','milk','sugar'],w:80}, // ★🧈🌾🥛🍬
+  {id:'honeytoast',g:'food',e:'🍯',n:'ハニートースト',r:4,m:['butter','flour','milk','sugar'],w:20}, // ★
+  {id:'cupcake', g:'food',e:'🧁',n:'カップケーキ',  r:3,m:['choco','egg','milk','sugar'],w:80},    // ★🍫🥚🥛🍬
+  {id:'parfait', g:'food',e:'🍧',n:'豪華パフェ',    r:4,m:['choco','egg','milk','sugar'],w:20},    // ★
+  // ── 5マス（基本 SSR）──
+  {id:'ramen',   g:'food',e:'🍥',n:'特製ラーメン',  r:4,m:['noodle','meat','egg','veg','cheese']},
+  {id:'fondue',  g:'food',e:'🫕',n:'チーズフォンデュ',r:4,m:['butter','cheese','milk','tomato','veg']},
+  {id:'cake',    g:'food',e:'🍰',n:'ショートケーキ',r:4,m:['butter','egg','flour','milk','sugar'],w:80}, // ★🧈🥚🌾🥛🍬
+  {id:'deco',    g:'food',e:'🎂',n:'デコレーションケーキ',r:5,m:['butter','egg','flour','milk','sugar'],w:20}, // ★
+  {id:'meatpie', g:'food',e:'🥧',n:'ミートパイ',    r:4,m:['cheese','meat','rice','tomato','veg'],w:80},  // ★🧀🥩🍚🍅🥬
+  {id:'course',  g:'food',e:'🏆',n:'伝説のフルコース',r:5,m:['cheese','meat','rice','tomato','veg'],w:20}, // ★
+  // ══════════════ ⚙️ 機械 ══════════════
+  // ── 2マス（基本 N）──
   {id:'bulb',    g:'mech',e:'💡',n:'電球',          r:1,m:['glass','wire']},
-  {id:'clock',   g:'mech',e:'⏰',n:'置き時計',      r:1,m:['iron','batt','glass']},
-  {id:'fan',     g:'mech',e:'🌀',n:'扇風機',        r:1,m:['iron','wire','rubber']},
-  {id:'radio',   g:'mech',e:'📻',n:'ラジオ',        r:1,m:['semic','wire','magnet']},
-  {id:'light',   g:'mech',e:'🔦',n:'懐中電灯',      r:1,m:['batt','glass','alum']},
+  {id:'speaker', g:'mech',e:'🔊',n:'スピーカー',    r:1,m:['magnet','wire']},
+  {id:'driver',  g:'mech',e:'🪛',n:'ドライバー',    r:1,m:['iron','alum']},
+  {id:'mirror',  g:'mech',e:'🪞',n:'手鏡',          r:1,m:['glass','alum']},
+  {id:'goggle',  g:'mech',e:'🥽',n:'ゴーグル',      r:1,m:['glass','rubber']},
+  {id:'powbank', g:'mech',e:'🪫',n:'モバイルバッテリー',r:1,m:['batt','wire']},
+  {id:'compass', g:'mech',e:'🧭',n:'方位磁針',      r:1,m:['iron','magnet']},
+  {id:'kickboard',g:'mech',e:'🛴',n:'キックボード', r:1,m:['iron','rubber']},
+  {id:'micro',   g:'mech',e:'🔬',n:'顕微鏡',        r:1,m:['glass','lens'],w:80},  // ★🪟🔍
+  {id:'scope',   g:'mech',e:'🔭',n:'望遠鏡',        r:2,m:['glass','lens'],w:20},  // ★
+  {id:'mouse',   g:'mech',e:'🖱️',n:'マウス',        r:1,m:['semic','wire'],w:80},  // ★💾🔌
+  {id:'keyboard',g:'mech',e:'⌨️',n:'キーボード',    r:2,m:['semic','wire'],w:20},  // ★
+  // ── 3マス（基本 R）──
+  {id:'clock',   g:'mech',e:'⏰',n:'置き時計',      r:2,m:['iron','batt','glass']},
+  {id:'fan',     g:'mech',e:'🌀',n:'扇風機',        r:2,m:['iron','wire','rubber']},
+  {id:'light',   g:'mech',e:'🔦',n:'懐中電灯',      r:2,m:['batt','glass','alum']},
+  {id:'console', g:'mech',e:'🎮',n:'ゲーム機',      r:2,m:['semic','batt','wire']},
   {id:'camera',  g:'mech',e:'📷',n:'カメラ',        r:2,m:['lens','glass','semic']},
-  {id:'headphone',g:'mech',e:'🎧',n:'ヘッドホン',   r:2,m:['magnet','wire','rubber']},
   {id:'printer', g:'mech',e:'🖨️',n:'プリンター',    r:2,m:['iron','semic','wire']},
   {id:'tv',      g:'mech',e:'📺',n:'テレビ',        r:2,m:['glass','semic','wire']},
-  {id:'watch',   g:'mech',e:'⌚',n:'スマートウォッチ',r:2,m:['semic','glass','rubber']},
-  {id:'pc',      g:'mech',e:'💻',n:'パソコン',      r:3,m:['semic','glass','iron','wire']},
-  {id:'phone',   g:'mech',e:'📱',n:'スマホ',        r:3,m:['semic','glass','batt']},
-  {id:'bike',    g:'mech',e:'🏍️',n:'バイク',        r:3,m:['iron','rubber','oil']},
-  {id:'car',     g:'mech',e:'🚗',n:'車',            r:4,m:['iron','rubber','glass','oil']},
-  {id:'train',   g:'mech',e:'🚃',n:'電車',          r:4,m:['iron','alum','magnet','wire']},
-  {id:'plane',   g:'mech',e:'✈️',n:'飛行機',        r:4,m:['alum','oil','glass','iron']},
-  {id:'heli',    g:'mech',e:'🚁',n:'ヘリコプター',  r:4,m:['alum','oil','iron','rubber']},
-  {id:'robot',   g:'mech',e:'🤖',n:'ロボット',      r:5,m:['semic','iron','magnet','batt','wire']},
-  {id:'rocket',  g:'mech',e:'🚀',n:'ロケット',      r:5,m:['alum','oil','semic','iron','glass']},
-  {id:'satellite',g:'mech',e:'🛰️',n:'人工衛星',     r:5,m:['alum','semic','lens','magnet']},
-  // ── 🧺 生活品 ──
-  {id:'tshirt',  g:'life',e:'👕',n:'Tシャツ',       r:1,m:['cloth','cotton','thread']},
-  {id:'pants',   g:'life',e:'👖',n:'ズボン',        r:1,m:['cloth','thread','leather']},
-  {id:'socks',   g:'life',e:'🧦',n:'靴下',          r:1,m:['cotton','thread']},
+  {id:'bike',    g:'mech',e:'🏍️',n:'バイク',        r:2,m:['iron','rubber','oil']},
+  {id:'phone',   g:'mech',e:'📱',n:'スマホ',        r:2,m:['batt','glass','semic'],w:80},  // ★🔋🪟💾
+  {id:'watch',   g:'mech',e:'⌚',n:'スマートウォッチ',r:3,m:['batt','glass','semic'],w:20},  // ★
+  {id:'radio',   g:'mech',e:'📻',n:'ラジオ',        r:2,m:['magnet','semic','wire'],w:80}, // ★🧲💾🔌
+  {id:'headphone',g:'mech',e:'🎧',n:'ヘッドホン',   r:3,m:['magnet','semic','wire'],w:20}, // ★
+  // ── 4マス（基本 SR）──
+  {id:'car',     g:'mech',e:'🚗',n:'車',            r:3,m:['iron','rubber','glass','oil']},
+  {id:'train',   g:'mech',e:'🚃',n:'電車',          r:3,m:['iron','alum','magnet','wire']},
+  {id:'heli',    g:'mech',e:'🚁',n:'ヘリコプター',  r:3,m:['alum','iron','oil','rubber'],w:80},  // ★🥫🔩🛢️🛞
+  {id:'plane',   g:'mech',e:'✈️',n:'飛行機',        r:4,m:['alum','iron','oil','rubber'],w:20},  // ★
+  {id:'pc',      g:'mech',e:'💻',n:'パソコン',      r:3,m:['alum','glass','magnet','semic'],w:80}, // ★🥫🪟🧲💾
+  {id:'satellite',g:'mech',e:'🛰️',n:'人工衛星',     r:4,m:['alum','glass','magnet','semic'],w:20}, // ★
+  // ── 5マス（基本 SSR）──
+  {id:'steamloco',g:'mech',e:'🚂',n:'蒸気機関車',   r:4,m:['iron','oil','wire','rubber','magnet']},
+  {id:'crane',   g:'mech',e:'🏗️',n:'クレーン車',    r:4,m:['iron','alum','oil','rubber','wire']},
+  {id:'exosuit', g:'mech',e:'🦾',n:'パワードスーツ',r:4,m:['alum','batt','iron','magnet','semic'],w:80}, // ★🥫🔋🔩🧲💾
+  {id:'robot',   g:'mech',e:'🤖',n:'ロボット',      r:5,m:['alum','batt','iron','magnet','semic'],w:20}, // ★
+  {id:'ship',    g:'mech',e:'🚢',n:'客船',          r:4,m:['alum','glass','iron','oil','semic'],w:80},   // ★🥫🪟🔩🛢️💾
+  {id:'rocket',  g:'mech',e:'🚀',n:'ロケット',      r:5,m:['alum','glass','iron','oil','semic'],w:20},   // ★
+  // ══════════════ 🧺 生活品 ══════════════
+  // ── 2マス（基本 N）──
   {id:'brush',   g:'life',e:'🪥',n:'歯ブラシ',      r:1,m:['plastic','thread']},
   {id:'soap',    g:'life',e:'🧼',n:'せっけん',      r:1,m:['plastic','dye']},
   {id:'note',    g:'life',e:'📓',n:'ノート',        r:1,m:['paper','thread']},
   {id:'basket',  g:'life',e:'🧺',n:'洗濯かご',      r:1,m:['plastic','bamboo']},
+  {id:'scarf',   g:'life',e:'🧣',n:'マフラー',      r:1,m:['cloth','thread']},
+  {id:'pencil',  g:'life',e:'✏️',n:'えんぴつ',      r:1,m:['wood','dye']},
+  {id:'sandal',  g:'life',e:'🩴',n:'サンダル',      r:1,m:['plastic','leather']},
+  {id:'kite',    g:'life',e:'🪁',n:'凧',            r:1,m:['bamboo','paper']},
+  {id:'socks',   g:'life',e:'🧦',n:'靴下',          r:1,m:['cotton','thread'],w:80}, // ★☁️🪢
+  {id:'gloves',  g:'life',e:'🧤',n:'手袋',          r:2,m:['cotton','thread'],w:20}, // ★
+  {id:'broom',   g:'life',e:'🧹',n:'ほうき',        r:1,m:['bamboo','thread'],w:80}, // ★🎍🪢
+  {id:'strawhat',g:'life',e:'👒',n:'麦わら帽子',    r:2,m:['bamboo','thread'],w:20}, // ★
+  // ── 3マス（基本 R）──
+  {id:'tshirt',  g:'life',e:'👕',n:'Tシャツ',       r:2,m:['cloth','cotton','thread']},
+  {id:'sponge',  g:'life',e:'🧽',n:'スポンジ',      r:2,m:['cotton','plastic','dye']},
+  {id:'case',    g:'life',e:'💼',n:'ブリーフケース',r:2,m:['leather','thread','dye']},
   {id:'cap',     g:'life',e:'🧢',n:'キャップ',      r:2,m:['cloth','cotton','dye']},
-  {id:'carpet',  g:'life',e:'🧶',n:'カーペット',    r:2,m:['cloth','cotton','dye','thread']},
   {id:'umbrella',g:'life',e:'☂️',n:'傘',            r:2,m:['cloth','bamboo','plastic']},
-  {id:'chair',   g:'life',e:'🪑',n:'イス',          r:2,m:['wood','cloth','thread']},
-  {id:'shoes',   g:'life',e:'👟',n:'スニーカー',    r:2,m:['leather','cloth','thread']},
-  {id:'bag',     g:'life',e:'🎒',n:'リュック',      r:2,m:['cloth','leather','thread']},
+  {id:'shoes',   g:'life',e:'👟',n:'スニーカー',    r:2,m:['cotton','leather','thread']},
   {id:'futon',   g:'life',e:'🛌',n:'布団',          r:2,m:['cloth','cotton','feather']},
-  {id:'teddy',   g:'life',e:'🧸',n:'ぬいぐるみ',    r:3,m:['cloth','cotton','thread','feather']},
-  {id:'sofa',    g:'life',e:'🛋️',n:'ソファ',        r:3,m:['wood','leather','cotton','cloth']},
-  {id:'bed',     g:'life',e:'🛏️',n:'ベッド',        r:3,m:['wood','cloth','cotton']},
-  {id:'frame',   g:'life',e:'🖼️',n:'額縁',          r:3,m:['wood','paper','dye']},
-  {id:'suit',    g:'life',e:'👔',n:'スーツ',        r:4,m:['cloth','thread','leather','dye']},
-  {id:'kimono',  g:'life',e:'👘',n:'着物',          r:4,m:['cloth','thread','dye','cotton']},
-  {id:'chest',   g:'life',e:'🗄️',n:'たんす',        r:4,m:['wood','bamboo','paper','dye']},
-  {id:'magic',   g:'life',e:'🪄',n:'魔法の絨毯',    r:5,m:['cloth','thread','dye','feather','cotton']},
+  {id:'frame',   g:'life',e:'🖼️',n:'額縁',          r:2,m:['wood','paper','dye']},
+  {id:'pants',   g:'life',e:'👖',n:'ズボン',        r:2,m:['cloth','leather','thread'],w:80}, // ★🧵👝🪢
+  {id:'bag',     g:'life',e:'🎒',n:'リュック',      r:3,m:['cloth','leather','thread'],w:20}, // ★
+  {id:'chair',   g:'life',e:'🪑',n:'イス',          r:2,m:['cloth','cotton','wood'],  w:80}, // ★🧵☁️🪵
+  {id:'bed',     g:'life',e:'🛏️',n:'ベッド',        r:3,m:['cloth','cotton','wood'],  w:20}, // ★
+  // ── 4マス（基本 SR）──
+  {id:'suit',    g:'life',e:'👔',n:'スーツ',        r:3,m:['cloth','thread','leather','dye']},
+  {id:'chest',   g:'life',e:'🗄️',n:'たんす',        r:3,m:['wood','bamboo','paper','dye']},
+  {id:'carpet',  g:'life',e:'🧶',n:'カーペット',    r:3,m:['cloth','cotton','dye','thread'],w:80},    // ★🧵☁️🎨🪢
+  {id:'kimono',  g:'life',e:'👘',n:'着物',          r:4,m:['cloth','cotton','dye','thread'],w:20},    // ★
+  {id:'teddy',   g:'life',e:'🧸',n:'ぬいぐるみ',    r:3,m:['cloth','cotton','feather','leather'],w:80}, // ★🧵☁️🪶👝
+  {id:'sofa',    g:'life',e:'🛋️',n:'ソファ',        r:4,m:['cloth','cotton','feather','leather'],w:20}, // ★
+  // ── 5マス（基本 SSR）──
+  {id:'tent',    g:'life',e:'⛺',n:'テント',        r:4,m:['cloth','thread','wood','plastic','dye']},
+  {id:'dress',   g:'life',e:'👗',n:'ドレス',        r:4,m:['cloth','cotton','dye','leather','thread']},
+  {id:'coat',    g:'life',e:'🧥',n:'高級コート',    r:4,m:['cloth','cotton','dye','feather','thread'],w:80}, // ★🧵☁️🎨🪶🪢
+  {id:'magic',   g:'life',e:'🪄',n:'魔法の絨毯',    r:5,m:['cloth','cotton','dye','feather','thread'],w:20}, // ★
+  {id:'doll',    g:'life',e:'🪆',n:'からくり人形',  r:4,m:['cloth','dye','paper','thread','wood'],w:80},     // ★🧵🎨📄🪢🪵
+  {id:'hina',    g:'life',e:'🎎',n:'ひな人形',      r:5,m:['cloth','dye','paper','thread','wood'],w:20},     // ★
   // ── ✨ シークレット（ジャンルを跨いだ特定の組み合わせでのみ出る）──
   {id:'ghost',   g:SECRET_G,e:'👻',n:'おばけ',      r:3,m:[]},
   {id:'cat',     g:SECRET_G,e:'🐈',n:'ふしぎな猫',  r:4,m:[]},
@@ -1064,11 +1126,13 @@ const PROD = Object.fromEntries(PRODS.map(p=>[p.id,p]));
    「違う組み合わせから同じ製品が出る」ことが構造的に起きない（製品 → 組み合わせ は1対1）。
    図鑑に出す材料アイコンも同じ m を見ているので、表示とレシピは必ず一致する。
    逆向き（1つの組み合わせから複数の製品）は残してある。同じ m を持つ製品どうしは
-   レア度の重み（RAR[r].w）で引き分けるので、同じ組み合わせを何度も試して上位レア度を狙う遊びになる。 */
+   重みで引き分けるので、同じ組み合わせを何度も試して上位レア度を狙う遊びになる。
+   重みは製品の w（%で書く。ガチャ枠は 80/20）。w が無い製品はレア度の既定重み（RAR[r].w）。 */
 const recipeKeyOf = (p)=> [...new Set(p.m||[])].sort().join(',');
 const RECIPES = PRODS.reduce((r,p)=>{
   if(p.g===SECRET_G) return r;                  // シークレットはジャンル跨ぎ限定なので SECRETS 側
-  const k=recipeKeyOf(p); (r[k]=r[k]||[]).push(p.id); return r;
+  const k=recipeKeyOf(p);
+  (r[k]=r[k]||[]).push(p.w!=null ? [p.id,p.w] : p.id); return r;
 }, {});
 
 /* ジャンルを跨いだ組み合わせのときだけ引かれる隠しレシピ。
