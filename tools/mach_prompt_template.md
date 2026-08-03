@@ -69,7 +69,50 @@
 
 ---
 
-## テンプレ本文
+## 実際に使うテンプレ（短い方。こちらを使う）
+
+長文版（下）と同じ縛りを箇条書きに畳んだもの。**2600字ほどで、長文版より通りが良い**
+（海賊船・スチパン・ドワーフ鉱山・幽霊屋敷などはこれで一発）。`<>` を差し替える。
+
+```
+High-precision pixel art SPRITE SHEET for a game on a FLAT SOLID PURE MAGENTA (#FF00FF) background. ABSOLUTELY NO floor, NO walls, NO cast shadows, NO text, NO labels, NO UI, NO borders, NO grid lines. NO letters, no numbers, no runes, no sigils.
+
+CONTENT: Exactly 4 separate industrial "<THEME>" manufacturing machines arranged in a 2x2 grid with wide magenta gaps.
+- Top-Left: 2 units long.
+- Top-Right: 3 units long.
+- Bottom-Left: 4 units long.
+- Bottom-Right: 5 units long.
+
+FOOTPRINT & PROPORTIONS (CRITICAL):
+1. NARROW SLAB: Each machine is exactly ONE TILE DEEP. The top plate is a narrow strip.
+2. DEPTH RULER: The rim of one intake collar almost spans the entire depth of the top plate.
+3. LOW PROFILE: The housing is very low, only half a tile tall. The visible long side face is a short horizontal band.
+4. NO CUBES: Even the 2-unit machine is a long rectangle (2x1), never a square or cube.
+5. SHARED TILE PITCH: The distance between intake centers (one step) is IDENTICAL in all 4 machines. Shorter machines leave large magenta gaps.
+6. TOTAL HEIGHT: GROUND line to the very top of the tallest part is exactly TWO AND A HALF STEPS. Body is 2/3 of height, decoration is 1/3.
+
+ORIENTATION: True 2:1 isometric projection. Long axis runs from BACK END (Upper-Left) down to FRONT END (Lower-Right).
+- Visible LONG SIDE face points toward viewer's Lower-Left.
+- Visible SHORT END face points toward viewer's Lower-Right.
+- Every edge is vertical or at a 2:1 slope. NO horizontal lines.
+
+SUBJECT: Industrial <THEME> Machines.
+- BODY: <筐体の素材と色>
+- INTAKES: Centered on each tile unit is ONE <素材>collar set flush into the <素材> top plate. Intakes are foreshortened ELLIPSES (2:1). Dark and empty inside.
+- SIDE: Short arched windows glowing <色>, framed by <素材> mullions.
+- MECHANICAL DETAILS: A cluster of pressure gauges, a motor housing with a drive belt, small valve wheels, a stubby exhaust pipe at the back end, and an output chute at the lower-front corner.
+- DECORATION (BACK EDGE): <テーマの小物を6つほど>
+
+STYLE: VERY chunky lo-fi 8-bit Famicom pixel art, extreme high contrast, thick clean black outlines, flat vibrant colors. No gradients, no anti-aliasing. Palette: <6色>. Consistency is absolute.
+```
+
+`generate_screen_from_text` は**ほぼ必ずタイムアウトする**が、裏で生成は走っている。
+反映は速いときで数分、遅いときは**数時間**かかる（実測あり）。投げる前に `list_screens` の
+IDを控えておき、あとで差分を取る。生成中は `screenInstances` にUUID形式のプレースホルダが立つ。
+
+---
+
+## 長文版（参考。上の短い版で足りないときだけ）
 
 ```
 Pixel art sprite sheet on a FLAT SOLID PURE MAGENTA (#FF00FF) background.
