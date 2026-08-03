@@ -26,6 +26,10 @@
 **素材は `+u`（右斜め下）方向の1種類だけ作らせる。** もう一方の対角（右斜め上↔左斜め下）は
 ゲーム側が左右反転して使うので生成不要（`game/main.js` の `if(e.dir==='v') img.setFlipX(true)`）。
 
+この前提が破れると、**影・占有マス・素材アイコンは正しい向きに並ぶのに本体の絵だけが
+直交した向きに見える**。目で見て気づきにくいので、`node tools/mach_axis.mjs` で機械的に
+検査する（`tools/test_machines.mjs` から自動で呼ばれる）。逆向きだったら `--fix` で揃える。
+
 ## これまでの失敗と対処
 
 1. 「long axis running from upper-left down-to-the-right」と書くと**マスが横一列**に並ぶ。
