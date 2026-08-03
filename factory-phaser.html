@@ -737,17 +737,20 @@ function collectionBody(){
       }).join('')}</div>`;
     // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
     body=gtabs+`<div class="pgrid">${prodsOfGenre(_collectionGenre).map(p=>{ const n=c.collection[p.id]||0;
-      // 発見済みには主な原材料をヒントとして出す（レシピを推測する手がかり）
-      const hint=p.m.length?p.m.map(x=>MAT[x]?MAT[x].e:'').join(''):'';
+      // 発見済みにはレシピ（= m）をそのまま出す。製品ごとに組み合わせは1つだけなので断定して見せられる
+      const recipe=p.m.length?p.m.map(x=>MAT[x]?MAT[x].e:'').join(''):'';
+      const rtitle=p.m.map(x=>MAT[x]?MAT[x].n:x).join(' + ');
       return n ? `<div class="pcard" style="border-color:${RAR[p.r].c}"><div class="e">${p.e}</div>
                     <div class="nm">${p.n}</div><div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
-                    <div class="qn">×${n}</div><div class="qn" title="主な原材料">${hint}</div></div>`
+                    <div class="qn">×${n}</div><div class="qn" title="レシピ: ${rtitle}">${recipe}</div></div>`
                : `<div class="pcard miss"><div class="e">❓</div><div class="nm">？？？</div>
                     <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`; }).join('')}</div>
       <div class="rowline" style="font-size:11px;color:#9fb0c0">${_collectionGenre===SECRET_G
         ? `シークレットは<b style="color:#ffd27a">ジャンルを跨いだ原材料</b>の特定の組み合わせでのみ、ごく低確率で出る。
            跨いだ組み合わせのほとんどは 🪨 謎のカタマリ。`
         : `同じ ${GENRE[_collectionGenre]?GENRE[_collectionGenre].e+GENRE[_collectionGenre].n:''} ジャンルの原材料の組み合わせを変えて未発見の製品を探そう。
+           発見済みカードの下に出る絵文字が<b style="color:#eafff4">その製品を作れる唯一の組み合わせ</b>。
+           同じ組み合わせから複数の製品が出ることはあるので、上位レア度は何度も試して狙う。
            1製品 = マス数 × ${WP_PER_SLOT}WP。レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。`}</div>`;
   } else {
     body=`<div class="grid">${PRIZES.map(p=>{ const have=G.inv[p.id]||0,col=RAR[p.r].c;
@@ -791,14 +794,15 @@ const PROD_PRICE = {1:60, 2:200, 3:700, 4:2600, 5:9000};
    ─ 拡張のしかた ─
    1. ジャンルを増やす     … GENRES に1行。以降は `g:'<id>'` を付けるだけ
    2. 原材料を増やす       … MATS に1行（g = 所属ジャンル）
-   3. 製品を増やす         … PRODS に1行（g = ジャンル / r = レア度1..5 / m = 相性のある原材料）
-   4. 組み合わせを増やす   … RECIPES にキー1行（キーは原材料idを重複除去してソートしカンマ結合）
+   3. 製品を増やす         … PRODS に1行（g = ジャンル / r = レア度1..5 / m = レシピ）
+   4. 組み合わせを変える   … その製品の m を書き換える。RECIPES は m から自動で作られる
    5. ジャンル跨ぎの当たり … SECRETS に1行（p = シークレットが出る確率。外れは🪨カタマリ）
 
-   ─ 確率の書き方（RECIPES の値。3通りどれでもよい）─
-     ['bread','cake']          … レア度の既定重み（RAR[r].w）で抽選
-     {bread:70, cake:30}       … 相対確率を明示（合計は何でもよい。比率で見る）
-     [['bread',70],['cake',30]]… 同上。並び順を保ちたいときはこちら
+   ─ m の決め方（m がその製品の唯一のレシピ）─
+     ・同ジャンルの原材料を 2〜5 個。製造機のマス数が2〜5なので6個以上は作れない
+     ・m は製品ごとに1つ ＝ 違う組み合わせから同じ製品は出ない
+     ・別の製品とわざと同じ m にすると、その組み合わせからは複数の製品が
+       レア度の既定重み（RAR[r].w）で出る。「同じ組み合わせを何度も試す」動機になる枠
    ========================================================================= */
 const GENRES = [
   {id:'food',e:'🍳',n:'食品'},
@@ -832,8 +836,8 @@ const MATS = [
 ];
 const MAT = Object.fromEntries(MATS.map(m=>[m.id,m]));
 
-// 製品（g は所属ジャンル / r は RAR と共通のレア度 1..5 / m は相性のある原材料）
-// m は図鑑のヒント表示に使う。レシピの抽選そのものには使わない。
+// 製品（g は所属ジャンル / r は RAR と共通のレア度 1..5 / m はこの製品を作る組み合わせ＝レシピ）
+// m がレシピの正。RECIPES はこの m から組み立て、図鑑の材料アイコンも同じ m を出す。
 const PRODS = [
   // ── 🍳 食品 ──
   {id:'bread',   g:'food',e:'🍞',n:'食パン',        r:1,m:['flour','butter','milk']},
@@ -862,10 +866,10 @@ const PRODS = [
   {id:'crepe',   g:'food',e:'🫓',n:'クレープ',      r:3,m:['flour','milk','egg','sugar']},
   {id:'gratin',  g:'food',e:'🥘',n:'グラタン',      r:3,m:['cheese','milk','butter','veg']},
   {id:'honeytoast',g:'food',e:'🍯',n:'ハニートースト',r:3,m:['flour','butter','sugar','milk']},
-  {id:'deco',    g:'food',e:'🎂',n:'デコレーションケーキ',r:4,m:['flour','egg','sugar','butter','choco','milk']},
+  {id:'deco',    g:'food',e:'🎂',n:'デコレーションケーキ',r:4,m:['flour','egg','sugar','butter','choco']},
   {id:'parfait', g:'food',e:'🍧',n:'豪華パフェ',    r:4,m:['milk','sugar','choco','egg']},
   {id:'bento',   g:'food',e:'🍱',n:'特上弁当',      r:4,m:['rice','meat','veg','egg']},
-  {id:'course',  g:'food',e:'🏆',n:'伝説のフルコース',r:5,m:['meat','cheese','tomato','butter','rice','veg']},
+  {id:'course',  g:'food',e:'🏆',n:'伝説のフルコース',r:5,m:['meat','cheese','tomato','rice','veg']},
   // ── ⚙️ 機械 ──
   {id:'bulb',    g:'mech',e:'💡',n:'電球',          r:1,m:['glass','wire']},
   {id:'clock',   g:'mech',e:'⏰',n:'置き時計',      r:1,m:['iron','batt','glass']},
@@ -921,57 +925,17 @@ const PRODS = [
 const UNKNOWN_PRODUCT='blob';
 const PROD = Object.fromEntries(PRODS.map(p=>[p.id,p]));
 
-// 組み合わせ（重複を除いた原材料のソート済みキー）→ 出うる製品と確率
-// 値の書き方はブロック冒頭のコメント参照（配列 / 比率オブジェクト / [id,重み]の配列）
-const RECIPES = {
-  // 🍳 食品
-  'egg,milk,sugar'      : ['pudding','icecream','parfait','crepe','honeytoast'],
-  'butter,egg,flour'    : ['cookie','cake','donut','croissant','deco'],
-  'egg,flour,milk'      : ['pancake','crepe','bread','cake','cupcake'],
-  'flour,milk'          : ['bread','pancake','croissant','crepe','cupcake'],
-  'egg,milk'            : ['pudding','omelet','icecream','pancake','parfait'],
-  'meat,noodle'         : ['cupnoodle','ramen','pasta','curry','soup'],
-  'meat,rice'           : ['curry','onigiri','bento','sushi','soup'],
-  'cheese,flour,tomato' : ['pizza','gratin','pasta','sandwich','burger'],
-  'meat,veg'            : ['salad','burger','taco','soup','bento'],
-  'butter,choco,flour'  : ['cookie','donut','cupcake','cake','deco'],
-  'choco,milk'          : ['icecream','pudding','crepe','parfait','cupcake'],
-  'cheese,meat,veg'     : ['burger','taco','sandwich','gratin','pizza'],
-  'rice,veg'            : ['onigiri','salad','bento','soup','sushi'],
-  'egg,flour'           : ['bread','pancake','cookie','omelet','croissant'],
-  'noodle,veg'          : ['cupnoodle','ramen','pasta','salad','soup'],
-  'butter,veg'          : ['fries','salad','soup','gratin','omelet'],
-  'cheese,meat,tomato'  : ['course','burger','pizza','pasta','gratin'],
-  // ⚙️ 機械
-  'glass,wire'          : ['bulb','light','tv','camera','clock'],
-  'batt,glass,semic'    : ['phone','watch','tv','camera','pc'],
-  'glass,semic,wire'    : ['tv','pc','printer','phone','robot'],
-  'glass,iron,semic,wire': {pc:55, printer:25, tv:12, robot:6, satellite:2},
-  'iron,rubber'         : ['fan','bike','car','heli','clock'],
-  'iron,oil,rubber'     : ['bike','car','heli','fan','rocket'],
-  'glass,iron,oil,rubber': {car:60, bike:22, heli:12, plane:5, rocket:1},
-  'alum,iron,magnet,wire': [['train',52],['printer',20],['robot',14],['satellite',9],['rocket',5]],
-  'alum,glass,iron,oil' : ['plane','heli','car','rocket','satellite'],
-  'batt,iron,magnet,semic,wire': {robot:40, printer:25, train:20, satellite:10, rocket:5},
-  'alum,lens,magnet,semic': {satellite:35, camera:30, robot:20, rocket:10, phone:5},
-  'magnet,rubber,wire'  : ['headphone','fan','radio','clock','bulb'],
-  'lens,semic'          : ['camera','watch','phone','tv','satellite'],
-  'alum,batt,glass'     : ['light','clock','watch','phone','plane'],
-  // 🧺 生活品
-  'cloth,cotton,thread' : ['tshirt','socks','cap','carpet','teddy'],
-  'cloth,leather,thread': ['pants','bag','shoes','suit','sofa'],
-  'cotton,thread'       : ['socks','tshirt','futon','teddy','carpet'],
-  'plastic,thread'      : ['brush','basket','umbrella','soap','shoes'],
-  'dye,plastic'         : ['soap','brush','basket','frame','umbrella'],
-  'paper,thread'        : ['note','frame','chest','carpet','bag'],
-  'cloth,cotton,dye,thread': {carpet:45, cap:22, kimono:16, suit:12, magic:5},
-  'cloth,thread,wood'   : ['chair','bed','sofa','frame','chest'],
-  'cotton,leather,wood' : ['sofa','chair','bed','chest','futon'],
-  'cloth,cotton,feather': ['futon','teddy','bed','magic','cap'],
-  'cloth,dye,leather,thread': [['suit',50],['bag',20],['kimono',18],['shoes',9],['magic',3]],
-  'bamboo,paper,wood'   : ['chest','frame','note','basket','umbrella'],
-  'cloth,cotton,dye,feather,thread': {magic:30, kimono:30, carpet:20, teddy:15, suit:5},
-};
+/* 組み合わせ（重複を除いた原材料のソート済みキー）→ 出うる製品。
+   手で書く表は持たず、PRODS の m から機械的に作る。m は製品ごとに1つしかないので
+   「違う組み合わせから同じ製品が出る」ことが構造的に起きない（製品 → 組み合わせ は1対1）。
+   図鑑に出す材料アイコンも同じ m を見ているので、表示とレシピは必ず一致する。
+   逆向き（1つの組み合わせから複数の製品）は残してある。同じ m を持つ製品どうしは
+   レア度の重み（RAR[r].w）で引き分けるので、同じ組み合わせを何度も試して上位レア度を狙う遊びになる。 */
+const recipeKeyOf = (p)=> [...new Set(p.m||[])].sort().join(',');
+const RECIPES = PRODS.reduce((r,p)=>{
+  if(p.g===SECRET_G) return r;                  // シークレットはジャンル跨ぎ限定なので SECRETS 側
+  const k=recipeKeyOf(p); (r[k]=r[k]||[]).push(p.id); return r;
+}, {});
 
 /* ジャンルを跨いだ組み合わせのときだけ引かれる隠しレシピ。
    ここに書いた組み合わせだけ p の確率でシークレット製品、外れは 🪨 謎のカタマリ。
@@ -1202,22 +1166,35 @@ function renderBoard(){
       <div class="l">今日の売上</div></div>`;
   const b=document.getElementById('todayBtn'); if(b) b.onclick=openToday;
 }
+/* マルチユーザー版は製造判定がサーバ側なので c.log は空のまま。
+   記録は /api/made（products_made）から取り、ローカル版と同じ形に揃えて同じ描画に流す。 */
+let _madeToday=null;                  // null=まだ取れていない / 配列=今日の記録
+const normMadeRow = r => ({ pid:r.product_id, at:new Date(r.made_at).getTime(), key:r.recipe_key||'' });
+async function fetchMadeToday(dlg){
+  const d=await NET.call('GET','/api/made');
+  if(!d){ if(!_madeToday) _madeToday=[]; return; }   // 取れなかったら前回の内容を残す
+  _madeToday=(d.made||[]).map(normMadeRow);
+  if(dlg) dlg.refresh();
+}
+const madeTodayRows = ()=> NET.multi ? (_madeToday||[]) : logToday();
 /* 📊 今日の製造 — 今日つくったものをレア度順に並べる（図鑑に近い見た目）。
    原材料の組み合わせも出すので、当たった組み合わせを見返す用途にも使える。 */
 function openToday(){
-  return openDialog({ title:'📊 今日の製造',
+  if(NET.multi) _madeToday=null;                    // 開くたび取り直す（前回開いた内容を出さない）
+  const dlg=openDialog({ title:'📊 今日の製造',
     subtitle:()=>`${madeToday()}個 / 売上 💰${Math.floor(salesToday()).toLocaleString()}`,
     live:2000,
     body:()=>{
+      if(NET.multi && !_madeToday) return '<div class="cost" style="padding:12px">読み込み中…</div>';
       const rows={};
-      for(const m of logToday()){ const p=PROD[m.pid]; if(!p) continue;
+      for(const m of madeTodayRows()){ const p=PROD[m.pid]; if(!p) continue;
         const r=rows[m.pid]||(rows[m.pid]={p, n:0, keys:{}});
         r.n++; if(m.key) r.keys[m.key]=(r.keys[m.key]||0)+1; }
       const list=Object.values(rows).sort((a,b)=>(b.p.r-a.p.r)||(b.n-a.n));
       if(!list.length) return '<div class="cost" style="padding:12px">今日はまだ何も作っていません。🏭製造で原材料をセットして ▶製造開始。</div>';
       const gain=list.reduce((s,r)=>s+(PROD_PRICE[r.p.r]||0)*r.n,0);
       return `<div class="pgrid">${list.map(r=>{
-          // 組み合わせは多い順に3つまで。原材料は絵文字で出す（図鑑のヒントと同じ見せ方）
+          // 製品ごとの組み合わせは1つなので普通は1行。過去の履歴に旧レシピが残る場合だけ複数出る（多い順に3つまで）
           const ks=Object.keys(r.keys).sort((a,b)=>r.keys[b]-r.keys[a]).slice(0,3)
             .map(k=>`<div class="qn" title="${k.split(',').map(x=>MAT[x]?MAT[x].n:x).join(' + ')}">${
               k.split(',').map(x=>MAT[x]?MAT[x].e:'').join('')}${r.keys[k]>1?` ×${r.keys[k]}`:''}</div>`).join('');
@@ -1229,6 +1206,11 @@ function openToday(){
           今日つくったものの合計価値は 💰${gain.toLocaleString()}（完成した時点で 💰 に入っている）。</div>`;
     },
     actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection('prod')}] });
+  if(NET.multi){                       // 開いている間だけ記録を取りに行く（閉じたら止める）
+    const pull=()=>{ if(_dlg!==dlg){ clearInterval(t); return; } fetchMadeToday(dlg); };
+    const t=setInterval(pull, 5000); pull();
+  }
+  return dlg;
 }
 
 /* --- 製造のコンパクト表示（画面上中央）。詳しい操作は🏭製造ダイアログに寄せ、
