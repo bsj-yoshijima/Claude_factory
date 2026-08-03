@@ -1027,10 +1027,12 @@ class Main extends Phaser.Scene {
     });
     for(const k of Object.keys(this.agents)){ if(!present.has(k)){ const a=this.agents[k]; this.clearDeco(a); a.sp.destroy(); if(a.hat)a.hat.destroy(); a.lbl.destroy(); a.shadow.destroy(); delete this.agents[k]; } }
     this.busyCount=busyN;
+    // 毎ポーリング呼ばれる。innerHTML の貼り替えだと数字を選択するたびに解除され、
+    // <img> も読み直しでちらつくので、UI側の差分適用(morphInto)に載せる
     if(this.hud){ const ic=mascotIcons();
-      this.hud.innerHTML=
+      window.morphInto(this.hud,
         `<span class="st" title="稼働中"><img src="${ic.work}" alt=""><i class="fx">✨</i><b>${busyN}</b></span>`+
-        `<span class="st" title="休憩中"><img src="${ic.sit}" alt=""><i class="fx">☕</i><b class="idle">${idleN}</b></span>`; }
+        `<span class="st" title="休憩中"><img src="${ic.sit}" alt=""><i class="fx">☕</i><b class="idle">${idleN}</b></span>`); }
   }
   update(time){
     // 星のまたたき(夜)

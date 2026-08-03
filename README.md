@@ -264,7 +264,8 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 
 | `tools/mach_prompt_template.md` | 製造機スプライトを Stitch に依頼するテンプレ（向きをピクセル送りで数値指定する。文章だと横一列で返ってくる） |
 | `tools/cut_machines.py` | 製造機シートから**2マス機の絵だけを正**として3/4/5マス機を合成し、表示サイズへ縮小＋投入口のアンカーを書き出す（`python3 tools/cut_machines.py`） |
-| `tools/test_ui_browser.mjs` | 実ブラウザ(headless Chrome)でUIを操作して確認（`node tools/test_ui_browser.mjs`。サーバ起動が前提）。グローバル名の衝突など「構文は通るが実行時に壊れる」類はこれでしか出ない |
+| `tools/make_favicon.mjs` | ファビコン（工場＋左下にClaude君）を描いて `assets/favicon.png` / `favicon-192.png` を出す（`node tools/make_favicon.mjs`。依存ゼロ。Claude君は `mascotCanvas()` の手順を移植したものなので、マスコットの形を変えたら再実行する） |
+| `tools/test_ui_browser.mjs` | 実ブラウザ(headless Chrome)でUIを操作して確認（`node tools/test_ui_browser.mjs`。サーバ起動が前提。`CF_URL` で接続先を変えられる）。グローバル名の衝突など「構文は通るが実行時に壊れる」類はこれでしか出ない |
 | `tools/test_machines.mjs` | 製造機／設置ロジックの検証（`node tools/test_machines.mjs`。Phaser をスタブして描画なしで走る） |
 | `tools/test_craft.mjs` | ジャンル／原材料／製品／レシピ＋確率の検証（`node tools/test_craft.mjs`。CRAFT-DATA ブロックを切り出して評価。ブラウザ不要） |
 
