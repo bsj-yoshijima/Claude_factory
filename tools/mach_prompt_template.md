@@ -69,7 +69,48 @@
 
 ---
 
-## 実際に使うテンプレ（短い方。こちらを使う）
+## いちばん確実な作り方: **うまくいったシートを種にして、テーマだけ差し替える**
+
+テキストだけで一から作らせると、**同じプロンプトでも出来が大きくブレる**（投入口の数が
+1/1/1/1 になる、L字に膨らむ、屋根が付いて立方体になる、装飾が消えて地味になる）。
+何度書き直しても直らないので、**構造は既存の合格シートから引き継がせる**。
+
+- 種にするシート: **ドワーフ鉱山 `d7c4677cdf2546eeb15b7ae734ffb63d`**
+  （投入口2/3/4/5・1マス奥行き・低い側面・正しいアイソメ角がそろっている）
+- 使うツール: `generate_variants`
+  - `selectedScreenIds: ['d7c4677cdf2546eeb15b7ae734ffb63d']`
+  - `variantOptions: {variantCount: 1, creativeRange: 'REFINE', aspects: ['COLOR_SCHEME','IMAGES']}`
+    → `LAYOUT` を変更対象に入れないのが肝。レイアウトを触らせない。
+- プロンプトの型:
+
+```
+Re-skin this exact sprite sheet to a "<THEME>" theme.
+
+KEEP EVERYTHING STRUCTURAL IDENTICAL to the reference. Do not redesign the layout:
+- Same 2x2 arrangement of four machines on the same flat pure magenta (#FF00FF) background.
+- Same four lengths and the SAME NUMBER OF INTAKES on each machine as the reference.
+- Same intake positions and the same spacing between intake centers.
+- Same true 2:1 isometric angle, same long axis running from upper-left back end down to lower-right front end.
+- Same low profile: the visible long side face stays exactly as short as in the reference. Do not make it taller.
+- Same one-tile-deep straight strip footprint. No side wings, no L shapes.
+- Same one row of arched glowing windows on the side face, one under each intake.
+- Same mechanical parts in the same places: gauge cluster, motor with drive belt, valve wheels, exhaust at the back end, output chute at the lower-front corner.
+
+ONLY CHANGE THE MATERIALS AND DECORATION:
+- Body: <素材と色>, instead of granite and iron.
+- Intake collars: <素材> instead of hammered iron.
+- Side windows: glowing <色> behind <素材> frames.
+- Back-edge decoration, replacing the forge and gems, at the same size and the same place: <小物を6つほど>
+- Palette: <6色>
+
+Keep the same VERY chunky lo-fi 8-bit Famicom pixel art style, extreme high contrast, thick clean black outlines, flat colors, no gradients. NO text, no letters, no numbers anywhere.
+```
+
+一から作らせるのは、種にできるシートがまだ無いテーマ系統だけにする。
+
+---
+
+## 一から作る場合のテンプレ（短い方）
 
 長文版（下）と同じ縛りを箇条書きに畳んだもの。**2600字ほどで、長文版より通りが良い**
 （海賊船・スチパン・ドワーフ鉱山・幽霊屋敷などはこれで一発）。`<>` を差し替える。
