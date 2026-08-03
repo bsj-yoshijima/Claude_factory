@@ -264,6 +264,42 @@
   .mychart .myhit{cursor:pointer}
   .mychart .myhit:focus{outline:none}
   .mychart .myhit:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+
+  /* ══════════ 狭い画面 ══════════
+     上部の 労働量ボード＋製造カード は、広い画面で「左の🏭ロゴと右の☰の隙間に収まる」
+     前提で left:160px / right:70px に置いてある。画面が狭くなるとその隙間がボードの
+     実寸より小さくなり、width:fit-content のせいで縮まずに右へはみ出して ☰ を隠す。
+     ロゴと☰の行の下へ落として、幅いっぱいを使わせる。 */
+  @media (max-width:900px){
+    #topwrap{top:48px;left:8px;right:8px;width:auto;max-width:none}
+    #board{flex:1 1 auto;min-width:0}
+    #board .m{flex:1 1 0;min-width:0;padding:7px 8px}
+    #board .v{font-size:21px}
+    #board .l{font-size:9px}
+    #craft{max-width:100%}
+    #craft .nm{max-width:none}
+    /* 完成品バッジは上下中央だと製造カードと重なるので下へ逃がす */
+    #doneBtn{top:auto;bottom:64px;transform:none}
+    /* パレット(336px)を出すと盤面の残り幅が消える。押し出さずに上へ重ねる */
+    #palette{width:min(var(--palw),86vw)}
+    #wrap.editing #game{width:min(1300px,96vw);margin-left:0}
+  }
+  /* ボードと製造カードを1行に並べると、この幅から両方とも潰れて読めなくなる。
+     ボードに全幅を取らせて、製造カードを次の行へ送る（#topwrap は flex-wrap:wrap）。 */
+  @media (max-width:640px){
+    #board{flex:1 1 100%}
+    #craft{flex:1 1 100%;max-width:100%}
+  }
+  /* スマホ幅 */
+  @media (max-width:480px){
+    #note{font-size:9px;padding:3px 7px}
+    #hud{left:8px;bottom:8px}
+    #doneBtn{right:8px}
+    /* ダイアログは画面に対して余白を詰め、縦は使える高さいっぱいまで */
+    #panel{width:calc(100vw - 16px);height:min(84vh,640px);padding:13px 14px}
+    /* レシピ表は1列に落とす（2列だと材料の絵文字が折り返して行が波打つ） */
+    .rlist{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
