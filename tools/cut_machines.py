@@ -60,6 +60,11 @@ SPOT_TEST = {
     'pirate':    lambda p: p[3] > 128 and max(p[:3]) < 28,                                                    # 真鍮輪の黒い内側
     'steampunk': lambda p: p[3] > 128 and max(p[:3]) < 28,                                                    # 真鍮襟の黒い内側
     'dwarf':     lambda p: p[3] > 128 and max(p[:3]) < 45,                                                    # 鍛鉄襟の暗い内側
+    # ドワーフ鉱山を種にした差し替え版。投入口は同じ「暗い楕円」なので判定も同じで通る
+    'china':     lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'sushi':     lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'haunted':   lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'tokyo':     lambda p: p[3] > 128 and max(p[:3]) < 45,
     'haunted':   lambda p: p[3] > 128 and max(p[:3]) < 45,                                                    # 銀の襟の暗い内側
 }
 SPOT_MIN_AREA = 120
