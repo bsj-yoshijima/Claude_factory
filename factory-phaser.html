@@ -918,8 +918,9 @@ document.getElementById('recipeBtn').addEventListener('click',()=>openRecipes())
 // 1製品あたりの必要WP = マス数 × WP_PER_SLOT。今後変わる可能性があるのでここ1箇所で調整する
 const WP_PER_SLOT = 50;
 const needWp = (m)=> Math.max(1, (m && m.size) || 1) * WP_PER_SLOT;
-// 製品の売価（レア度別）。製品が完成した瞬間に 💰 と売上に加算される
-const PROD_PRICE = {1:60, 2:200, 3:700, 4:2600, 5:9000};
+/* 製品の売価（レア度別）。製品が完成した瞬間に 💰 と売上に加算される。
+   server/game-data.mjs にも同じ表があり、tools/test_server.mjs が一致を検証する。片方だけ直さないこと。 */
+const PROD_PRICE = {1:50, 2:100, 3:250, 4:500, 5:1000};
 // 原材料をセットできるマス数 = 製造機のマス数(2〜5)。台ごとに1レシピ。
 
 /* == CRAFT-DATA-START ==（tools/test_craft.mjs がこの範囲を切り出して検証する）
