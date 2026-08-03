@@ -107,7 +107,10 @@ def main_js_consts():
     iso = dict(re.findall(r'(Bx|By|ux|uy|vx|vy):\s*(-?[\d.]+)', src)[:6])
     iso = {k: float(v) for k, v in iso.items()}
     inset = float(re.search(r'MACH_GEO = \{ inset:([\d.]+)', src).group(1))
-    return W, H, GU, GV, iso, inset
+    # 製造機は他のオブジェクトに合わせて少し小さく描く。描画時に縮めると NEAREST で
+    # ドットが間引かれて絵が壊れるので、ここで焼き込み時に縮めておく。
+    draw = float(re.search(r'const MACH_DRAW = ([\d.]+)', src).group(1))
+    return W, H, GU, GV, iso, inset, draw
 
 
 def target_width(n, W, H, GU, GV, iso, IN):
@@ -468,10 +471,10 @@ def pick_source(found):
     return i, cand[i][1]
 
 
-def synth_fit(theme, found, W, H, GU, GV, iso):
+def synth_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
     """2マス機の絵からNマス機を合成する。{'2':{ax,ay},...} を返す。無理なら None"""
-    step_x = abs(iso['ux'] * W / GU)
-    step_y = abs(iso['uy'] * H / GU)
+    step_x = abs(iso['ux'] * W / GU) * draw      # MACH_DRAW ぶん小さく焼く
+    step_y = abs(iso['uy'] * H / GU) * draw
     src = pick_source(found)
     if src is None:
         return None
@@ -520,7 +523,7 @@ def synth_fit(theme, found, W, H, GU, GV, iso):
 
 def main():
     import json
-    W, H, GU, GV, iso, IN = main_js_consts()
+    W, H, GU, GV, iso, IN, DRAW = main_js_consts()
     step_x = abs(iso['ux'] * W / GU)      # ゲームの1マス送り(u方向)
     step_y = abs(iso['uy'] * H / GU)
     print(f'ゲームの1マス送り = ({step_x:.4f}, {step_y:.4f})px  (game/main.js の ISO/W/H/GU より)')
@@ -559,24 +562,24 @@ def main():
             print(f'   シートの実測送り: {" / ".join(f"{m:.1f}" for m in measured)} px '
                   f'(ばらつき ±{(max(measured)-min(measured))/med*100:.1f}%) ← これを直すために合成する')
 
-        got = synth_fit(theme, found, W, H, GU, GV, iso) if test else None
+        got = synth_fit(theme, found, W, H, GU, GV, iso, DRAW) if test else None
         if got:
             fit[theme] = got
         else:
             print('   !! 2マス機の投入口を検出できないテーマなので、従来の幅合わせにフォールバック')
-            legacy_fit(theme, found, W, H, GU, GV, iso, IN)
+            legacy_fit(theme, found, W, H, GU, GV, iso, IN, DRAW)
 
     with open(os.path.join(OUT, 'mach-fit.json'), 'w', encoding='utf-8') as fp:
         json.dump(fit, fp, ensure_ascii=False, indent=1)
     print('\nwrote assets/mach-fit.json')
 
 
-def legacy_fit(theme, found, W, H, GU, GV, iso, IN):
+def legacy_fit(theme, found, W, H, GU, GV, iso, IN, draw=1.0):
     """投入口を検出できないテーマ用。占有外周の幅に合わせ、筐体高を4台で揃える従来方式"""
     cut = []
     for n, sp, _ in found:
-        tw = target_width(n, W, H, GU, GV, iso, IN)
-        fh = target_height(n, W, H, GU, GV, iso, IN)
+        tw = target_width(n, W, H, GU, GV, iso, IN) * draw
+        fh = target_height(n, W, H, GU, GV, iso, IN) * draw
         cut.append((n, sp, tw, fh, sp.height * tw / sp.width - fh))
     bodies = sorted(c[4] for c in cut)
     body = bodies[len(bodies) // 2]

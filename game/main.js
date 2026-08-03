@@ -47,6 +47,8 @@ const MACH_GEO = { inset:0.10, height:0.42, slot:0.52 };
 // 製造機の描画倍率。絵は1マスの送りぴったりに焼いてあるが、他のオブジェクトと並べると
 // やや大きいので少しだけ小さく描く。絵・土台・素材アイコンを同じ倍率で縮めるので、
 // 投入口とアイコンの位置関係は崩れない(占有マス数は変わらない)。
+// tools/cut_machines.py も同じ値を読んで、この倍率ぶん小さく焼く。
+// 描画時に縮めるのは NG (NEAREST でドットが間引かれて絵が壊れる)。
 const MACH_DRAW = 0.88;
 // 製造機のサイズ。variant('s2'..'s5') が在庫キー兼サイズ。1マス=スロット1つ。1マス機は廃止(最小2マス)。
 const MACH_SIZES = [2,3,4,5];
@@ -409,15 +411,16 @@ class Main extends Phaser.Scene {
     let HG, spotPts=null;   // 天面の高さ(px) / 投入口の実位置(スプライトのときアンカーから算出)
     e._lit=[];              // 採光tintの対象。帯の数だけある
     if(tex){
-      // 絵は「1マスの送り=ゲームの1マス」で焼いてある(tools/cut_machines.py)。
-      // ただし他のオブジェクトと並べるとやや大きいので、MACH_DRAW ぶんだけ小さく描く。
-      // 縮めるのは 絵・土台・素材アイコン の3つを同じ倍率・同じ原点で。
-      // 絵だけ縮めると土台が縁からはみ出し、アイコンだけ据え置くと投入口からズレる。
+      // 絵は「1マスの送り = ゲームの1マス × MACH_DRAW」で焼いてある(tools/cut_machines.py)。
+      // ここで setScale して縮めてはいけない。pixelArt:true は NEAREST なので、
+      // 半端な倍率をかけるとドットが不均等に間引かれて線が太い所と消える所ができる。
+      // 縮小は焼き込み側(LANCZOS)に任せ、ここは等倍で描く。
+      // 一方 土台と素材アイコンは絵に合わせて縮める必要があるので、倍率は幾何計算だけに使う。
       const S=MACH_DRAW;
       const flip=(e.dir==='v');   // 素材はu方向。v方向は左右反転した絵で角度が合う
       const key=flip? this._machFlipTex(tex.key) : tex.key;
       const src=this.textures.get(key).getSourceImage(), iw=src.width, ih=src.height;
-      const dw=iw*S, dh=ih*S;
+      const dw=iw, dh=ih;         // 絵は等倍(焼き込み済み)
       const fitA=((this.machFit()[tex.theme])||{})[String(tex.n)];
       const ax=fitA ? (flip?1-fitA.ax:fitA.ax) : null;
       const du=(cellXY(1,0).x-cellXY(0,0).x)*S, dv=(cellXY(1,0).y-cellXY(0,0).y)*S;   // 縮めた後の1マス送り
@@ -440,7 +443,7 @@ class Main extends Phaser.Scene {
       const cx=cells.map(q=>cellXY(q.c,q.r).x), asc=(cx[n-1]>=cx[0]), cut=[];
       for(let i=1;i<n;i++){
         const bnd = fitA ? sx0+(flip?-1:1)*du*(i-0.5) : (cx[i-1]+cx[i])/2;
-        cut.push(Phaser.Math.Clamp(Math.round((bnd-L)/S),0,iw));
+        cut.push(Phaser.Math.Clamp(Math.round(bnd-L),0,iw));   // 等倍なので画面px=元絵px
       }
       const sh=this.add.image((bx0+bx1)/2+3, by1-2, 'shadow').setDepth(dBack-0.6)
         .setDisplaySize(dw*0.9,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);   // 影は機械の一番奥より後ろ
@@ -456,7 +459,7 @@ class Main extends Phaser.Scene {
         bg.lineStyle(2,sk.side,1); this._strokeOuter(bg,qd,i,n,e.dir);
         const x0 = asc ? (i===0?0:cut[i-1]) : (i===n-1?0:cut[i]);
         const x1 = asc ? (i===n-1?iw:cut[i]) : (i===0?iw:cut[i-1]);
-        const im=this.add.image(imx, by1, key).setOrigin(0.5,1).setScale(S).setDepth(dep[i]).setTint(tint);
+        const im=this.add.image(imx, by1, key).setOrigin(0.5,1).setDepth(dep[i]).setTint(tint);
         im.setCrop(x0, 0, Math.max(0,x1-x0), ih);   // 位置は変えず、自分の帯だけを見せる
         objs.push(im); e._lit.push(im); this.lit.push({sp:im,u,v});
       });

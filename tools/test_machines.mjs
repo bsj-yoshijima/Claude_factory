@@ -452,7 +452,10 @@ console.log('\n[15] 合成した製造機スプライトの1マス送り（tools
   const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
   const [,W,H,GU] = src.match(/const W = (\d+), H = (\d+), GU = (\d+), GV = \d+/).map(Number);
   const iso = Object.fromEntries([...src.matchAll(/(ux|uy):\s*(-?[\d.]+)/g)].map(m=>[m[1],+m[2]]));
-  const stepX = Math.abs(iso.ux*W/GU), stepY = Math.abs(iso.uy*H/GU);
+  // 絵は MACH_DRAW ぶん小さく焼いてある(描画時に縮めると NEAREST でドットが壊れるため)。
+  // なので1マスの送りも同じだけ小さいのが正しい。
+  const draw = +src.match(/const MACH_DRAW = ([\d.]+)/)[1];
+  const stepX = Math.abs(iso.ux*W/GU)*draw, stepY = Math.abs(iso.uy*H/GU)*draw;
   ok(Object.keys(fit).length>0, `mach-fit.json にテーマがある (${Object.keys(fit).join(', ')})`);
   for(const th of Object.keys(fit)){
     const at=[2,3,4,5].map(n=>{ const a=fit[th][String(n)];
