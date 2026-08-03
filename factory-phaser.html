@@ -829,7 +829,12 @@ let _collectionTab='prod';   // 'prod'=製造した製品(ゲームのゴール)
 let _collectionGenre='food';     // 製品タブ配下のジャンル切り替え（GENRES + ✨シークレット）
 // 図鑑のジャンルタブ。GENRES に足せば自動で増える
 const collectionGenres = ()=>[...GENRES, {id:SECRET_G,e:'✨',n:'シークレット'}];
-const prodsOfGenre = (g)=>PRODS.filter(p=>p.g===g);
+/* 図鑑の並びは レア度の低い順 → 同レア度なら必要マス数の少ない順。
+   PRODS の定義順（ジャンル→マス数→単独/ガチャ枠）をそのまま出すと、マス数グループの
+   末尾に置いたガチャ枠の「1段上」のせいで、次のグループの先頭で必ずレア度が下がる。
+   定義順は m を読みやすく並べるためのもので表示順ではないので、ここで並べ直す。 */
+const prodsOfGenre = (g)=>PRODS.filter(p=>p.g===g)
+  .sort((a,b)=> a.r-b.r || new Set(a.m||[]).size-new Set(b.m||[]).size);
 function collectionTabs(){
   const c=craftState();
   const pOwned=PRODS.filter(p=>c.collection[p.id]).length;
