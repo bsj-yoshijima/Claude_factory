@@ -11,10 +11,17 @@
 import { q } from './db.mjs';
 import path from 'node:path';
 
-/** busy → 休憩(☕) にするまでの無音時間。
- *  実測: 同一セッションの連続イベント間隔は p99=28.5s / p99.5=88.5s。
- *  90秒なら「作業中なのに休ませる」誤判定は全区間の 0.6% 程度。 */
+/** busy → 休憩(☕) にするまでの、hook が途切れてからの時間。
+ *  hook は「プロンプト投入(UserPromptSubmit)」と「応答終了(Stop)」しか飛ばないので、
+ *  これ単独だと 90秒を超える作業は必ず休憩に見える（＝稼働中のエージェントが 💤 になる）。
+ *  OTel が届いているセッションは下の ACTIVE_AFTER_SEC が優先される。 */
 export const IDLE_AFTER_SEC = 90;
+/** OTel が最後に届いてから、まだ稼働中とみなす時間。
+ *  実測(1日ぶん・470区間): 受信間隔は中央値 9.6秒 / p90 41秒。
+ *  連続作業中の実測最大は 68.8秒（ログを出さない長いツール実行の区間）。
+ *  180秒はそこに約2.6倍の余裕を見た値。長くするほど「kill -9 で Stop が
+ *  飛ばずに落ちたセッション」が 🟢 のまま残る時間も延びる、というトレードオフ。 */
+export const ACTIVE_AFTER_SEC = 180;
 /** 一度でも働いたセッションを工場から消すまでの無音時間。
  *  実測で30分超の沈黙は全区間の 0.05%。SessionEnd は kill -9 では飛ばないので保険が要る。 */
 export const GONE_AFTER_SEC = 30 * 60;
@@ -70,20 +77,28 @@ export async function ingestHook(userId, event, body) {
  */
 export async function activeAgents(userId) {
   const r = await q(
-    `SELECT session_id, project, state, ever_busy, started_at, last_event_at,
-            EXTRACT(EPOCH FROM (now() - last_event_at))::int AS idle_sec
-       FROM agent_sessions
-      WHERE user_id = $1
-        AND state <> 'ended'
-        -- 退場: 働いた実績があれば長め、無ければ短めで下げる
-        AND last_event_at > now() - (CASE WHEN ever_busy THEN $2 ELSE $3 END || ' seconds')::interval
+    // seen_at = hook と OTel のうち新しいほう。「まだ居るか」はこれで測る
+    `WITH a AS (
+       SELECT *, GREATEST(last_event_at, COALESCE(last_activity_at, last_event_at)) AS seen_at
+         FROM agent_sessions WHERE user_id = $1 AND state <> 'ended')
+     SELECT session_id, project, state, ever_busy, started_at, last_event_at,
+            EXTRACT(EPOCH FROM (now() - last_event_at))::int AS idle_sec,
+            EXTRACT(EPOCH FROM (now() - last_activity_at))::int AS otel_sec
+       FROM a
+      WHERE -- 退場: 働いた実績があれば長め、無ければ短めで下げる
+            seen_at > now() - (CASE WHEN ever_busy THEN $2 ELSE $3 END || ' seconds')::interval
         -- 入場: 働いたセッションは即時。そうでなければ猶予を過ぎてから
         AND (ever_busy OR now() - started_at >= ($4 || ' seconds')::interval)
-      ORDER BY ever_busy DESC, last_event_at DESC`,
+      ORDER BY ever_busy DESC, seen_at DESC`,
     [userId, GONE_AFTER_SEC, GONE_IDLE_ONLY_SEC, MIN_LIFE_SEC]);
 
   return r.rows.map((w) => {
-    const working = w.state === 'busy' && w.idle_sec <= IDLE_AFTER_SEC;
+    // state は「プロンプトを投げてから Stop が来るまで」busy。その区間のうち、
+    //   hook が新しい            → そのまま稼働
+    //   OTel が届き続けている    → 長い作業の最中。稼働のまま（本来の不具合はここ）
+    // OTel が無いセッション(otel_sec=null)は従来どおり hook だけで判定する。
+    const working = w.state === 'busy'
+      && (w.idle_sec <= IDLE_AFTER_SEC || (w.otel_sec != null && w.otel_sec <= ACTIVE_AFTER_SEC));
     return {
       sessionId: w.session_id,
       project: w.project || w.session_id.slice(0, 8),

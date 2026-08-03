@@ -254,9 +254,15 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
   ever_busy     boolean NOT NULL DEFAULT false,
   started_at    timestamptz NOT NULL DEFAULT now(),
   last_event_at timestamptz NOT NULL DEFAULT now(),
+  -- OTel が最後に届いた時刻。hook は「プロンプト投入」と「応答終了」しか飛ばないので、
+  -- 長い作業の最中は last_event_at が止まり、稼働中なのに休憩に見えてしまう。
+  -- OTel はその間も数秒〜数十秒おきに届くので、生存確認だけこちらで見る。
+  -- NULL = OTel が一度も来ていないセッション（hook だけの判定に落ちる）
+  last_activity_at timestamptz,
   ended_at      timestamptz,
   PRIMARY KEY (user_id, session_id)
 );
+ALTER TABLE agent_sessions ADD COLUMN IF NOT EXISTS last_activity_at timestamptz;
 CREATE INDEX IF NOT EXISTS agent_sessions_user ON agent_sessions(user_id, last_event_at DESC);
 
 -- 頭アクセサリ。プロジェクト単位で保持する（旧実装の G.skins[proj] 相当）

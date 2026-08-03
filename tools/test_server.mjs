@@ -158,6 +158,54 @@ try {
     eq(noTok.status, 401, 'トークン無しの hook は 401');
   }
 
+  console.log('\n[2b] 長い作業の最中も稼働のままであること（hook は Stop まで飛ばない）');
+  {
+    // hook は「プロンプト投入」と「応答終了」しか飛ばない。その間に何分かかっても
+    // last_event_at は動かないので、hook だけで判定すると必ず休憩に見えてしまう。
+    // 実時間で 90秒待つ代わりに、DB 上で hook の時刻を過去へ倒して同じ状況を作る。
+    const SESS = 'long-task';
+    const { pool } = await import('../server/db.mjs');
+    const backdate = (sec) => pool.query(
+      `UPDATE agent_sessions SET last_event_at = now() - ($1 || ' seconds')::interval
+         FROM users u WHERE u.email=$2 AND agent_sessions.user_id=u.id AND session_id=$3`,
+      [sec, EMAIL, SESS]);
+    const agent = async () => ((await a('GET', '/api/state')).json.agents || [])
+      .find((x) => x.project === 'long-task-proj');
+
+    await a('POST', '/hooks/SessionStart', { token: TOKEN, body: { session_id: SESS, cwd: '/x/long-task-proj' } });
+    await a('POST', '/hooks/UserPromptSubmit', { token: TOKEN, body: { session_id: SESS } });
+    eq((await agent()).working, true, 'プロンプト投入で稼働になる');
+
+    await backdate(300);            // 5分かかる作業の途中。hook は1つも飛んでいない
+    eq((await agent()).working, false, 'OTel が無ければ従来どおり休憩に落ちる（hook だけの判定）');
+
+    // 作業中は OTel が届き続ける。これを生存確認に使う。
+    // 加点対象でない api_request を使う（生存確認は「届いたこと」だけを見ており、
+    // イベントの種類に依存しない。後続の WP の検証にも影響を与えない）
+    const alive = () => a('POST', '/v1/logs', { token: TOKEN, body: logsPayload([
+      logRecord('api_request', Date.now(), {}, SESS)]) });
+    await alive();
+    eq((await agent()).working, true, 'OTel が届いていれば、hook が古くても稼働のまま');
+
+    // OTel も途切れたら休憩へ。生きているフリを永久に続けない
+    await pool.query(
+      `UPDATE agent_sessions SET last_activity_at = now() - interval '400 seconds'
+         FROM users u WHERE u.email=$1 AND agent_sessions.user_id=u.id AND session_id=$2`,
+      [EMAIL, SESS]);
+    eq((await agent()).working, false, 'OTel も途切れれば休憩に落ちる');
+
+    // 長い作業の最中に工場から消えてしまわないこと（退場判定にも活動時刻を効かせる）
+    await alive();
+    await backdate(40 * 60);        // hook は 40分前。従来の退場条件(30分)を超えている
+    ok(!!(await agent()), 'hook が退場しきい値を過ぎても、OTel が来ていれば工場に残る');
+    eq((await agent()).working, true, 'その間も稼働のまま');
+
+    await a('POST', '/hooks/Stop', { token: TOKEN, body: { session_id: SESS } });
+    eq((await agent()).working, false, 'Stop が来たら即座に休憩になる');
+    await a('POST', '/hooks/SessionEnd', { token: TOKEN, body: { session_id: SESS } });
+    eq(await agent(), undefined, 'SessionEnd で退場する');
+  }
+
   console.log('\n[3] OTLP 取り込みと WP');
   {
     const t = Date.now();
