@@ -65,7 +65,13 @@ SPOT_TEST = {
     'sushi':     lambda p: p[3] > 128 and max(p[:3]) < 45,
     'haunted':   lambda p: p[3] > 128 and max(p[:3]) < 45,
     'tokyo':     lambda p: p[3] > 128 and max(p[:3]) < 45,
-    'haunted':   lambda p: p[3] > 128 and max(p[:3]) < 45,                                                    # 銀の襟の暗い内側
+    'beehive':   lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'carnival':  lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'circus':    lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'desert':    lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'space':     lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'ice':       lambda p: p[3] > 128 and max(p[:3]) < 45,
+    'mushroom':  lambda p: p[3] > 128 and max(p[:3]) < 45,
 }
 SPOT_MIN_AREA = 120
 SPOT_FILL = 0.40            # 塊が外接矩形をどれだけ埋めていれば「面」と見なすか(輪郭線を落とす)
@@ -73,6 +79,16 @@ SPOT_ASPECT = (1.05, 4.6)   # 2:1アイソメなので投入口は横長。縦�
 
 # 投入口は必ず筐体の上側にある。下部の影を誤検出しないよう、bboxの上から何割までを見るか。
 SPOT_TOP = {'western': 0.62}
+
+# 投入口が地の色と溶けていて色では拾えないテーマ用の逃げ道。
+# 「幅が最小の台」の絵の中での、隣り合う投入口2つの中心座標を直接与える。
+#   beehive  : 蜂の巣の房が天板と同じ蜜色で、輪郭も無いので塊にならない
+#   mushroom : 穴が暗いが、天板そのものが暗褐色なので穴と地が繋がる
+# 座標は tools/cut_machines.py が切り出す2マス機の画像を3倍表示して読み取る。
+SPOT_HINT = {
+    'beehive':  [(77, 53), (141, 86)],
+    'mushroom': [(67, 75), (112, 97)],
+}
 
 
 def main_js_consts():
@@ -504,7 +520,7 @@ def main():
         picks = split_machines(sheet)
         if len(picks) < len(SIZES):
             print(f'   !! 機械を{len(picks)}台しか検出できませんでした(4台必要)。スキップ'); continue
-        test = SPOT_TEST.get(theme)
+        test = SPOT_TEST.get(theme) or (lambda p: False) if theme in SPOT_HINT else SPOT_TEST.get(theme)
 
         # 投入口を検出する。4台ぶん測るのは「生成された絵がどれだけ詰まっているか」をログに残すため
         found = []
@@ -515,6 +531,8 @@ def main():
             if top:
                 cands = [c for c in cands if c[0][1] < sp.height * top]
             spots = best_spots(cands, n) if test and cands else None
+            if theme in SPOT_HINT and not found:      # 幅が最小の台にだけ効かせる
+                spots = [(tuple(c), 999) for c in SPOT_HINT[theme]]
             found.append((n, sp, spots))
         measured = [abs((s[-1][0][0] - s[0][0][0]) / (n - 1)) for n, _, s in found if s and n > 1]
         if len(measured) >= 2:
