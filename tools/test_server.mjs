@@ -6,6 +6,8 @@
 // まで一気に通す。ブラウザなしで「設計どおり動くか」を確認できる。
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
+// 必要WPは調整対象なので値をベタ書きせず、定義（＝factory-phaser.html の CRAFT/ECON ブロック）から引く
+import { WP_PER_SLOT } from '../server/game-data.mjs';
 
 const PORT = Number(process.env.TEST_PORT || 4455);
 const BASE = `http://localhost:${PORT}`;
@@ -278,19 +280,23 @@ try {
 
     const st0 = (await a('GET', '/api/state')).json;
     const m = st0.factory.machines[0];
-    eq(m.need, 100, '2マス機の必要WPは 100（マス数 × 50）');
+    const NEED2 = 2 * WP_PER_SLOT;                 // 2マス機の必要WP
+    eq(m.need, NEED2, `2マス機の必要WPは ${NEED2}（マス数 × ${WP_PER_SLOT}）`);
     eq(st0.pending, 0, '稼働させた時点では在庫ゼロ（止めている間のWPは繰り越さない＝旧実装と同じ）');
 
-    // 稼働開始後に働く。1分に Edit×10 = 100WP を3分ぶん → 2マス機で3個できるはず
+    /* 稼働開始後に働く。1分あたり Edit×19 = 190WP（perMinuteCap 200 を超えない範囲の最大）を
+       3個できるまで積む。1分ぶんが必要WPより小さいので、切り上げても4個目には届かない。 */
+    const EDITS_PER_MIN = 19, WP_PER_MIN = EDITS_PER_MIN * 10;
+    const MINUTES = Math.ceil(3 * NEED2 / WP_PER_MIN), TOTAL = MINUTES * WP_PER_MIN;
     const base = Date.now() + 7200e3;
-    for (let min = 0; min < 3; min++) {
+    for (let min = 0; min < MINUTES; min++) {
       const t = base + min * 60000;
       const recs = [logRecord('api_request', t, { query_source: 'sdk' })];
-      for (let i = 0; i < 10; i++) recs.push(logRecord('tool_result', t + i, { tool_name: 'Edit', success: 'true' }));
+      for (let i = 0; i < EDITS_PER_MIN; i++) recs.push(logRecord('tool_result', t + i, { tool_name: 'Edit', success: 'true' }));
       await a('POST', '/v1/logs', { token: TOKEN, body: logsPayload(recs) });
     }
     const st1 = (await a('GET', '/api/state')).json;
-    eq(st1.pending, 3, '300WP ぶん働いたら 2マス機で3個できる（超過は繰り越し）');
+    eq(st1.pending, 3, `${TOTAL}WP ぶん働いたら 2マス機で3個できる（超過は繰り越し）`);
     const salesMade = st1.today.sales - st0.today.sales;   // この節で完成したぶんだけを見る
     ok(salesMade > 0, '売上は完成した瞬間に立つ（🎁を開く前）', `💰${salesMade}`);
     eq(st1.factory.money, st0.factory.money + salesMade, '💰も完成した瞬間に増える');

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Claude Factory</title>
-<link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png">
+<link rel="icon" type="image/png" sizes="96x96" href="assets/favicon.png">
 <link rel="apple-touch-icon" href="assets/favicon-192.png">
 <style>
   :root{ --ink:#e6fff4; --gold:#ffd27a; --mint:#9fdcc6; --panel:rgba(16,24,26,.82); --edge:#2c4740;
@@ -56,11 +56,6 @@
                            margin:0 0 0 3px;color:#ffd27a}
   #board .m.hit{cursor:pointer}                     /* クリックで今日の製造を開く */
   #board .m.hit:hover{background:rgba(127,230,255,.09)}
-  /* 工場レイアウト編集は常時アクセスできるよう右下に固定 */
-  #editFab{position:absolute;right:12px;bottom:12px;z-index:9;cursor:pointer;font-size:12px;
-           background:var(--panel);border:1px solid var(--edge);border-radius:9px;padding:8px 13px;color:var(--mint);backdrop-filter:blur(3px)}
-  #editFab:hover{border-color:var(--mint)}
-  #editFab.on{background:#78d0a6;border-color:#78d0a6;color:#17251f;font-weight:700}
   /* 稼働/休憩は Claude君の絵で示す（稼働=作業ポーズ+火花 / 休憩=座り+☕）。
      常時見えるのはこのコンパクト表示だけ。クリックでエージェント一覧ダイアログを開く。 */
   #hud{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;gap:8px;background:var(--panel);
@@ -229,6 +224,23 @@
   .pcard .rr{font-size:9px;margin-top:1px}
   .pcard .qn{font-size:9px;color:#7fe6ff}
   .pcard.miss{opacity:.28}
+  /* 🧾 製造レシピ — 「原材料 → 製品」を1行1レシピで並べる */
+  .rsec{margin:12px 0 5px;font-size:11px;letter-spacing:.08em;color:#9fdcc6;
+        border-bottom:1px solid var(--edge);padding-bottom:4px}
+  .rsec:first-child{margin-top:2px}
+  .rlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:6px}
+  .rrow{display:flex;align-items:center;gap:5px;background:#10171b;border:1px solid #243036;
+        border-radius:9px;padding:7px 9px}
+  .rms{display:flex;align-items:center;gap:1px;flex-wrap:wrap;font-size:15px;line-height:1.15}
+  .rms i{font-style:normal;font-size:9px;color:#5d7078;padding:0 1px}
+  .rrow .ra{font-style:normal;font-size:11px;color:#5d7078;margin-left:auto;padding-left:4px}
+  .rp{display:flex;align-items:center;gap:5px}
+  .rp .e{font-size:22px;line-height:1}
+  /* 未製造は輪郭だけ。色も名前もレア度も伏せる（作る前に狙い目が分かってしまわないように） */
+  .rp .e.sil{filter:brightness(0) saturate(0);opacity:.5}
+  .rp .nm{font-size:10px;color:#eafff4}
+  .rp .nm.dim{color:#5d7078;letter-spacing:.08em}
+  .rp .rr{font-size:9px}
   .pcard .new{position:absolute;top:-5px;left:-4px;background:#ff5d6c;color:#fff;font-size:8px;
               font-weight:700;padding:1px 5px;border-radius:99px;transform:rotate(-8deg)}
   /* マイページ（工場名 / 選択した日・週のサマリ / WPの折れ線） */
@@ -252,6 +264,42 @@
   .mychart .myhit{cursor:pointer}
   .mychart .myhit:focus{outline:none}
   .mychart .myhit:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+
+  /* ══════════ 狭い画面 ══════════
+     上部の 労働量ボード＋製造カード は、広い画面で「左の🏭ロゴと右の☰の隙間に収まる」
+     前提で left:160px / right:70px に置いてある。画面が狭くなるとその隙間がボードの
+     実寸より小さくなり、width:fit-content のせいで縮まずに右へはみ出して ☰ を隠す。
+     ロゴと☰の行の下へ落として、幅いっぱいを使わせる。 */
+  @media (max-width:900px){
+    #topwrap{top:48px;left:8px;right:8px;width:auto;max-width:none}
+    #board{flex:1 1 auto;min-width:0}
+    #board .m{flex:1 1 0;min-width:0;padding:7px 8px}
+    #board .v{font-size:21px}
+    #board .l{font-size:9px}
+    #craft{max-width:100%}
+    #craft .nm{max-width:none}
+    /* 完成品バッジは上下中央だと製造カードと重なるので下へ逃がす */
+    #doneBtn{top:auto;bottom:64px;transform:none}
+    /* パレット(336px)を出すと盤面の残り幅が消える。押し出さずに上へ重ねる */
+    #palette{width:min(var(--palw),86vw)}
+    #wrap.editing #game{width:min(1300px,96vw);margin-left:0}
+  }
+  /* ボードと製造カードを1行に並べると、この幅から両方とも潰れて読めなくなる。
+     ボードに全幅を取らせて、製造カードを次の行へ送る（#topwrap は flex-wrap:wrap）。 */
+  @media (max-width:640px){
+    #board{flex:1 1 100%}
+    #craft{flex:1 1 100%;max-width:100%}
+  }
+  /* スマホ幅 */
+  @media (max-width:480px){
+    #note{font-size:9px;padding:3px 7px}
+    #hud{left:8px;bottom:8px}
+    #doneBtn{right:8px}
+    /* ダイアログは画面に対して余白を詰め、縦は使える高さいっぱいまで */
+    #panel{width:calc(100vw - 16px);height:min(84vh,640px);padding:13px 14px}
+    /* レシピ表は1列に落とす（2列だと材料の絵文字が折り返して行が波打つ） */
+    .rlist{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
@@ -264,12 +312,9 @@
     <div class="mi" id="myBtn">🏠 マイページ</div>
     <div class="msep"></div>
     <div class="mh">工場</div>
-    <div class="mi" id="craftBtn">🏭 製造（原材料セット）</div>
+    <div class="mi" id="recipeBtn">🧾 製造レシピ</div>
     <div class="mi" id="shopBtn">🏪 ショップ</div>
     <div class="mi" id="editMenuBtn">🔧 レイアウト編集</div>
-    <div class="msep"></div>
-    <div class="mh">仲間</div>
-    <div class="mi" id="agentsBtn">🧑‍🏭 エージェント（スキン変更）</div>
     <div class="msep"></div>
     <div class="mh">記録</div>
     <div class="mi" id="collectionBtn">📖 図鑑</div>
@@ -281,7 +326,6 @@
     <div id="craft"></div>
   </div>
   <div id="doneBtn">🎁 完成品 <span id="doneN"></span></div>
-  <div id="editFab">🔧 レイアウト編集</div>
   <div id="hud"></div>
   <div id="palette"></div>
   <div id="toast"></div>
@@ -785,7 +829,12 @@ let _collectionTab='prod';   // 'prod'=製造した製品(ゲームのゴール)
 let _collectionGenre='food';     // 製品タブ配下のジャンル切り替え（GENRES + ✨シークレット）
 // 図鑑のジャンルタブ。GENRES に足せば自動で増える
 const collectionGenres = ()=>[...GENRES, {id:SECRET_G,e:'✨',n:'シークレット'}];
-const prodsOfGenre = (g)=>PRODS.filter(p=>p.g===g);
+/* 図鑑の並びは レア度の低い順 → 同レア度なら必要マス数の少ない順。
+   PRODS の定義順（ジャンル→マス数→単独/ガチャ枠）をそのまま出すと、マス数グループの
+   末尾に置いたガチャ枠の「1段上」のせいで、次のグループの先頭で必ずレア度が下がる。
+   定義順は m を読みやすく並べるためのもので表示順ではないので、ここで並べ直す。 */
+const prodsOfGenre = (g)=>PRODS.filter(p=>p.g===g)
+  .sort((a,b)=> a.r-b.r || new Set(a.m||[]).size-new Set(b.m||[]).size);
 function collectionTabs(){
   const c=craftState();
   const pOwned=PRODS.filter(p=>c.collection[p.id]).length;
@@ -845,15 +894,65 @@ function openCollection(tab,genre){
 document.getElementById('collectionBtn').addEventListener('click',()=>openCollection());
 
 /* =========================================================================
+   🧾 製造レシピ — 「何を入れれば作れるか」の一覧
+   図鑑が実績（作った物と個数）なら、こちらは献立表。原材料の組み合わせは
+   最初から全部見せて、製品のほうを伏せる。未製造は絵文字を黒く潰した
+   シルエットだけを出し、名前もレア度も出さない（レア度が見えると作る前から
+   狙い目が分かってしまい、「作って確かめる」動機が消える）。
+   個数は出さない ＝ そこは図鑑の担当。
+   🪨謎のカタマリはレシピではなく「レシピに無い組み合わせのハズレ」なので載せない。
+   ========================================================================= */
+// シークレットは PRODS 側の m が空で、組み合わせは SECRETS のキーにある。製品id → 原材料 に引き直す
+function secretMatsOf(pid){
+  const k=Object.keys(SECRETS).find(k=>SECRETS[k].pid===pid);
+  return k?k.split(','):[];
+}
+function recipeRow(p,mats){
+  const chips=mats.map(x=>MAT[x]?`<span title="${MAT[x].n}">${MAT[x].e}</span>`:'').join('<i>＋</i>');
+  const out=(craftState().collection[p.id]||0)
+    ? `<span class="rp"><span class="e">${p.e}</span><span class="nm">${p.n}</span>
+         <span class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</span></span>`
+    : `<span class="rp"><span class="e sil" title="まだ作っていない製品">${p.e}</span>
+         <span class="nm dim">？？？</span></span>`;
+  return `<div class="rrow" data-key="${p.id}"><span class="rms">${chips}</span><i class="ra">→</i>${out}</div>`;
+}
+/* 節の中の並び順は「必要マス数の少ない順 → 同じマス数ならレア度の低い順」。
+   持っている製造機で作れるものが上に来るので、2マス機しか無いうちから表が読める。
+   必要マス数 = 重複を除いた原材料の数（RECIPES のキーと同じ数え方）。 */
+const recipeSlots = (mats)=>new Set(mats).size;
+const recipeSorted = (rows)=>rows.slice().sort((a,b)=>
+  recipeSlots(a.mats)-recipeSlots(b.mats) || a.p.r-b.p.r);
+const recipeRowsOf = (g,matsOf)=>PRODS.filter(p=>p.g===g && p.id!==UNKNOWN_PRODUCT)
+  .map(p=>({p,mats:matsOf(p)}));
+function recipeBody(){
+  const c=craftState();
+  const sec=(head,rows)=>`<div class="rsec">${head}</div><div class="rlist">`
+    +recipeSorted(rows).map(x=>recipeRow(x.p,x.mats)).join('')+'</div>';
+  let body=GENRES.map(g=>sec(`${g.e} ${g.n}`, recipeRowsOf(g.id,p=>p.m))).join('');
+  /* シークレットは1つでも作るまで節ごと出さない。出したあとも中身は「作った物」だけで、
+     未発見のシークレットは行ごと存在しない（残り何個かを悟らせないため）。 */
+  const found=recipeRowsOf(SECRET_G,p=>secretMatsOf(p.id)).filter(x=>c.collection[x.p.id]);
+  if(found.length) body+=sec('✨ シークレット',found);
+  return body+`<div class="rowline" style="font-size:11px;color:#9fb0c0">
+    左が原材料の組み合わせ、右がそれで作れる製品。1度も作っていない製品は
+    <b style="color:#eafff4">シルエット</b>だけ見える。作れば名前とレア度が出る。
+    作った数は 📖 図鑑 で見られる。</div>`;
+}
+function openRecipes(){ return openDialog({ title:'🧾 製造レシピ', body:recipeBody }); }
+document.getElementById('recipeBtn').addEventListener('click',()=>openRecipes());
+
+/* =========================================================================
    製造プロトタイプ — 抽出機に原材料をセット → 実WPを溜めて製品化
    WP は /api/otel（OTel実測）の累計を参照する。セッション開始時点の累計を
    startWp として記録し、差分を「現セッションWP」として扱う。
    ========================================================================= */
-// 1製品あたりの必要WP = マス数 × WP_PER_SLOT。今後変わる可能性があるのでここ1箇所で調整する
-const WP_PER_SLOT = 50;
+/* 1製品あたりの必要WP = マス数 × WP_PER_SLOT（2マス4000 / 3マス6000 / 4マス8000 / 5マス10000）。
+   server/game-data.mjs にも同じ値があり、tools/test_server.mjs が一致を検証する。片方だけ直さないこと。 */
+const WP_PER_SLOT = 2000;
 const needWp = (m)=> Math.max(1, (m && m.size) || 1) * WP_PER_SLOT;
-// 製品の売価（レア度別）。製品が完成した瞬間に 💰 と売上に加算される
-const PROD_PRICE = {1:60, 2:200, 3:700, 4:2600, 5:9000};
+/* 製品の売価（レア度別）。製品が完成した瞬間に 💰 と売上に加算される。
+   server/game-data.mjs にも同じ表があり、tools/test_server.mjs が一致を検証する。片方だけ直さないこと。 */
+const PROD_PRICE = {1:50, 2:100, 3:250, 4:500, 5:1000};
 // 原材料をセットできるマス数 = 製造機のマス数(2〜5)。台ごとに1レシピ。
 
 /* == CRAFT-DATA-START ==（tools/test_craft.mjs がこの範囲を切り出して検証する）
@@ -869,8 +968,20 @@ const PROD_PRICE = {1:60, 2:200, 3:700, 4:2600, 5:9000};
    ─ m の決め方（m がその製品の唯一のレシピ）─
      ・同ジャンルの原材料を 2〜5 個。製造機のマス数が2〜5なので6個以上は作れない
      ・m は製品ごとに1つ ＝ 違う組み合わせから同じ製品は出ない
-     ・別の製品とわざと同じ m にすると、その組み合わせからは複数の製品が
-       レア度の既定重み（RAR[r].w）で出る。「同じ組み合わせを何度も試す」動機になる枠
+     ・別の製品とわざと同じ m にすると「ガチャ枠」になる（下記）
+
+   ─ レア度の設計（マス数＝製造コストとレア度を一致させる）─
+     マス数ごとに基本レア度が決まっていて、単独レシピの製品は必ずその基本レア度。
+       2マス → N / 3マス → R / 4マス → SR / 5マス → SSR
+     例外は「ガチャ枠」＝ 2つの製品がわざと同じ m を共有する組み合わせ。
+     ここだけ 8割で基本レア度、2割で1段上が出る（w:80 / w:20 と書く）。
+       2マス 8割N・2割R ／ 3マス 8割R・2割SR ／ 4マス 8割SR・2割SSR ／ 5マス 8割SSR・2割UR
+     各ジャンル各マス数に ちょうど2組 置く。1組に入れる製品は2つまで（3つは作らない）。
+     ＝ UR は「5マスのガチャ枠を引き続ける」ことでしか手に入らない。
+
+   ─ 各ジャンルの構成（1ジャンル36製品 × 3ジャンル）─
+     2マス 12個 = 単独8 + ガチャ枠2組(4)   ／ 3マス 12個 = 単独8 + ガチャ枠2組(4)
+     4マス  6個 = 単独2 + ガチャ枠2組(4)   ／ 5マス  6個 = 単独2 + ガチャ枠2組(4)
    ========================================================================= */
 const GENRES = [
   {id:'food',e:'🍳',n:'食品'},
@@ -906,82 +1017,132 @@ const MAT = Object.fromEntries(MATS.map(m=>[m.id,m]));
 
 // 製品（g は所属ジャンル / r は RAR と共通のレア度 1..5 / m はこの製品を作る組み合わせ＝レシピ）
 // m がレシピの正。RECIPES はこの m から組み立て、図鑑の材料アイコンも同じ m を出す。
+/* 並びは ジャンル → マス数 → 単独レシピ / ガチャ枠 の順。
+   ★ が付いた2行が同じ m を共有する「ガチャ枠」（w:80 が基本レア度 / w:20 が1段上）。 */
 const PRODS = [
-  // ── 🍳 食品 ──
-  {id:'bread',   g:'food',e:'🍞',n:'食パン',        r:1,m:['flour','butter','milk']},
-  {id:'onigiri', g:'food',e:'🍙',n:'おにぎり',      r:1,m:['rice','veg']},
-  {id:'cookie',  g:'food',e:'🍪',n:'クッキー',      r:1,m:['flour','butter','sugar']},
-  {id:'pancake', g:'food',e:'🥞',n:'パンケーキ',    r:1,m:['flour','egg','milk','sugar']},
-  {id:'omelet',  g:'food',e:'🍳',n:'オムレツ',      r:1,m:['egg','butter','cheese']},
-  {id:'salad',   g:'food',e:'🥗',n:'サラダ',        r:1,m:['veg','tomato','cheese']},
+  // ══════════════ 🍳 食品 ══════════════
+  // ── 2マス（基本 N）──
+  {id:'tkg',     g:'food',e:'🥣',n:'卵かけご飯',    r:1,m:['rice','egg']},
+  {id:'pretzel', g:'food',e:'🥨',n:'プレッツェル',  r:1,m:['flour','sugar']},
+  {id:'shake',   g:'food',e:'🥤',n:'チョコシェイク',r:1,m:['milk','choco']},
+  {id:'pancake', g:'food',e:'🥞',n:'パンケーキ',    r:1,m:['flour','egg']},
   {id:'fries',   g:'food',e:'🍟',n:'フライドポテト',r:1,m:['veg','butter']},
-  {id:'soup',    g:'food',e:'🍲',n:'スープ',        r:1,m:['veg','tomato','meat']},
-  {id:'pudding', g:'food',e:'🍮',n:'プリン',        r:2,m:['egg','milk','sugar']},
-  {id:'sandwich',g:'food',e:'🥪',n:'サンドイッチ',  r:2,m:['flour','veg','cheese','meat']},
+  {id:'kushi',   g:'food',e:'🍢',n:'串焼き',        r:1,m:['meat','veg']},
+  {id:'sandwich',g:'food',e:'🥪',n:'サンドイッチ',  r:1,m:['flour','cheese']},
+  {id:'croissant',g:'food',e:'🥐',n:'クロワッサン', r:1,m:['flour','butter']},
+  {id:'onigiri', g:'food',e:'🍙',n:'おにぎり',      r:1,m:['rice','veg'],   w:80},  // ★🍚🥬
+  {id:'sushi',   g:'food',e:'🍣',n:'寿司',          r:2,m:['rice','veg'],   w:20},  // ★
+  {id:'burger',  g:'food',e:'🍔',n:'ハンバーガー',  r:1,m:['flour','meat'], w:80},  // ★🌾🥩
+  {id:'taco',    g:'food',e:'🌮',n:'タコス',        r:2,m:['flour','meat'], w:20},  // ★
+  // ── 3マス（基本 R）──
+  {id:'bread',   g:'food',e:'🍞',n:'食パン',        r:2,m:['flour','butter','milk']},
+  {id:'omelet',  g:'food',e:'🍳',n:'オムレツ',      r:2,m:['egg','butter','cheese']},
+  {id:'salad',   g:'food',e:'🥗',n:'サラダ',        r:2,m:['veg','tomato','cheese']},
+  {id:'soup',    g:'food',e:'🍲',n:'スープ',        r:2,m:['veg','tomato','meat']},
   {id:'cupnoodle',g:'food',e:'🍜',n:'カップラーメン',r:2,m:['noodle','meat','veg']},
   {id:'pizza',   g:'food',e:'🍕',n:'ピザ',          r:2,m:['flour','cheese','tomato']},
-  {id:'donut',   g:'food',e:'🍩',n:'ドーナツ',      r:2,m:['flour','sugar','butter']},
-  {id:'croissant',g:'food',e:'🥐',n:'クロワッサン', r:2,m:['flour','butter']},
   {id:'pasta',   g:'food',e:'🍝',n:'パスタ',        r:2,m:['noodle','tomato','cheese']},
   {id:'curry',   g:'food',e:'🍛',n:'カレー',        r:2,m:['rice','meat','veg']},
-  {id:'burger',  g:'food',e:'🍔',n:'ハンバーガー',  r:2,m:['flour','meat','cheese','veg']},
-  {id:'taco',    g:'food',e:'🌮',n:'タコス',        r:2,m:['flour','meat','veg','tomato']},
-  {id:'cake',    g:'food',e:'🍰',n:'ショートケーキ',r:3,m:['flour','egg','sugar','butter','milk']},
-  {id:'icecream',g:'food',e:'🍨',n:'アイスクリーム',r:3,m:['milk','sugar','egg']},
-  {id:'cupcake', g:'food',e:'🧁',n:'カップケーキ',  r:3,m:['flour','egg','sugar','choco']},
-  {id:'sushi',   g:'food',e:'🍣',n:'寿司',          r:3,m:['rice','veg']},
-  {id:'ramen',   g:'food',e:'🍥',n:'特製ラーメン',  r:3,m:['noodle','meat','egg']},
-  {id:'crepe',   g:'food',e:'🫓',n:'クレープ',      r:3,m:['flour','milk','egg','sugar']},
+  {id:'cookie',  g:'food',e:'🍪',n:'クッキー',      r:2,m:['flour','butter','sugar'],w:80}, // ★🌾🧈🍬
+  {id:'donut',   g:'food',e:'🍩',n:'ドーナツ',      r:3,m:['flour','butter','sugar'],w:20}, // ★
+  {id:'pudding', g:'food',e:'🍮',n:'プリン',        r:2,m:['egg','milk','sugar'],   w:80},  // ★🥚🥛🍬
+  {id:'icecream',g:'food',e:'🍨',n:'アイスクリーム',r:3,m:['egg','milk','sugar'],   w:20},  // ★
+  // ── 4マス（基本 SR）──
   {id:'gratin',  g:'food',e:'🥘',n:'グラタン',      r:3,m:['cheese','milk','butter','veg']},
-  {id:'honeytoast',g:'food',e:'🍯',n:'ハニートースト',r:3,m:['flour','butter','sugar','milk']},
-  {id:'deco',    g:'food',e:'🎂',n:'デコレーションケーキ',r:4,m:['flour','egg','sugar','butter','choco']},
-  {id:'parfait', g:'food',e:'🍧',n:'豪華パフェ',    r:4,m:['milk','sugar','choco','egg']},
-  {id:'bento',   g:'food',e:'🍱',n:'特上弁当',      r:4,m:['rice','meat','veg','egg']},
-  {id:'course',  g:'food',e:'🏆',n:'伝説のフルコース',r:5,m:['meat','cheese','tomato','rice','veg']},
-  // ── ⚙️ 機械 ──
+  {id:'bento',   g:'food',e:'🍱',n:'特上弁当',      r:3,m:['rice','meat','veg','egg']},
+  {id:'crepe',   g:'food',e:'🫓',n:'クレープ',      r:3,m:['butter','flour','milk','sugar'],w:80}, // ★🧈🌾🥛🍬
+  {id:'honeytoast',g:'food',e:'🍯',n:'ハニートースト',r:4,m:['butter','flour','milk','sugar'],w:20}, // ★
+  {id:'cupcake', g:'food',e:'🧁',n:'カップケーキ',  r:3,m:['choco','egg','milk','sugar'],w:80},    // ★🍫🥚🥛🍬
+  {id:'parfait', g:'food',e:'🍧',n:'豪華パフェ',    r:4,m:['choco','egg','milk','sugar'],w:20},    // ★
+  // ── 5マス（基本 SSR）──
+  {id:'ramen',   g:'food',e:'🍥',n:'特製ラーメン',  r:4,m:['noodle','meat','egg','veg','cheese']},
+  {id:'fondue',  g:'food',e:'🫕',n:'チーズフォンデュ',r:4,m:['butter','cheese','milk','tomato','veg']},
+  {id:'cake',    g:'food',e:'🍰',n:'ショートケーキ',r:4,m:['butter','egg','flour','milk','sugar'],w:80}, // ★🧈🥚🌾🥛🍬
+  {id:'deco',    g:'food',e:'🎂',n:'デコレーションケーキ',r:5,m:['butter','egg','flour','milk','sugar'],w:20}, // ★
+  {id:'meatpie', g:'food',e:'🥧',n:'ミートパイ',    r:4,m:['cheese','meat','rice','tomato','veg'],w:80},  // ★🧀🥩🍚🍅🥬
+  {id:'course',  g:'food',e:'🏆',n:'伝説のフルコース',r:5,m:['cheese','meat','rice','tomato','veg'],w:20}, // ★
+  // ══════════════ ⚙️ 機械 ══════════════
+  // ── 2マス（基本 N）──
   {id:'bulb',    g:'mech',e:'💡',n:'電球',          r:1,m:['glass','wire']},
-  {id:'clock',   g:'mech',e:'⏰',n:'置き時計',      r:1,m:['iron','batt','glass']},
-  {id:'fan',     g:'mech',e:'🌀',n:'扇風機',        r:1,m:['iron','wire','rubber']},
-  {id:'radio',   g:'mech',e:'📻',n:'ラジオ',        r:1,m:['semic','wire','magnet']},
-  {id:'light',   g:'mech',e:'🔦',n:'懐中電灯',      r:1,m:['batt','glass','alum']},
+  {id:'speaker', g:'mech',e:'🔊',n:'スピーカー',    r:1,m:['magnet','wire']},
+  {id:'driver',  g:'mech',e:'🪛',n:'ドライバー',    r:1,m:['iron','alum']},
+  {id:'mirror',  g:'mech',e:'🪞',n:'手鏡',          r:1,m:['glass','alum']},
+  {id:'goggle',  g:'mech',e:'🥽',n:'ゴーグル',      r:1,m:['glass','rubber']},
+  {id:'powbank', g:'mech',e:'🪫',n:'モバイルバッテリー',r:1,m:['batt','wire']},
+  {id:'compass', g:'mech',e:'🧭',n:'方位磁針',      r:1,m:['iron','magnet']},
+  {id:'kickboard',g:'mech',e:'🛴',n:'キックボード', r:1,m:['iron','rubber']},
+  {id:'micro',   g:'mech',e:'🔬',n:'顕微鏡',        r:1,m:['glass','lens'],w:80},  // ★🪟🔍
+  {id:'scope',   g:'mech',e:'🔭',n:'望遠鏡',        r:2,m:['glass','lens'],w:20},  // ★
+  {id:'mouse',   g:'mech',e:'🖱️',n:'マウス',        r:1,m:['semic','wire'],w:80},  // ★💾🔌
+  {id:'keyboard',g:'mech',e:'⌨️',n:'キーボード',    r:2,m:['semic','wire'],w:20},  // ★
+  // ── 3マス（基本 R）──
+  {id:'clock',   g:'mech',e:'⏰',n:'置き時計',      r:2,m:['iron','batt','glass']},
+  {id:'fan',     g:'mech',e:'🌀',n:'扇風機',        r:2,m:['iron','wire','rubber']},
+  {id:'light',   g:'mech',e:'🔦',n:'懐中電灯',      r:2,m:['batt','glass','alum']},
+  {id:'console', g:'mech',e:'🎮',n:'ゲーム機',      r:2,m:['semic','batt','wire']},
   {id:'camera',  g:'mech',e:'📷',n:'カメラ',        r:2,m:['lens','glass','semic']},
-  {id:'headphone',g:'mech',e:'🎧',n:'ヘッドホン',   r:2,m:['magnet','wire','rubber']},
   {id:'printer', g:'mech',e:'🖨️',n:'プリンター',    r:2,m:['iron','semic','wire']},
   {id:'tv',      g:'mech',e:'📺',n:'テレビ',        r:2,m:['glass','semic','wire']},
-  {id:'watch',   g:'mech',e:'⌚',n:'スマートウォッチ',r:2,m:['semic','glass','rubber']},
-  {id:'pc',      g:'mech',e:'💻',n:'パソコン',      r:3,m:['semic','glass','iron','wire']},
-  {id:'phone',   g:'mech',e:'📱',n:'スマホ',        r:3,m:['semic','glass','batt']},
-  {id:'bike',    g:'mech',e:'🏍️',n:'バイク',        r:3,m:['iron','rubber','oil']},
-  {id:'car',     g:'mech',e:'🚗',n:'車',            r:4,m:['iron','rubber','glass','oil']},
-  {id:'train',   g:'mech',e:'🚃',n:'電車',          r:4,m:['iron','alum','magnet','wire']},
-  {id:'plane',   g:'mech',e:'✈️',n:'飛行機',        r:4,m:['alum','oil','glass','iron']},
-  {id:'heli',    g:'mech',e:'🚁',n:'ヘリコプター',  r:4,m:['alum','oil','iron','rubber']},
-  {id:'robot',   g:'mech',e:'🤖',n:'ロボット',      r:5,m:['semic','iron','magnet','batt','wire']},
-  {id:'rocket',  g:'mech',e:'🚀',n:'ロケット',      r:5,m:['alum','oil','semic','iron','glass']},
-  {id:'satellite',g:'mech',e:'🛰️',n:'人工衛星',     r:5,m:['alum','semic','lens','magnet']},
-  // ── 🧺 生活品 ──
-  {id:'tshirt',  g:'life',e:'👕',n:'Tシャツ',       r:1,m:['cloth','cotton','thread']},
-  {id:'pants',   g:'life',e:'👖',n:'ズボン',        r:1,m:['cloth','thread','leather']},
-  {id:'socks',   g:'life',e:'🧦',n:'靴下',          r:1,m:['cotton','thread']},
+  {id:'bike',    g:'mech',e:'🏍️',n:'バイク',        r:2,m:['iron','rubber','oil']},
+  {id:'phone',   g:'mech',e:'📱',n:'スマホ',        r:2,m:['batt','glass','semic'],w:80},  // ★🔋🪟💾
+  {id:'watch',   g:'mech',e:'⌚',n:'スマートウォッチ',r:3,m:['batt','glass','semic'],w:20},  // ★
+  {id:'radio',   g:'mech',e:'📻',n:'ラジオ',        r:2,m:['magnet','semic','wire'],w:80}, // ★🧲💾🔌
+  {id:'headphone',g:'mech',e:'🎧',n:'ヘッドホン',   r:3,m:['magnet','semic','wire'],w:20}, // ★
+  // ── 4マス（基本 SR）──
+  {id:'car',     g:'mech',e:'🚗',n:'車',            r:3,m:['iron','rubber','glass','oil']},
+  {id:'train',   g:'mech',e:'🚃',n:'電車',          r:3,m:['iron','alum','magnet','wire']},
+  {id:'heli',    g:'mech',e:'🚁',n:'ヘリコプター',  r:3,m:['alum','iron','oil','rubber'],w:80},  // ★🥫🔩🛢️🛞
+  {id:'plane',   g:'mech',e:'✈️',n:'飛行機',        r:4,m:['alum','iron','oil','rubber'],w:20},  // ★
+  {id:'pc',      g:'mech',e:'💻',n:'パソコン',      r:3,m:['alum','glass','magnet','semic'],w:80}, // ★🥫🪟🧲💾
+  {id:'satellite',g:'mech',e:'🛰️',n:'人工衛星',     r:4,m:['alum','glass','magnet','semic'],w:20}, // ★
+  // ── 5マス（基本 SSR）──
+  {id:'steamloco',g:'mech',e:'🚂',n:'蒸気機関車',   r:4,m:['iron','oil','wire','rubber','magnet']},
+  {id:'crane',   g:'mech',e:'🏗️',n:'クレーン車',    r:4,m:['iron','alum','oil','rubber','wire']},
+  {id:'exosuit', g:'mech',e:'🦾',n:'パワードスーツ',r:4,m:['alum','batt','iron','magnet','semic'],w:80}, // ★🥫🔋🔩🧲💾
+  {id:'robot',   g:'mech',e:'🤖',n:'ロボット',      r:5,m:['alum','batt','iron','magnet','semic'],w:20}, // ★
+  {id:'ship',    g:'mech',e:'🚢',n:'客船',          r:4,m:['alum','glass','iron','oil','semic'],w:80},   // ★🥫🪟🔩🛢️💾
+  {id:'rocket',  g:'mech',e:'🚀',n:'ロケット',      r:5,m:['alum','glass','iron','oil','semic'],w:20},   // ★
+  // ══════════════ 🧺 生活品 ══════════════
+  // ── 2マス（基本 N）──
   {id:'brush',   g:'life',e:'🪥',n:'歯ブラシ',      r:1,m:['plastic','thread']},
   {id:'soap',    g:'life',e:'🧼',n:'せっけん',      r:1,m:['plastic','dye']},
   {id:'note',    g:'life',e:'📓',n:'ノート',        r:1,m:['paper','thread']},
   {id:'basket',  g:'life',e:'🧺',n:'洗濯かご',      r:1,m:['plastic','bamboo']},
+  {id:'scarf',   g:'life',e:'🧣',n:'マフラー',      r:1,m:['cloth','thread']},
+  {id:'pencil',  g:'life',e:'✏️',n:'えんぴつ',      r:1,m:['wood','dye']},
+  {id:'sandal',  g:'life',e:'🩴',n:'サンダル',      r:1,m:['plastic','leather']},
+  {id:'kite',    g:'life',e:'🪁',n:'凧',            r:1,m:['bamboo','paper']},
+  {id:'socks',   g:'life',e:'🧦',n:'靴下',          r:1,m:['cotton','thread'],w:80}, // ★☁️🪢
+  {id:'gloves',  g:'life',e:'🧤',n:'手袋',          r:2,m:['cotton','thread'],w:20}, // ★
+  {id:'broom',   g:'life',e:'🧹',n:'ほうき',        r:1,m:['bamboo','thread'],w:80}, // ★🎍🪢
+  {id:'strawhat',g:'life',e:'👒',n:'麦わら帽子',    r:2,m:['bamboo','thread'],w:20}, // ★
+  // ── 3マス（基本 R）──
+  {id:'tshirt',  g:'life',e:'👕',n:'Tシャツ',       r:2,m:['cloth','cotton','thread']},
+  {id:'sponge',  g:'life',e:'🧽',n:'スポンジ',      r:2,m:['cotton','plastic','dye']},
+  {id:'case',    g:'life',e:'💼',n:'ブリーフケース',r:2,m:['leather','thread','dye']},
   {id:'cap',     g:'life',e:'🧢',n:'キャップ',      r:2,m:['cloth','cotton','dye']},
-  {id:'carpet',  g:'life',e:'🧶',n:'カーペット',    r:2,m:['cloth','cotton','dye','thread']},
   {id:'umbrella',g:'life',e:'☂️',n:'傘',            r:2,m:['cloth','bamboo','plastic']},
-  {id:'chair',   g:'life',e:'🪑',n:'イス',          r:2,m:['wood','cloth','thread']},
-  {id:'shoes',   g:'life',e:'👟',n:'スニーカー',    r:2,m:['leather','cloth','thread']},
-  {id:'bag',     g:'life',e:'🎒',n:'リュック',      r:2,m:['cloth','leather','thread']},
+  {id:'shoes',   g:'life',e:'👟',n:'スニーカー',    r:2,m:['cotton','leather','thread']},
   {id:'futon',   g:'life',e:'🛌',n:'布団',          r:2,m:['cloth','cotton','feather']},
-  {id:'teddy',   g:'life',e:'🧸',n:'ぬいぐるみ',    r:3,m:['cloth','cotton','thread','feather']},
-  {id:'sofa',    g:'life',e:'🛋️',n:'ソファ',        r:3,m:['wood','leather','cotton','cloth']},
-  {id:'bed',     g:'life',e:'🛏️',n:'ベッド',        r:3,m:['wood','cloth','cotton']},
-  {id:'frame',   g:'life',e:'🖼️',n:'額縁',          r:3,m:['wood','paper','dye']},
-  {id:'suit',    g:'life',e:'👔',n:'スーツ',        r:4,m:['cloth','thread','leather','dye']},
-  {id:'kimono',  g:'life',e:'👘',n:'着物',          r:4,m:['cloth','thread','dye','cotton']},
-  {id:'chest',   g:'life',e:'🗄️',n:'たんす',        r:4,m:['wood','bamboo','paper','dye']},
-  {id:'magic',   g:'life',e:'🪄',n:'魔法の絨毯',    r:5,m:['cloth','thread','dye','feather','cotton']},
+  {id:'frame',   g:'life',e:'🖼️',n:'額縁',          r:2,m:['wood','paper','dye']},
+  {id:'pants',   g:'life',e:'👖',n:'ズボン',        r:2,m:['cloth','leather','thread'],w:80}, // ★🧵👝🪢
+  {id:'bag',     g:'life',e:'🎒',n:'リュック',      r:3,m:['cloth','leather','thread'],w:20}, // ★
+  {id:'chair',   g:'life',e:'🪑',n:'イス',          r:2,m:['cloth','cotton','wood'],  w:80}, // ★🧵☁️🪵
+  {id:'bed',     g:'life',e:'🛏️',n:'ベッド',        r:3,m:['cloth','cotton','wood'],  w:20}, // ★
+  // ── 4マス（基本 SR）──
+  {id:'suit',    g:'life',e:'👔',n:'スーツ',        r:3,m:['cloth','thread','leather','dye']},
+  {id:'chest',   g:'life',e:'🗄️',n:'たんす',        r:3,m:['wood','bamboo','paper','dye']},
+  {id:'carpet',  g:'life',e:'🧶',n:'カーペット',    r:3,m:['cloth','cotton','dye','thread'],w:80},    // ★🧵☁️🎨🪢
+  {id:'kimono',  g:'life',e:'👘',n:'着物',          r:4,m:['cloth','cotton','dye','thread'],w:20},    // ★
+  {id:'teddy',   g:'life',e:'🧸',n:'ぬいぐるみ',    r:3,m:['cloth','cotton','feather','leather'],w:80}, // ★🧵☁️🪶👝
+  {id:'sofa',    g:'life',e:'🛋️',n:'ソファ',        r:4,m:['cloth','cotton','feather','leather'],w:20}, // ★
+  // ── 5マス（基本 SSR）──
+  {id:'tent',    g:'life',e:'⛺',n:'テント',        r:4,m:['cloth','thread','wood','plastic','dye']},
+  {id:'dress',   g:'life',e:'👗',n:'ドレス',        r:4,m:['cloth','cotton','dye','leather','thread']},
+  {id:'coat',    g:'life',e:'🧥',n:'高級コート',    r:4,m:['cloth','cotton','dye','feather','thread'],w:80}, // ★🧵☁️🎨🪶🪢
+  {id:'magic',   g:'life',e:'🪄',n:'魔法の絨毯',    r:5,m:['cloth','cotton','dye','feather','thread'],w:20}, // ★
+  {id:'doll',    g:'life',e:'🪆',n:'からくり人形',  r:4,m:['cloth','dye','paper','thread','wood'],w:80},     // ★🧵🎨📄🪢🪵
+  {id:'hina',    g:'life',e:'🎎',n:'ひな人形',      r:5,m:['cloth','dye','paper','thread','wood'],w:20},     // ★
   // ── ✨ シークレット（ジャンルを跨いだ特定の組み合わせでのみ出る）──
   {id:'ghost',   g:SECRET_G,e:'👻',n:'おばけ',      r:3,m:[]},
   {id:'cat',     g:SECRET_G,e:'🐈',n:'ふしぎな猫',  r:4,m:[]},
@@ -998,11 +1159,13 @@ const PROD = Object.fromEntries(PRODS.map(p=>[p.id,p]));
    「違う組み合わせから同じ製品が出る」ことが構造的に起きない（製品 → 組み合わせ は1対1）。
    図鑑に出す材料アイコンも同じ m を見ているので、表示とレシピは必ず一致する。
    逆向き（1つの組み合わせから複数の製品）は残してある。同じ m を持つ製品どうしは
-   レア度の重み（RAR[r].w）で引き分けるので、同じ組み合わせを何度も試して上位レア度を狙う遊びになる。 */
+   重みで引き分けるので、同じ組み合わせを何度も試して上位レア度を狙う遊びになる。
+   重みは製品の w（%で書く。ガチャ枠は 80/20）。w が無い製品はレア度の既定重み（RAR[r].w）。 */
 const recipeKeyOf = (p)=> [...new Set(p.m||[])].sort().join(',');
 const RECIPES = PRODS.reduce((r,p)=>{
   if(p.g===SECRET_G) return r;                  // シークレットはジャンル跨ぎ限定なので SECRETS 側
-  const k=recipeKeyOf(p); (r[k]=r[k]||[]).push(p.id); return r;
+  const k=recipeKeyOf(p);
+  (r[k]=r[k]||[]).push(p.w!=null ? [p.id,p.w] : p.id); return r;
 }, {});
 
 /* ジャンルを跨いだ組み合わせのときだけ引かれる隠しレシピ。
@@ -1374,7 +1537,7 @@ function openCraft(){
     },
     onRender:bindMachRow });
 }
-document.getElementById('craftBtn').addEventListener('click',()=>openCraft());
+// 導線は上部の製造ボード(#craft)だけ。☰メニューからは外した（同じ物への入口が2つある必要はない）
 document.getElementById('craft').addEventListener('click',()=>openCraft());
 
 /* --- 原材料の選択（ピッカーは machRow の中にある。ここはセットの実体だけ） --- */
@@ -1876,7 +2039,7 @@ function openAgents(){
         toast(`${pj||'(無名)'} → ${skinName(el.dataset.skin)}`); d.refresh(); });
     } });
 }
-document.getElementById('agentsBtn').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openAgents(); });
+// 導線は左下の稼働/休憩HUDだけ。☰メニューの「仲間」節は外した（同じ物への入口が2つある必要はない）
 document.getElementById('hud').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openAgents(); });
 document.getElementById('hud').title='クリックでエージェント一覧';
 
@@ -2137,7 +2300,7 @@ window.__openMachine=(id)=>{
     // パネルが開いたままだと床をクリックできないので必ず閉じる。保存もシーン側(__layoutChanged)が行う。
     p.querySelectorAll('[data-move]').forEach(el=>el.onclick=()=>{
       if(!F.beginMoveMachine(id)){ toast('移動できません'); return; }
-      closeOverlay(); syncEditFab(); });   // 移動は必要なら編集モードをONにするので表示を合わせる
+      closeOverlay(); syncEditMode(); });   // 移動は必要なら編集モードをONにするので表示を合わせる
     // 撤去はドラッグ&ドロップ(🗑ゴミ箱)に一本化したのでボタンは持たない
   } });
   return dlg;
@@ -2154,16 +2317,18 @@ function slideGame(){
   const tick=()=>{ g.scale.refresh(); if(performance.now()-t0<620) requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 }
-/* 編集モードのON/OFF表示をシーンに合わせる。Eキーや「✥移動」でシーン側から切り替わることがある */
-function syncEditFab(){ const on=!!(window.__scene&&window.__scene.editMode), fab=document.getElementById('editFab');
-  if(fab.classList.contains('on')===on) return;              // 変化したときだけ描き直す
-  fab.classList.toggle('on',on); paletteEl.classList.toggle('show',on);
+/* 編集モードのON/OFF表示をシーンに合わせる。Eキーや「✥移動」でシーン側から切り替わることがある。
+   入口は ☰メニューの「🔧 レイアウト編集」だけ（盤面に常駐するボタンは置かない）ので、
+   ONかどうかはボタンの見た目ではなくこの変数で覚える。 */
+let _editOn=false;
+function syncEditMode(){ const on=!!(window.__scene&&window.__scene.editMode);
+  if(_editOn===on) return;                                   // 変化したときだけ描き直す
+  _editOn=on; paletteEl.classList.toggle('show',on);
   wrapEl.classList.toggle('editing',on); slideGame();
   if(on) renderPalette(); else { editSel=null; window.__editSel=null; } }
 function toggleEditMode(){ if(!window.__scene){ toast('準備中…'); return; }
-  const on=window.__scene.toggleEdit(); syncEditFab();
+  const on=window.__scene.toggleEdit(); syncEditMode();
   toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 設置済みはドラッグで移動・🗑へドラッグで撤去':'編集モードを終了'); }
-document.getElementById('editFab').addEventListener('click',toggleEditMode);
 document.getElementById('editMenuBtn').addEventListener('click',toggleEditMode);
 loadGame().then(async ()=>{
   G.lastT=Date.now();
@@ -2171,7 +2336,7 @@ loadGame().then(async ()=>{
   if(NET.multi){ const mi=document.getElementById('metricsMi'); if(mi) mi.remove(); }
   await waitScene(); applyOwned(); updateBadge();
   if(!NET.multi) setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
-  setInterval(syncEditFab, 1000); syncEditFab();   // Eキー・移動モードでの編集ON/OFFに追従
+  setInterval(syncEditMode, 1000); syncEditMode();   // Eキー・移動モードでの編集ON/OFFに追従
   // 製造: 原材料バッジを反映してからWPの取得を開始（3秒ごと = OTelのログ送信間隔に合わせる）
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
   updateDoneBtn(); renderCraft(); pollWp();
@@ -2192,7 +2357,7 @@ loadGame().then(async ()=>{
     for(const t of Object.keys(DECO)) G.stock.deco[t]=Math.max(3,G.stock.deco[t]||0);
     saveGame(); updateBadge(); toast('✅ 全背景・全アイテムを解放しました（在庫）');
   }
-  if(q.get('edit')){ paletteEl.classList.add('show'); document.getElementById('editFab').classList.add('on');
+  if(q.get('edit')){ paletteEl.classList.add('show'); _editOn=true;
     wrapEl.classList.add('editing'); slideGame(); renderPalette(); }
   if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop'));
 });
