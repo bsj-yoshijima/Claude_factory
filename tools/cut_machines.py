@@ -82,6 +82,8 @@ SPOT_TEST = {
     'cabin':      lambda p: p[3] > 128 and max(p[:3]) < 45,
     'dino':       lambda p: p[3] > 128 and max(p[:3]) < 45,
 }
+# 1マスモジュールのホッパーの口の判定。既定は「暗い」。テーマ側で必要なら上書きする。
+MODULE_TEST = {}
 SPOT_MIN_AREA = 120
 SPOT_FILL = 0.40            # 塊が外接矩形をどれだけ埋めていれば「面」と見なすか(輪郭線を落とす)
 SPOT_ASPECT = (1.05, 4.6)   # 2:1アイソメなので投入口は横長。縦長の塊は投入口ではない
@@ -657,7 +659,9 @@ def module_fit(theme, sp, W, H, GU, GV, iso, draw=1.0):
     sc = tile_w / dw
     ow, oh = max(1, round(sp.width * sc)), max(1, round(sp.height * sc))
     mod = sp.resize((ow, oh), Image.LANCZOS)
-    hc = hopper_center(mod, SPOT_TEST.get(theme) or (lambda p: p[3] > 128 and max(p[:3]) < 45))
+    # モジュールの仕様で「口は暗く空」と決めてあるので、テーマ別の旧判定は使わず暗さで拾う。
+    # (旧判定はテーマごとに面一プレートの色などを見ているので、ホッパーには当たらない)
+    hc = hopper_center(mod, MODULE_TEST.get(theme, lambda p: p[3] > 128 and max(p[:3]) < 55))
     if hc is None:
         print('   !! ホッパーの口を検出できないのでスキップ'); return None
     print(f'   モジュール {ow}x{oh}  1マス送り ({step_x:.3f}, {step_y:.3f})px  口の中心 ({hc[0]:.1f}, {hc[1]:.1f})')
