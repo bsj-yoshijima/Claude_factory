@@ -18,8 +18,12 @@ ws.onmessage=e=>{const m=JSON.parse(e.data); if(m.id&&pend.has(m.id)){pend.get(m
   if(m.method==='Runtime.exceptionThrown'){const d=m.params.exceptionDetails; errs.push((d.exception&&d.exception.description)||d.text);}};
 await new Promise(r=>ws.onopen=r);
 await send('Runtime.enable'); await send('Page.enable');
-await send('Page.navigate',{url:'http://localhost:4321/'}); await sleep(6000);
+await send('Page.navigate',{url:'http://localhost:4321/'});
 const ev=async x=>{const r=await send('Runtime.evaluate',{expression:x,returnByValue:true}); return r.result?.value ?? r.exceptionDetails?.text;};
+// 固定待ちにすると、プロファイルが冷えているときに間に合わずテスト全体が崩れる。
+// Phaser のシーンが立ち上がる（= window.__scene が入る）まで待つ。
+for(let i=0;i<80;i++){ if(await ev('typeof window.__scene')==='object') break; await sleep(250); }
+await sleep(800);   // create() 直後の初回描画ぶん
 // 実マウス。DOM要素が mousemove を吸っていないか（Phaserにポインタが届くか）を見るのに使う
 const mouse=(type,x,y)=>send('Input.dispatchMouseEvent',{type,x,y,button:'none',buttons:0});
 let fail=0; const ok=(c,m)=>{console.log((c?'  ok  ':'FAIL  ')+m); if(!c)fail++;};
