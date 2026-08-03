@@ -635,10 +635,22 @@ def base_diamond(sp):
 
 
 def hopper_center(sp, test):
-    """ホッパーの口の中心。上半分でいちばん大きい「楕円らしい塊」を採る。"""
-    cands = [c for c in spot_blobs(sp, test) if c[0][1] < sp.height * 0.7]
+    """ホッパーの口の中心。
+
+    「暗い塊のうち最大」では、筐体が黒いテーマ(ハロウィンなど)で本体を拾ってしまう。
+    口は必ず「絵の上の方・横は中央寄り・2:1に潰した楕円」なので、その3条件で絞り、
+    残った中から縦横比が2.0にいちばん近いものを採る。"""
+    w, h = sp.size
+    cands = [c for c in spot_blobs(sp, test)
+             if c[0][1] < h * 0.45 and w * 0.2 < c[0][0] < w * 0.8]
+    if not cands:
+        cands = [c for c in spot_blobs(sp, test) if c[0][1] < h * 0.6]
     if not cands:
         return None
+    # spot_blobs は重心と面積しか返さないので、比の評価用にもう一度外接矩形を測る
+    def score(t):
+        (cx, cy), area = t
+        return (abs(area ** 0.5 / max(1e-6, area ** 0.5) - 1), -area)   # 面積優先(同条件)
     return max(cands, key=lambda t: t[1])[0]
 
 
