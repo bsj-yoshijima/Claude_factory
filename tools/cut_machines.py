@@ -45,7 +45,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SHEETS = os.path.join(ROOT, 'assets', 'mach-sheets')
 OUT = os.path.join(ROOT, 'assets')
 SIZES = [2, 3, 4, 5]          # 幅の小さい順に割り当てる
-ERODE = 1                     # マゼンタのハロー除去(alpha収縮 px)
+ERODE = 2                     # マゼンタのハロー除去(alpha収縮 px)。帆綱のような細い線の縁に残る
 MIN_AREA = 2000               # これ未満の連結成分はゴミとして捨てる
 
 # 投入口(素材を置く場所)の色。テーマごとに違うので判定を持たせる。
@@ -55,8 +55,15 @@ SPOT_TEST = {
     'scifi':     lambda p: p[3] > 128 and max(p[:3]) < 70,                                                    # 吸気リングの暗い口
     'egypt':     lambda p: p[3] > 128 and 190 < p[0] < 232 and 118 < p[1] < 158 and p[2] < 45,                 # 漏斗の内側(琥珀)
     'western':   lambda p: p[3] > 128 and max(p[:3]) < 45,                                                    # 漏斗の黒い口(影と繋がるので暗めに)
+    'onsen':     lambda p: p[3] > 128 and p[0] > 170 and p[2] > p[0] + 8,                                      # 乳白色の湯(青みがある)
+    'japan':     lambda p: p[3] > 128 and 45 < max(p[:3]) < 100 and max(p[:3]) - min(p[:3]) < 30,              # 黒鉄プレート(灰)
+    'pirate':    lambda p: p[3] > 128 and max(p[:3]) < 28,                                                    # 真鍮輪の黒い内側
+    'steampunk': lambda p: p[3] > 128 and max(p[:3]) < 28,                                                    # 真鍮襟の黒い内側
+    'dwarf':     lambda p: p[3] > 128 and max(p[:3]) < 45,                                                    # 鍛鉄襟の暗い内側
 }
 SPOT_MIN_AREA = 120
+SPOT_FILL = 0.40            # 塊が外接矩形をどれだけ埋めていれば「面」と見なすか(輪郭線を落とす)
+SPOT_ASPECT = (1.05, 4.6)   # 2:1アイソメなので投入口は横長。縦長の塊は投入口ではない
 
 # 投入口は必ず筐体の上側にある。下部の影を誤検出しないよう、bboxの上から何割までを見るか。
 SPOT_TOP = {'western': 0.62}
@@ -107,20 +114,33 @@ def key_out(im):
             nx, ny = x + dx, y + dy
             if 0 <= nx < w and 0 <= ny < h and not seen[nx][ny] and is_magenta(px[nx, ny]):
                 seen[nx][ny] = True; q.append((nx, ny))
-    # ハロー除去: 透明に隣接する半端なマゼンタ寄りピクセルを削る
+    # 縁から届かない「囲まれたマゼンタ」(帆と帆柱の隙間など)も抜く。
+    # プロンプトでマゼンタは背景専用と縛っているので、意匠の色と衝突しない。
+    for x in range(w):
+        for y in range(h):
+            if px[x, y][3] and is_magenta(px[x, y]):
+                px[x, y] = (0, 0, 0, 0)
+    # フリンジ除去: 背景に接した「マゼンタ寄り」の画素を、隣の正しい色で塗り替える。
+    # 消すだけだと帆綱のような細い線がピンクのまま残る/穴になるので、色を借りて直す。
+    # 内部の紫の意匠には触らない(透明に接している画素だけが対象)。
+    def fringe(p):
+        r, g, b = p[0], p[1], p[2]
+        return r > 120 and b > 120 and g < 130 and (r - g) > 35 and (b - g) > 35
     for _ in range(ERODE):
-        drop = []
+        fix = []
         for x in range(w):
             for y in range(h):
-                if px[x, y][3] == 0:
+                if px[x, y][3] == 0 or not fringe(px[x, y]):
                     continue
-                if any(0 <= x + dx < w and 0 <= y + dy < h and px[x + dx, y + dy][3] == 0
-                       for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))):
-                    r, g, b, _a = px[x, y]
-                    if r > 120 and b > 120 and g < 130 and (r - g) > 35 and (b - g) > 35:
-                        drop.append((x, y))
-        for x, y in drop:
-            px[x, y] = (0, 0, 0, 0)
+                near = [(x + dx, y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+                if not any(0 <= a < w and 0 <= b2 < h and px[a, b2][3] == 0 for a, b2 in near):
+                    continue                                   # 背景に接していない = 意匠の紫
+                good = [px[a, b2] for a, b2 in near
+                        if 0 <= a < w and 0 <= b2 < h and px[a, b2][3] and not fringe(px[a, b2])]
+                fix.append((x, y, tuple(sum(c[i] for c in good) // len(good) for i in range(3)) + (255,)
+                            if good else (0, 0, 0, 0)))
+        for x, y, v in fix:
+            px[x, y] = v
     return im
 
 
@@ -164,6 +184,24 @@ def target_height(n, W, H, GU, GV, iso, IN):
 MAX_WARP = 0.15   # 縦の歪みがこれを超えたら警告(背の高い意匠を潰している可能性)
 
 
+TAIL = 0.25   # 行の幅が最大幅のこの割合を下回るあいだ、上下から削る
+
+
+def trim_tails(pts):
+    """塊の上下から「細い尻尾」を削る。露天風呂の湯気のように投入口とつながって伸びる装飾が
+    重心を引っぱるのを防ぐ。楕円そのものは上下端が数行減るだけで、重心は動かない。"""
+    rows = {}
+    for x, y in pts:
+        rows.setdefault(y, []).append(x)
+    ys = sorted(rows)
+    wide = max(len(rows[y]) for y in ys) * TAIL
+    lo, hi = 0, len(ys) - 1
+    while lo < hi and len(rows[ys[lo]]) < wide: lo += 1
+    while hi > lo and len(rows[ys[hi]]) < wide: hi -= 1
+    keep = set(ys[lo:hi + 1])
+    return [p for p in pts if p[1] in keep]
+
+
 def spot_blobs(sp, test):
     """投入口の候補を連結成分で拾う。((cx,cy), area) のリスト"""
     w, h = sp.size
@@ -181,18 +219,31 @@ def spot_blobs(sp, test):
                     nx, ny = cx + dx, cy + dy
                     if 0 <= nx < w and 0 <= ny < h and not seen[nx][ny] and test(px[nx, ny]):
                         seen[nx][ny] = True; q.append((nx, ny))
-            if len(pts) >= SPOT_MIN_AREA:
-                xs = [q0[0] for q0 in pts]; ys = [q0[1] for q0 in pts]
-                out.append(((sum(xs) / len(xs), sum(ys) / len(ys)), len(pts)))
+            if len(pts) < SPOT_MIN_AREA:
+                continue
+            pts = trim_tails(pts)
+            if len(pts) < SPOT_MIN_AREA:
+                continue
+            xs = [q0[0] for q0 in pts]; ys = [q0[1] for q0 in pts]
+            bw, bh = max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
+            # 投入口は「2:1に潰した円」= 外接矩形の π/4≈0.79 を埋める横長の塊。
+            # 色だけで拾うと黒い輪郭線が全部つながった巨大な成分が混ざるので、形でも落とす。
+            if len(pts) < SPOT_FILL * bw * bh:
+                continue
+            if not (SPOT_ASPECT[0] <= bw / bh <= SPOT_ASPECT[1]):
+                continue
+            out.append(((sum(xs) / len(xs), sum(ys) / len(ys)), len(pts)))
     return out
 
 
-def pick_spots(cands, n):
-    """候補から「等間隔・一直線・同じ大きさ」に最も近い n 個を選ぶ(装飾の誤検出を落とす)"""
+def pick_spots(cands, n, score=None):
+    """候補から「等間隔・一直線・同じ大きさ」に最も近い n 個を選ぶ(装飾の誤検出を落とす)。
+    score=True なら (選んだ組, 崩れの度合い) を返す。"""
     if len(cands) < n:
-        return None
+        return (None, 1e18) if score else None
     if n == 1:
-        return [max(cands, key=lambda t: t[1])]
+        top = [max(cands, key=lambda t: t[1])]
+        return (top, 0.0) if score else top
     best, bv = None, 1e18
     for sub in itertools.combinations(cands, n):
         sub = sorted(sub, key=lambda t: t[0][0])
@@ -211,7 +262,20 @@ def pick_spots(cands, n):
         v = even * 3 + line * 3 + size
         if v < bv:
             bv, best = v, sub
-    return best
+    return best if score is None else (best, bv)
+
+
+GOOD_SPOTS = 0.35   # 「等間隔・一直線・同サイズ」の崩れがこの値未満なら投入口の並びと認める
+
+
+def best_spots(cands, hint):
+    """投入口が何個あるかを絵から決める。生成AIは台ごとに個数を1つ間違えることがあるので、
+    呼び名(hint)を鵜呑みにせず、6個から2個まで試して「並びとして成立する最大個数」を採る。"""
+    for k in range(min(6, len(cands)), 1, -1):
+        got = pick_spots(cands, k, score=True)
+        if got and got[0] and got[1] < GOOD_SPOTS:
+            return list(got[0])
+    return pick_spots(cands, hint)
 
 
 # ---- ここから「2マス機からNマス機を合成する」ための道具 ----------------------------
@@ -344,24 +408,28 @@ ANGLE_TOL = 0.25   # ベイの傾き(|dy/dx|)が多数派からこの割合を�
 
 
 def pick_source(found):
-    """合成元の台を選ぶ。基本は2マス機だが、そこだけ絵のアイソメ角が多数派から外れていたら
-    (生成AIがたまに1台だけ違う角度で描く)、角度が多数派に近い台に切り替える。"""
-    ang = {}
-    for i, (n, _sp, spots) in enumerate(found):
+    """合成元の台を選ぶ。(index, その絵が持つベイ数) を返す。無理なら None。
+
+    「幅が最小 = 2マス機」とは限らない。生成AIは投入口の数を1つ間違えることがあるので、
+    台の呼び名ではなく **実際に検出できた投入口の数** をベイ数として扱う。
+    そのうえで、絵のアイソメ角が多数派から外れている台(たまに1台だけ違う角度で描かれる)は
+    合成元から外し、残りのうちベイ数が少ない台を選ぶ(合成は伸ばす向きのほうが素直)。"""
+    cand = {}
+    for i, (_n, _sp, spots) in enumerate(found):
         if not spots or len(spots) < 2:
             continue
         cs = sorted([s[0] for s in spots], key=lambda c: c[0])
         dx = cs[-1][0] - cs[0][0]
         if dx > 4:
-            ang[i] = abs(cs[-1][1] - cs[0][1]) / dx
-    if 0 not in ang or len(found[0][2]) != 2:
+            cand[i] = (abs(cs[-1][1] - cs[0][1]) / dx, len(spots))
+    if not cand:
         return None
-    if len(ang) < 3:
-        return 0
-    med = sorted(ang.values())[len(ang) // 2]
-    if med > 0 and abs(ang[0] - med) / med <= ANGLE_TOL:
-        return 0
-    return min(ang, key=lambda i: abs(ang[i] - med))
+    angs = sorted(a for a, _m in cand.values())
+    med = angs[len(angs) // 2]
+    ok = [i for i, (a, _m) in cand.items()
+          if med > 0 and abs(a - med) / med <= ANGLE_TOL] or list(cand)
+    i = min(ok, key=lambda k: (cand[k][1], k))
+    return i, cand[i][1]
 
 
 def synth_fit(theme, found, W, H, GU, GV, iso):
@@ -371,9 +439,11 @@ def synth_fit(theme, found, W, H, GU, GV, iso):
     src = pick_source(found)
     if src is None:
         return None
-    m, sp, spots = found[src]
-    if m != 2:
-        print(f'   ※2マス機だけ絵の角度が浮いていたので、{m}マス機を合成元にした')
+    idx, m = src
+    nominal, sp, spots = found[idx]
+    if idx != 0 or m != nominal:
+        print(f'   ※合成元は「{nominal}マス機」の絵。実際の投入口は {m} 個なので '
+              f'{m}ベイぶんの絵として扱う')
     cs = sorted([s[0] for s in spots], key=lambda c: c[0])
     cs = [cs[0], cs[1]]                                     # 隣り合う2つの投入口 = 1ベイ
     if cs[1][1] < cs[0][1]:                                 # 長軸が右斜め上 → 左右反転
@@ -438,7 +508,7 @@ def main():
             top = SPOT_TOP.get(theme)
             if top:
                 cands = [c for c in cands if c[0][1] < sp.height * top]
-            spots = pick_spots(cands, n) if test else None
+            spots = best_spots(cands, n) if test and cands else None
             found.append((n, sp, spots))
         measured = [abs((s[-1][0][0] - s[0][0][0]) / (n - 1)) for n, _, s in found if s and n > 1]
         if len(measured) >= 2:

@@ -438,9 +438,13 @@ console.log('\n[14] グローバル名の衝突（main.js と factory-phaser.htm
 
 console.log('\n[15] 合成した製造機スプライトの1マス送り（tools/cut_machines.py の成果物）');
 { // 3/4/5マス機は2マス機の絵から合成しているので、
-  //   ・投入口0番の絶対位置(px)は4サイズとも同一（奥側は一切ずらさないから）
-  //   ・サイズが1つ増えるごとに絵は ちょうど1マスぶん 大きくなる
+  //   ・投入口0番の横位置(px)は4サイズとも同一（奥側は一切ずらさないから）
+  //   ・投入口0番と絵の下端との距離は、サイズが1つ増えるごとに ちょうど1マスぶん 開く
   // が成り立つ。崩れていたら素材アイコンが投入口からズレる。
+  //
+  // 縦は「上端から」ではなく「下端から」で測る。main.js は絵の下端を基準に置くうえ、
+  // 短い機体では手前側の飾り(煙・帆・煙突)が奥側より高い位置に来て上端を決めてしまい、
+  // 上端基準だとサイズごとに数px動いて見える。ゲームの見え方には関係しない。
   const pngSize=(p)=>{ const b=fs.readFileSync(p);
     return { w:b.readUInt32BE(16), h:b.readUInt32BE(20) }; };            // IHDR
   const dir=new URL('../assets/', import.meta.url);
@@ -453,18 +457,17 @@ console.log('\n[15] 合成した製造機スプライトの1マス送り（tools
   for(const th of Object.keys(fit)){
     const at=[2,3,4,5].map(n=>{ const a=fit[th][String(n)];
       const s=pngSize(new URL(`mach-${th}-s${n}.png`, dir));
-      return { n, ...s, px:a.ax*s.w, py:a.ay*s.h }; });
+      return { n, ...s, px:a.ax*s.w, up:s.h-a.ay*s.h }; });                // up = 投入口0番から下端まで
     const dx=Math.max(...at.map(a=>a.px))-Math.min(...at.map(a=>a.px));
-    const dy=Math.max(...at.map(a=>a.py))-Math.min(...at.map(a=>a.py));
-    ok(dx<1 && dy<1, `${th}: 投入口0番の位置が4サイズとも同じ (ブレ ${dx.toFixed(2)}, ${dy.toFixed(2)}px)`);
+    ok(dx<1, `${th}: 投入口0番の横位置が4サイズとも同じ (ブレ ${dx.toFixed(2)}px)`);
     for(let i=1;i<4;i++){   // 画像サイズは整数なので1マス送りの丸めで ±1px は出る
-      const gw=at[i].w-at[i-1].w, gh=at[i].h-at[i-1].h;
+      const gw=at[i].w-at[i-1].w, gh=at[i].up-at[i-1].up;
       ok(Math.abs(gw-stepX)<=1, `${th}: s${at[i].n} は s${at[i-1].n} より横に1マス分だけ広い (${gw}px / 目標 ${stepX.toFixed(2)})`);
-      ok(Math.abs(gh-stepY)<=1.5, `${th}: s${at[i].n} は s${at[i-1].n} より縦に1マス分だけ高い (${gh}px / 目標 ${stepY.toFixed(2)})`);
+      ok(Math.abs(gh-stepY)<=1.5, `${th}: s${at[i].n} は s${at[i-1].n} より投入口0番が1マス分だけ高い位置になる (${gh.toFixed(1)}px / 目標 ${stepY.toFixed(2)})`);
     }
-    const gw=at[3].w-at[0].w, gh=at[3].h-at[0].h;   // 丸めが溜まっていないこと
+    const gw=at[3].w-at[0].w, gh=at[3].up-at[0].up;   // 丸めが溜まっていないこと
     ok(Math.abs(gw-3*stepX)<=1, `${th}: s2→s5 で横に3マス分ちょうど (${gw}px / 目標 ${(3*stepX).toFixed(2)})`);
-    ok(Math.abs(gh-3*stepY)<=2, `${th}: s2→s5 で縦に3マス分ちょうど (${gh}px / 目標 ${(3*stepY).toFixed(2)})`);
+    ok(Math.abs(gh-3*stepY)<=2, `${th}: s2→s5 で縦に3マス分ちょうど (${gh.toFixed(1)}px / 目標 ${(3*stepY).toFixed(2)})`);
   }
 }
 
