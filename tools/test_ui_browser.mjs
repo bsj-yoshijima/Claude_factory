@@ -18,7 +18,8 @@ ws.onmessage=e=>{const m=JSON.parse(e.data); if(m.id&&pend.has(m.id)){pend.get(m
   if(m.method==='Runtime.exceptionThrown'){const d=m.params.exceptionDetails; errs.push((d.exception&&d.exception.description)||d.text);}};
 await new Promise(r=>ws.onopen=r);
 await send('Runtime.enable'); await send('Page.enable');
-await send('Page.navigate',{url:'http://localhost:4321/'});
+// 単一ユーザー版(server.mjs)に当てたいときは CF_URL=http://localhost:4322/ で上書きする
+await send('Page.navigate',{url:process.env.CF_URL||'http://localhost:4321/'});
 const ev=async x=>{const r=await send('Runtime.evaluate',{expression:x,returnByValue:true}); return r.result?.value ?? r.exceptionDetails?.text;};
 // 固定待ちにすると、プロファイルが冷えているときに間に合わずテスト全体が崩れる。
 // Phaser のシーンが立ち上がる（= window.__scene が入る）まで待つ。
@@ -267,6 +268,59 @@ await ev(`document.querySelectorAll('[data-skin]')[0].click()`); await sleep(300
 ok((await ev(`(window.__factory.getAgents().find(a=>a.proj===${JSON.stringify(proj)})||{}).skinId`))==='none', 'デフォルトに戻せる');
 await sleep(1200);
 ok(await ev(`document.getElementById('overlay').classList.contains('show')&&document.querySelectorAll('[data-agsel]').length>0`), '開いている間も中身が更新され続ける（1秒ごと）');
+await ev(`closeOverlay()`); await sleep(150);
+
+/* 数秒おきの再描画で、ユーザーの操作の途中経過を壊さないこと。
+   innerHTML の貼り替えに戻すと全部落ちる（＝この節が差分適用の見張り）。 */
+console.log('\n=== live更新で操作が壊れない（差分適用） ===');
+// 本編画面: HUDは pollWp から数秒おきに描き直される。その間ずっと文字を選択していられるか
+await ev(`(()=>{const n=document.querySelector('#board .l');
+  const r=document.createRange(); r.selectNodeContents(n);
+  const s=getSelection(); s.removeAllRanges(); s.addRange(r); window.__selNode=n; return String(s);})()`);
+const selBefore=await ev(`String(getSelection())`);
+await sleep(4200);                                  // pollWp(3秒) + renderBoard を跨ぐ
+ok(selBefore.length>0 && (await ev(`String(getSelection())`))===selBefore,
+   `ボードの文字を選択したまま数秒おいても解除されない (「${selBefore}」)`);
+ok(await ev(`document.contains(window.__selNode)`), 'ボードのノードが作り直されていない');
+await ev(`getSelection().removeAllRanges()`);
+
+// スキン一覧: 入れ子のスクロール領域。live更新(1秒)を跨いでスクロール位置が戻らないこと
+await ev(`document.getElementById('hud').click()`); await sleep(400);
+// スキン一覧の開閉は前のセクションの状態を引きずるので、「開いている」ことを確かめてから測る
+await ev(`(()=>{ if(!document.querySelector('[data-skin]')) document.querySelector('[data-agsel]').click(); })()`);
+await sleep(400);
+const scRes=await ev(`(()=>{const g=[...document.querySelectorAll('#panel .grid')].find(x=>x.scrollHeight>x.clientHeight+8);
+  if(!g) return 'no-scrollable'; g.scrollTop=80; window.__scGrid=g; return g.scrollTop;})()`);
+ok(scRes!=='no-scrollable', `スキン一覧がスクロールできる状態にある (scrollTop=${scRes})`);
+await sleep(2500);                                  // live更新を2回以上跨ぐ
+ok((await ev(`window.__scGrid&&document.contains(window.__scGrid)?window.__scGrid.scrollTop:-1`))===scRes,
+   'スキン一覧を下にスクロールしても、live更新で上に戻されない');
+ok(await ev(`document.contains(window.__scGrid)`), 'スキン一覧のノードが作り直されていない');
+await ev(`closeOverlay()`); await sleep(150);
+
+// 🏭製造: 本文(.pbody)側のスクロールと、行ノードの同一性
+await ev(`openCraft()`); await sleep(300);
+const pbBefore=await ev(`(()=>{const b=document.querySelector('#panel .pbody'); b.scrollTop=60;
+  window.__pb=b; window.__row0=document.querySelector('.mrow'); return b.scrollTop;})()`);
+await sleep(2500);
+ok(pbBefore>0 && (await ev(`document.querySelector('#panel .pbody').scrollTop`))===pbBefore,
+   '製造一覧のスクロール位置が live更新で戻らない');
+ok(await ev(`window.__row0===document.querySelector('.mrow')`), '機械の行は同じノードが使い回される（data-key）');
+await ev(`closeOverlay()`); await sleep(150);
+
+// タブの切り替えは「別の中身」なので、そこだけは先頭に戻ってほしい
+await ev(`openShop()`); await sleep(300);
+// 中身がスクロールするタブを探して、そこを下までスクロールしてから別のタブへ移る
+const nTabs=await ev(`document.querySelectorAll('#panel [data-dlgtab]').length`);
+let tA=-1, tabScrolled=0;
+for(let i=0;i<nTabs;i++){
+  await ev(`document.querySelectorAll('#panel [data-dlgtab]')[${i}].click()`); await sleep(300);
+  const s=await ev(`(()=>{const b=document.querySelector('#panel .pbody'); b.scrollTop=120; return b.scrollTop;})()`);
+  if(s>0){ tA=i; tabScrolled=s; break; }
+}
+await ev(`document.querySelectorAll('#panel [data-dlgtab]')[${(tA+1)%nTabs}].click()`); await sleep(300);
+ok(tabScrolled>0 && (await ev(`document.querySelector('#panel .pbody').scrollTop`))===0,
+   `タブを切り替えたときは本文が先頭に戻る (切替前 ${tabScrolled}px)`);
 await ev(`closeOverlay()`); await sleep(150);
 
 console.log('\n=== メニューのグルーピング ===');

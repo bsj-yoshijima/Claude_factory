@@ -658,6 +658,59 @@ window.__skinChanged=(proj,skinId)=>{ if(!proj)return;
   saveGame(); };
 const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
 /* =========================================================================
+   DOM差分適用（morph） — 再描画で「いまの状態」を壊さないための土台
+   innerHTML の貼り替えは DOM ノードを丸ごと捨てるので、
+     ・選択中のテキスト（ハイライト）が解除される
+     ・入れ子のスクロール位置 / フォーカス / ホバー / 入力途中の値が失われる
+     ・<img> が読み直しになってちらつく
+   live更新（1〜2秒ごと）ではこれが延々と起きる。そこで
+   「新しく描いたツリーへ、既存ツリーを最小の変更で寄せる」方式にする。
+   ノードが生き残るので、上のどれも副作用として保たれる。
+     data-key   : 並び替わるリストに付けると、ノードを持ち回して同一性を保てる
+     data-morph="skip" : 既にある要素の中身には触れない（外部が触る領域の保護用）
+   ========================================================================= */
+function _morphAttrs(from,to){
+  for(const a of Array.from(from.attributes)) if(!to.hasAttribute(a.name)) from.removeAttribute(a.name);
+  for(const a of Array.from(to.attributes)) if(from.getAttribute(a.name)!==a.value) from.setAttribute(a.name,a.value);
+}
+// 差し替えずに寄せられる組み合わせか。data-key が違うものは別物として扱う
+function _morphSame(a,b){
+  if(a.nodeType!==b.nodeType) return false;
+  if(a.nodeType!==1) return true;
+  return a.tagName===b.tagName && (a.getAttribute('data-key')||null)===(b.getAttribute('data-key')||null);
+}
+function _morphNode(from,to){
+  if(from.nodeType!==1){ if(from.nodeValue!==to.nodeValue) from.nodeValue=to.nodeValue; return; }
+  if(to.getAttribute('data-morph')==='skip') return;
+  _morphAttrs(from,to);
+  _morphChildren(from,to);
+}
+function _morphChildren(from,to){
+  // data-key を持つ既存の子を先に拾っておく（並びが変わってもノードを使い回す）
+  const keyed=new Map();
+  for(const c of Array.from(from.childNodes))
+    if(c.nodeType===1){ const k=c.getAttribute('data-key'); if(k) keyed.set(k,c); }
+  let cur=from.firstChild;
+  for(const t of Array.from(to.childNodes)){
+    const k=(t.nodeType===1)?t.getAttribute('data-key'):null;
+    let hit=null;
+    if(k){ if(keyed.has(k)){ hit=keyed.get(k); keyed.delete(k); } }
+    // キー無しは位置で対応づける。キー付きの既存ノードは「その場所の持ち主」ではないので使わない
+    else if(cur && _morphSame(cur,t) && !(cur.nodeType===1&&cur.getAttribute('data-key'))) hit=cur;
+    if(hit){
+      if(hit===cur) cur=cur.nextSibling; else from.insertBefore(hit,cur);
+      _morphNode(hit,t);
+    } else from.insertBefore(t.cloneNode(true),cur);       // cur が null なら末尾に足される
+  }
+  while(cur){ const n=cur.nextSibling; from.removeChild(cur); cur=n; }   // cur 以降は残りもの
+}
+/* html を root の中身に反映する。root の子ノードは可能な限り再利用される */
+function morphInto(root,html){
+  const tmp=document.createElement('div'); tmp.innerHTML=html;
+  _morphChildren(root,tmp);
+}
+window.morphInto=morphInto;        // scene(main.js)のHUD更新からも使う
+/* =========================================================================
    共通ダイアログ — 見出し / タブ / 本文 / フッターの操作ボタン / 閉じる
    すべてのダイアログ(ショップ・図鑑・エージェント・原材料・製造機…)はこれに載せる。
      openDialog({
@@ -672,6 +725,14 @@ const overlay=document.getElementById('overlay'), panel=document.getElementById(
        onRender:(panel,dlg)=>void  本文描画後のイベント結線
      })
    戻り値 dlg = { tab, refresh(), setTab(id), close() }
+
+   body は毎回まるごと組み直してよい（宣言的に書ける）。実際の DOM への反映は
+   morphInto による差分適用なので、変わっていない部分のノードはそのまま残る。
+   ＝ 文字の選択・入れ子のスクロール位置・フォーカス・画像は live更新でも壊れない。
+   並びが変わりうるリストの各要素には data-key を付けること（付いていないと
+   位置で対応づけるため、並び替えのときに中身だけが入れ替わる）。
+   onRender は毎回呼ばれるので、結線は el.onclick= のような冪等な形で書く
+   （addEventListener はノードが残るぶん二重登録になる）。
    ========================================================================= */
 let _dlg=null, _dlgTimer=null;
 function closeOverlay(){ overlay.classList.remove('show');
@@ -680,24 +741,29 @@ function closeOverlay(){ overlay.classList.remove('show');
 function openDialog(o){
   const val=(v,d)=>(typeof v==='function')?v(d):v;
   const dlg={ tab:o.tab||null, refresh, setTab, close:closeOverlay };
+  let mounted=false, shownTab=null;                          // 初回だけは前のダイアログの残骸を捨てて建て直す
   function setTab(id){ dlg.tab=id; if(o.onTab) o.onTab(id,dlg); else refresh(); }
   function refresh(){
     if(_dlg!==dlg) return;                                   // 別のダイアログに差し替わっていたら描かない
-    const old=panel.querySelector('.pbody'), sc=old?old.scrollTop:0;   // live更新でスクロール位置を失わない
     const tabs=val(o.tabs,dlg)||[];
     const acts=val(o.actions,dlg)||[];
     const subtitle=o.subtitle!=null?val(o.subtitle,dlg):'';
-    panel.innerHTML='<span class="close" title="閉じる">✕</span>'
+    const html='<span class="close" title="閉じる">✕</span>'
       +`<div class="dlgHead"><h2>${o.title||''}${subtitle?`<span class="dlgSub">${subtitle}</span>`:''}</h2>`
       +(tabs.length?`<div class="sttabs">${tabs.map(t=>`<span class="sttab ${t.id===dlg.tab?'on':''}" data-dlgtab="${t.id}">${t.label}</span>`).join('')}</div>`:'')
       +'</div>'
       +`<div class="pbody">${val(o.body,dlg)||''}</div>`
       +(acts.length?`<div class="dlgFoot">${acts.map((a,i)=>
           `<button class="dbtn ${a.kind==='ghost'?'ghost':''}" data-dlgact="${i}"${a.disabled?' disabled':''}>${a.label}</button>`).join('')}</div>`:'');
+    // 2回目以降は差分適用。選択中のテキストもスクロール位置も生き残る（morphInto の項を参照）
+    const tabChanged = mounted && shownTab!==dlg.tab;
+    if(mounted) morphInto(panel,html); else { panel.innerHTML=html; mounted=true; }
+    shownTab=dlg.tab;
+    // 本文が別物になるタブ切替のときだけ先頭へ。live更新ではスクロール位置を保つ
+    if(tabChanged){ const b=panel.querySelector('.pbody'); if(b) b.scrollTop=0; }
     panel.querySelector('.close').onclick=closeOverlay;
     panel.querySelectorAll('[data-dlgtab]').forEach(el=>el.onclick=()=>setTab(el.dataset.dlgtab));
     panel.querySelectorAll('[data-dlgact]').forEach(el=>el.onclick=()=>{ const a=acts[+el.dataset.dlgact]; if(a&&a.on) a.on(dlg); });
-    const nb=panel.querySelector('.pbody'); if(nb&&sc) nb.scrollTop=sc;
     if(o.onRender) o.onRender(panel,dlg);
   }
   if(_dlgTimer){ clearInterval(_dlgTimer); _dlgTimer=null; }
@@ -1156,14 +1222,16 @@ const salesToday = ()=> NET.multi ? ((NET.last&&NET.last.today.sales)||0)
                                   : (craftState().sales[jstDay(Date.now())]||0);
 function renderBoard(){
   const el=document.getElementById('board'); if(!el) return;
-  el.innerHTML=`
+  // pollWp から数秒おきに呼ばれる。innerHTML を貼り替えると、そのたびに
+  // ここの文字の選択（ハイライト）が解除されてしまうので差分適用にする
+  morphInto(el,`
     <div class="m"><div class="v">${wpState.ok?Math.floor(wpState.today).toLocaleString():'—'}<small>WP</small></div>
       <div class="l">今日の労働量</div></div>
     <div class="m prod hit" id="todayBtn" title="クリックで今日つくったものを見る">
       <div class="v">${madeToday()}<small>個</small></div>
       <div class="l">今日の製造</div></div>
     <div class="m sales"><div class="v">${Math.floor(salesToday()).toLocaleString()}<small>💰</small></div>
-      <div class="l">今日の売上</div></div>`;
+      <div class="l">今日の売上</div></div>`);
   const b=document.getElementById('todayBtn'); if(b) b.onclick=openToday;
 }
 /* マルチユーザー版は製造判定がサーバ側なので c.log は空のまま。
@@ -1198,7 +1266,7 @@ function openToday(){
           const ks=Object.keys(r.keys).sort((a,b)=>r.keys[b]-r.keys[a]).slice(0,3)
             .map(k=>`<div class="qn" title="${k.split(',').map(x=>MAT[x]?MAT[x].n:x).join(' + ')}">${
               k.split(',').map(x=>MAT[x]?MAT[x].e:'').join('')}${r.keys[k]>1?` ×${r.keys[k]}`:''}</div>`).join('');
-          return `<div class="pcard" style="border-color:${RAR[r.p.r].c}"><div class="e">${r.p.e}</div>
+          return `<div class="pcard" data-key="pd:${r.p.id}" style="border-color:${RAR[r.p.r].c}"><div class="e">${r.p.e}</div>
             <div class="nm">${r.p.n}</div><div class="rr" style="color:${RAR[r.p.r].c}">${RAR[r.p.r].n}</div>
             <div class="qn"><b style="color:#eafff4">×${r.n}</b></div>${ks}</div>`; }).join('')}</div>
         <div class="rowline" style="font-size:11px;color:#9fb0c0">
@@ -1222,11 +1290,11 @@ function renderCraft(){
   const ms=machines(), run=ms.filter(m=>machState(m.id).running).length;
   // メインは「製造機設定」。稼働状況は下に小さく添える（何のボタンか一目で分かるように）
   const st = !ms.length ? '製造機なし' : run ? `⚙️ 製造中 ${run}/${ms.length}台` : `📦 待機中 ${ms.length}台`;
-  el.innerHTML = `<span class="pe">🏭</span>
+  morphInto(el,`<span class="pe">🏭</span>
     <div class="mid"><div class="nm">製造機設定</div>
       <div class="note">${st}</div>${
       wpState.ok?'':'<div class="note warn">WP未取得（サーバ未接続）</div>'}</div>
-    <span class="go">▸</span>`;
+    <span class="go">▸</span>`);
   el.title='クリックで🏭製造（原材料のセット・製造開始）';
   renderBoard();
 }
@@ -1270,7 +1338,7 @@ function machRow(m){
       ${matsOfGenre(g.id).map(x=>`<span class="mchip ${m.slots[_craftPick.idx]===x.id?'on':''}"
         data-cmat="${x.id}" data-cmid="${m.id}" title="${x.n}">${x.e}<small>${x.n}</small></span>`).join('')}
       </div></div>`).join('')}</div>` : '';
-  return `<div class="mrow ${st.running?'run':''}" title="${machTitle(m)}（${m.size}マス / 必要 ${need}WP）">
+  return `<div class="mrow ${st.running?'run':''}" data-key="mach:${m.id}" title="${machTitle(m)}（${m.size}マス / 必要 ${need}WP）">
     <div class="mslots">${slots}
       <button class="dbtn ${st.running?'ghost':''}" data-crun="${m.id}"${(!st.running&&!nSet)?' disabled':''}
         title="${(!st.running&&!nSet)?'原材料を1つ以上セットしてください':''}">${st.running?'■ 停止':'▶ 製造開始'}</button>
@@ -1711,7 +1779,8 @@ async function openMyPage(){
       if(save&&inp){ save.onclick=()=>saveFactoryName(inp.value,d);
         inp.onkeydown=e=>{ if(e.key==='Enter') saveFactoryName(inp.value,d);
                            if(e.key==='Escape'){ _myEdit=false; d.refresh(); } };
-        inp.focus(); inp.select(); }
+        // 差分適用で入力欄は生き残るので、初回だけ選択する（再描画のたびに全選択し直さない）
+        if(document.activeElement!==inp){ inp.focus(); inp.select(); } }
     } });
   _myData = NET.multi ? await NET.call('GET',`/api/mypage?days=${MY_DAYS}`) : await myLocalData(MY_DAYS);
   // 取得に失敗したときは 0 を並べて黙らない。名前だけはポーリングの me から作れる
@@ -1743,10 +1812,26 @@ function agentRows(){                   // プロジェクト単位に集約(同
   return Object.values(by);
 }
 const skinName=(id)=>{ const s=((window.__factory&&window.__factory.skinList)||[]).find(x=>x.id===id); return s?s.n:'デフォルト'; };
-// スキンの見本。画像(assets/hat-*.png)は未生成のものが多いので onerror で絵文字に差し替える
+/* 被り物の画像(assets/hat-*.png)は未生成のものが多い。
+   onerror で DOM を差し替える手は、差分適用のたびに元の <img> へ戻されて
+   読み直し→また差し替え…とちらつくので使わない。
+   「その画像があるか」を一度だけ判定してキャッシュし、描画は常に決定的にする。 */
+const _hatOk=new Map();                     // id -> true(あり) / false(なし・未判定)
+function hatReady(id){
+  if(!id||id==='none') return false;
+  if(_hatOk.has(id)) return _hatOk.get(id);
+  _hatOk.set(id,false);                     // 判定がつくまでは「なし」＝絵文字で描く
+  const im=new Image();
+  im.onload =()=>{ _hatOk.set(id,true); if(_dlg) _dlg.refresh(); };   // 届いたら次の描画から画像に変わる
+  im.onerror=()=>{ _hatOk.set(id,false); };
+  im.src='assets/hat-'+id+'.png';
+  return false;
+}
+// スキンの見本。画像が無いスキンは絵文字の仮アイコンで出す
 function skinThumb(id,px){ const e=(id==='none')?'🧑‍🏭':((BG_META[id]&&BG_META[id].e)||'🎨');
-  return (id==='none') ? `<span style="font-size:${px}px">${e}</span>`
-    : `<img src="assets/hat-${id}.png" alt="" style="width:${px+16}px;height:${px+16}px;object-fit:contain" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${e}',style:'font-size:${px}px'}))">`;
+  return hatReady(id)
+    ? `<img src="assets/hat-${id}.png" alt="" style="width:${px+16}px;height:${px+16}px;object-fit:contain">`
+    : `<span style="font-size:${px}px">${e}</span>`;
 }
 function openAgents(){
   const esc=(s)=>String(s||'').replace(/[<>&]/g,'');
@@ -1759,18 +1844,20 @@ function openAgents(){
       const skins=(window.__factory&&window.__factory.skinList)||[];
       return rows.map(p=>{
         const key=encodeURIComponent(p.proj), nm=esc(p.proj)||'(無名)', open=_agentSel===p.proj;
-        const hat=(p.skinId&&p.skinId!=='none')?`<img src="assets/hat-${p.skinId}.png" alt="" onerror="this.remove()">`:'';
-        let h=`<div class="rc">
+        const hat=hatReady(p.skinId)?`<img src="assets/hat-${p.skinId}.png" alt="">`:'';
+        // 1プロジェクト = 1ノード。data-key で、稼働状況の変化で並びが動いてもノードを持ち回す
+        // （＝ 開いているスキン一覧のスクロール位置が live更新で戻らない）
+        let h=`<div data-key="ag:${key}"><div class="rc">
           <div class="ic"><span class="lgAv" style="background:${p.color||'#4f7fc4'}"><span class="eye l"></span><span class="eye r"></span>${hat}</span></div>
           <div class="mid"><div class="nm">${nm}${p.n>1?` <span style="color:#9fb0c0;font-size:10px">×${p.n}</span>`:''}</div>
             <div class="cost"><span class="agSt ${p.busy?'on':''}">${p.busy?`🟢 稼働 ${p.busy}/${p.n}`:'💤 休憩'}</span>スキン: ${skinName(p.skinId)}</div></div>
           <button data-agsel="${key}">${open?'閉じる':'🎨 スキン'}</button></div>`;
         // スキンの一覧は長いので行の直下で折りたたみ表示（他の行が押し出されないよう高さを制限）
         if(open) h+=`<div class="grid" style="margin:0 0 12px 8px;max-height:196px;overflow-y:auto">${skins.map(s=>{ const on=p.skinId===s.id;
-            return `<div class="cell own" data-skin="${s.id}" data-proj="${key}" title="${s.n}"
+            return `<div class="cell own" data-key="sk:${s.id}" data-skin="${s.id}" data-proj="${key}" title="${s.n}"
               style="${on?'border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset':''}">${skinThumb(s.id,26)}<small style="color:#cfeee0">${s.n}</small>${on?'<span class="qty">✓</span>':''}</div>`;
           }).join('')}</div>`;
-        return h;
+        return h+'</div>';
       }).join('')
       +'<div class="rowline" style="font-size:11px;color:#9fb0c0">「🎨 スキン」から被り物を変更できます。画像が未生成のスキンは仮アイコン表示で、アセット到着までは見た目がデフォルトのままです。</div>';
     },
@@ -1942,13 +2029,15 @@ const paletteEl=document.getElementById('palette');
 let editCat='bg', editSel=null; window.__editSel=null;
 let selMode=false, selN=0;                       // 収納の複数選択モードと選択数
 let propFilter=null;                             // 装飾の絞り込みテーマ(null=すべて / ''=汎用)
+let _paletteView=null;                           // 最後に描いた一覧の種類。切り替わったときだけスクロールを戻す
 window.__selChanged=(n)=>{ selN=n; renderPalette(); };
 function renderPalette(){
   const cats=[['bg','🌏 背景'],['prop','🧰 装飾'],['machine','🏭 製造機']];
   let items='', hint='', acts='', fil='';
-  const cell=(dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
+  // key は差分適用でノードを持ち回すための識別子（在庫が増減しても他の項目が作り直されない）
+  const cell=(key,dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" data-key="${key}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
   if(editCat==='bg'){ hint='背景を選ぶと即適用（部屋ごと切替）';
-    items=ownedBgs().map(k=>`<div class="pitem ${G.bg===k?'cur':''}" data-bg="${k}">${BG_META[k].e}<small>${BG_META[k].n}</small></div>`).join('');
+    items=ownedBgs().map(k=>`<div class="pitem ${G.bg===k?'cur':''}" data-key="bg:${k}" data-bg="${k}">${BG_META[k].e}<small>${BG_META[k].n}</small></div>`).join('');
   } else if(editCat==='prop'){
     const s=window.__scene, placedN=s?s.stowables().length:0;
     if(selMode){ hint=`床の装飾をクリックで選択（もう一度クリックで解除）・ ${selN}個 選択中`;
@@ -1958,8 +2047,8 @@ function renderPalette(){
         +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去 ・ ラグは床の平物なので家具の下に敷けます';
       // テーマ(=背景)で絞り込む。propFilter が null なら全部。DECO は汎用('')扱い
       const inFilter=(th)=> propFilter===null || (th||'')===propFilter;
-      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.variant===t));
-      const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.variant===t));
+      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`prop:${t}`,`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.variant===t));
+      const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`deco:${t}`,`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.variant===t));
       items=(P.concat(D).join(''))||`<div class="phint" style="padding:8px">${propFilter===null?'在庫なし。🏪ショップ→設備 で購入してください。':'このテーマの在庫がありません。「すべて」に戻すか、🏪ショップで購入してください。'}</div>`;
       // 絞り込み行: 在庫のあるテーマだけ出す。適用中の背景と同じテーマには印を付ける
       const nOf=(th)=> Object.keys(PROP).filter(t=>(PROP[t].th||'')===th&&availN('prop',t)>0).length
@@ -1977,13 +2066,17 @@ function renderPalette(){
       : `<span class="c" data-stow="all">📦 すべて収納 (${placedN})</span><span class="c" data-selmode="1">☑️ 選んで収納</span>`;
   } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です')
       +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去 ・ クリックで設定パネル（↻回転・✥移動／素材は🏭製造タブ）';
-    const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.variant===t));
+    const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`machine:${t}`,`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.variant===t));
     items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
   }
-  paletteEl.innerHTML=`<div class="phead"><b>🔧 レイアウト編集</b><span class="c" data-pclose="1">✖ 閉じる</span></div>
+  morphInto(paletteEl,`<div class="phead"><b>🔧 レイアウト編集</b><span class="c" data-pclose="1">✖ 閉じる</span></div>
     <div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
     ${fil?`<div class="pcat pfil">${fil}</div>`:''}
-    <div class="pitems">${items}</div>${acts?`<div class="pcat">${acts}</div>`:''}<div class="phint">${hint}</div>`;
+    <div class="pitems">${items}</div>${acts?`<div class="pcat">${acts}</div>`:''}<div class="phint">${hint}</div>`);
+  // 一覧そのものが別物になったとき（カテゴリ/絞り込み/選択モードの切替）だけ先頭に戻す。
+  // 設置や購入での描き直しではスクロール位置を保つ
+  const view=`${editCat}/${propFilter}/${selMode?1:0}`;
+  if(view!==_paletteView){ _paletteView=view; const it=paletteEl.querySelector('.pitems'); if(it) it.scrollTop=0; }
   paletteEl.querySelectorAll('[data-pclose]').forEach(el=>el.onclick=()=>toggleEditMode());
   paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; setSelMode(false); renderPalette(); });
   paletteEl.querySelectorAll('[data-pfil]').forEach(el=>el.onclick=()=>{ propFilter=el.dataset.pfil==='*'?null:el.dataset.pfil; renderPalette(); });
