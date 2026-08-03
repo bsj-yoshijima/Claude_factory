@@ -72,7 +72,14 @@ class Batch {
     this.metrics = new Map();   // minute -> {la, lr, commits, prs}
     this.score = new Map();     // day -> {…カウンタ}
     this.names = new Map();     // `${day}|${kind}|${name}` -> count
+    this.alive = new Map();     // sessionId -> そのセッションで見た最新のイベント時刻(ms)
     this.dedup = new Set();
+  }
+  /** このセッションが生きている証跡。工場の 🟢/💤 の判定だけに使う（集計には入らない） */
+  live(sess, ms) {
+    if (!sess || sess === '?' || !ms) return;
+    const cur = this.alive.get(sess);
+    if (cur == null || ms > cur) this.alive.set(sess, ms);
   }
   tool(ms, name, isSubagent, ok) {
     const k = `${minuteOf(ms)}|${name}|${isSubagent ? 1 : 0}`;
@@ -97,7 +104,8 @@ class Batch {
     this.names.set(k, (this.names.get(k) || 0) + 1);
   }
   get empty() {
-    return !this.tools.size && !this.metrics.size && !this.score.size && !this.names.size;
+    return !this.tools.size && !this.metrics.size && !this.score.size && !this.names.size
+        && !this.alive.size;
   }
 }
 
@@ -160,6 +168,20 @@ async function flush(b) {
          SELECT $1, * FROM UNNEST($2::text[]) ON CONFLICT DO NOTHING`,
         [b.userId, [...b.dedup]]);
     }
+    // 受信1回につきこの UPDATE 1発だけ（イベント件数には比例しない）。
+    // 行は作らない: セッションの実体と project 名は hook 側が持つ。
+    // 時刻は「now を超えない」「後戻りしない」で丸める（過去ログのリプレイで
+    // 死んだセッションが生き返らないように）。
+    if (b.alive.size) {
+      const ids = [...b.alive.keys()], ms = ids.map((k) => b.alive.get(k));
+      await c.query(
+        `UPDATE agent_sessions AS s
+            SET last_activity_at = GREATEST(COALESCE(s.last_activity_at, 'epoch'::timestamptz),
+                                            LEAST(now(), to_timestamp(v.ms / 1000.0)))
+           FROM UNNEST($2::text[], $3::float8[]) AS v(session_id, ms)
+          WHERE s.user_id = $1 AND s.session_id = v.session_id AND s.state <> 'ended'`,
+        [b.userId, ids, ms]);
+    }
   });
 }
 
@@ -207,6 +229,7 @@ export async function ingestLogs(userId, payload, audit) {
     accepted++;
     const name = norm(a['event.name'] || '');
     const sess = a['session.id'] || '?';
+    b.live(sess, t);                    // 種類を問わず「届いた＝生きている」
 
     // api_request: 親/子の判別材料。以降のツールはこの query_source に従う
     if (name === 'api_request' && a.query_source) {
@@ -261,6 +284,9 @@ export async function ingestMetrics(userId, payload, audit) {
           const t = nanoToMs(dp.timeUnixNano);
           const v = dpValue(dp);
           accepted++;
+          // メトリクスは活動量に関係なく固定周期で飛ぶ。ログが途切れる
+          // 「無言で長いツール実行」の区間はこちらが生存を担保する
+          b.live(a['session.id'], t);
           switch (m.name) {
             case 'claude_code.lines_of_code.count':
               if (a.type === 'added') { b.metric(t, 'la', v); b.sc(t, 'lines_added', v); }
