@@ -546,7 +546,9 @@ def synth_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
         res = im.resize((ow, oh), Image.LANCZOS)
         res.save(os.path.join(OUT, f'mach-{theme}-s{n}.png'))
         ax, ay = o[0] * scale / ow, o[1] * scale / oh
-        out_fit[str(n)] = {'ax': round(ax, 4), 'ay': round(ay, 4),
+        gb = ground_b(im, step_y / step_x)
+        gy = (step_y / step_x * o[0] + gb) * scale / oh
+        out_fit[str(n)] = {'ax': round(ax, 4), 'ay': round(ay, 4), 'gy': round(gy, 4),
                            'step': round(Dx * scale, 3), 'stepY': round(Py * scale, 3), 'src': 'synth'}
         print(f'   s{n}: 合成 {im.width}x{im.height} → {ow}x{oh}  '
               f'送り ({Dx*scale:.3f}, {Py*scale:.3f})px  アンカー ({ax:.4f}, {ay:.4f})')
@@ -596,10 +598,13 @@ def direct_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
             print(f'   s{k}: 絵の傾き {abs(dy)/own:.3f} → ゲームの {step_y/step_x:.3f} にせん断'
                   f' (列あたり {r:+.4f}px)')
         sc = step_x / own
+        slope = step_y / step_x
+        gb = ground_b(sp, slope)                       # 接地線 y = slope*x + gb
         ow, oh = max(1, round(sp.width * sc)), max(1, round(sp.height * sc))
         sp.resize((ow, oh), Image.LANCZOS).save(os.path.join(OUT, f'mach-{theme}-s{k}.png'))
         ax, ay = cs[0][0] * sc / ow, cs[0][1] * sc / oh
-        out[str(k)] = {'ax': round(ax, 4), 'ay': round(ay, 4),
+        gy = (slope * cs[0][0] + gb) * sc / oh          # 投入口0番の列での接地線の高さ
+        out[str(k)] = {'ax': round(ax, 4), 'ay': round(ay, 4), 'gy': round(gy, 4),
                        'step': round(own * sc, 3), 'stepY': round(want * sc, 3), 'src': 'direct'}
         print(f'   s{k}: そのまま切取 {sp.width}x{sp.height} → {ow}x{oh}  '
               f'送り ({own*sc:.3f}, {own*sc*step_y/step_x:.3f})px  アンカー ({ax:.4f}, {ay:.4f})')
@@ -681,6 +686,26 @@ def axis_slope(sp):
     if not L or not R:
         return 0.0
     return sum(R) / len(R) - sum(L) / len(L)
+
+
+def ground_b(sp, slope):
+    """絵の「接地線」を測る。返すのは y = slope*x + b の b。
+
+    絵の一番下の画素は、前面に垂れ下がったシュートや脚であることが多く、機械が床に
+    触れている線ではない。そこを床に合わせると本体が持ち上がって浮いて見える。
+    接地線はアイソメの傾き slope の直線なので、列ごとに (最下のy - slope*x) を出すと
+    接地線に沿う列では同じ値になる。ぶら下がりは少数なので中央値でその値が取れる。"""
+    a = np.asarray(sp.convert('RGBA'))
+    h, w = a.shape[0], a.shape[1]
+    bs = []
+    for x in range(w):
+        col = np.nonzero(a[:, x, 3] > 128)[0]
+        if len(col):
+            bs.append(col[-1] - slope * x)
+    if not bs:
+        return float(h - 1)
+    bs.sort()
+    return bs[len(bs) // 2]
 
 
 def legacy_fit(theme, found, W, H, GU, GV, iso, IN, draw=1.0):

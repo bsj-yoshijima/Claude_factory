@@ -447,9 +447,18 @@ class Main extends Phaser.Scene {
       }
       const L=imx-dw/2;
       const sx0=fitA ? L+ax*dw : 0;                       // 投入口0番の画面x
-      if(fitA){ const sy=(by1-dh)+fitA.ay*dh;
+      // 縦位置は「絵の下端」ではなく「絵の接地線」を足元の四角形の手前の辺に合わせる。
+      // 絵の一番下はシュートや脚が垂れていることが多く、そこを床に合わせると
+      // 本体が数px持ち上がって浮いて見える(土台が絵の下から食み出す)。
+      let imy=by1;
+      if(fitA && fitA.gy!=null){
+        const dd=D, cc=C;                                 // 足元の四角形の手前(下)の辺 D→C
+        const fy=(cc.x===dd.x)? cc.y : dd.y+(sx0-dd.x)*(cc.y-dd.y)/(cc.x-dd.x);
+        imy = fy + dh*(1-fitA.gy);                        // 接地線が fy に来るよう下端を決める
+      }
+      if(fitA){ const sy=(imy-dh)+fitA.ay*dh;
         spotPts=cells.map((q,i)=>({x:sx0+(flip?-1:1)*du*i, y:sy+dv*i}));
-        HG = Math.max(2, by1-sy);      // 天面の高さ = 接地点から投入口までの高さ
+        HG = Math.max(2, imy-sy);      // 天面の高さ = 接地点から投入口までの高さ
       } else HG = Math.max(2, dh-(by1-by0));
       // 帯の切れ目は「隣の投入口との中点」。マス中心ではなく絵側の送りで切る(縮めてあるので別物)。
       // 両端は絵の端まで伸ばす(端の飾りを落とさない)。境界は元絵の整数pxに丸める
@@ -459,10 +468,10 @@ class Main extends Phaser.Scene {
         const bnd = fitA ? sx0+(flip?-1:1)*du*(i-0.5) : (cx[i-1]+cx[i])/2;
         cut.push(Phaser.Math.Clamp(Math.round(bnd-L),0,iw));   // 等倍なので画面px=元絵px
       }
-      const sh=this.add.image((bx0+bx1)/2+3, by1-2, 'shadow').setDepth(dBack-0.6)
+      const sh=this.add.image((bx0+bx1)/2+3, imy-2, 'shadow').setDepth(dBack-0.6)
         .setDisplaySize(dw*0.9,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);   // 影は機械の一番奥より後ろ
       // 土台も絵と同じだけ縮める。原点は接地点(足元の中央)。
-      const fx=(bx0+bx1)/2, fy=by1;
+      const fx=(bx0+bx1)/2, fy=imy;
       const shrink=(p)=>({x:fx+(p.x-fx)*S, y:fy+(p.y-fy)*S});
       // 土台をテーマ色で塗ると、絵の下に暗い帯が出て「床との間に隙間がある」ように見える。
       // 絵の下端の色を拾って塗れば、機械の裾がそのまま床まで続いているように見える。
@@ -476,7 +485,7 @@ class Main extends Phaser.Scene {
         bg.lineStyle(2,foot,1); this._strokeOuter(bg,qd,i,n,e.dir);
         const x0 = asc ? (i===0?0:cut[i-1]) : (i===n-1?0:cut[i]);
         const x1 = asc ? (i===n-1?iw:cut[i]) : (i===0?iw:cut[i-1]);
-        const im=this.add.image(imx, by1, key).setOrigin(0.5,1).setDepth(dep[i]).setTint(tint);
+        const im=this.add.image(imx, imy, key).setOrigin(0.5,1).setDepth(dep[i]).setTint(tint);
         im.setCrop(x0, 0, Math.max(0,x1-x0), ih);   // 位置は変えず、自分の帯だけを見せる
         objs.push(im); e._lit.push(im); this.lit.push({sp:im,u,v});
       });
