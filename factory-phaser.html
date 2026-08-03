@@ -1603,7 +1603,7 @@ document.getElementById('lbBtn').addEventListener('click',openLb);
 /* =========================================================================
    マイページ — 工場名 / 選んだ日・週のWP・製造個数・売上 / WPの推移グラフ
    粒度は日次(00:00-23:59)と週次(日曜00:00-土曜23:59)の2つ。折れ線はWPだけ引き、
-   点をクリックするとその日・週の3指標に切り替わる（3本重ねると単位が違って読めない）。
+   グラフをクリックするとその日・週の3指標に切り替わる（3本重ねると単位が違って読めない）。
    ========================================================================= */
 const MY_DAYS=90;                      // 週次12週分を作るのに必要な日数。日次は末尾14日だけ使う
 const MY_DAILY_N=14, MY_WEEK_N=12;
@@ -1653,7 +1653,7 @@ function myBuckets(){
 }
 const mySelIdx=(b)=> b.length ? Math.min(Math.max(_mySel==null?b.length-1:_mySel,0),b.length-1) : -1;
 
-/* WPの折れ線＋塗り。各ポイントをクリックするとその日/週の数値に切り替わる */
+/* WPの折れ線＋塗り。点の縦列（どの高さでも可）をクリックするとその日/週の数値に切り替わる */
 function myChartSvg(buckets,sel){
   const W=620,H=210,PL=26,PR=76,PT=16,PB=26;   // PL は左端の日付ラベル、PR は右端の「n WP」が切れない幅
   const n=buckets.length;
@@ -1686,11 +1686,14 @@ function myChartSvg(buckets,sel){
     const on=i===sel;
     return `<circle cx="${pts[i][0].toFixed(1)}" cy="${pts[i][1].toFixed(1)}" r="${on?5.5:3.6}"
               fill="${on?MY_COLOR:'#10171b'}" stroke="${MY_COLOR}" stroke-width="2"/>`;}).join('');
-  // 当たり判定は別に大きめの透明円を置く（半径3.6の点は指でもマウスでも押しにくい）
-  const hits=buckets.map((d,i)=>
-    `<circle class="myhit" cx="${pts[i][0].toFixed(1)}" cy="${pts[i][1].toFixed(1)}" r="16"
+  // 当たり判定は点ではなく縦帯にする。隣の点との中点で区切った列のどの高さを押しても
+  // その日/週が選ばれる（半径数pxの点を狙わせると指でもマウスでも押しにくい）
+  const hits=buckets.map((d,i)=>{
+    const x0=i===0   ? 0 : (pts[i-1][0]+pts[i][0])/2;
+    const x1=i===n-1 ? W : (pts[i][0]+pts[i+1][0])/2;
+    return `<rect class="myhit" x="${x0.toFixed(1)}" y="0" width="${(x1-x0).toFixed(1)}" height="${H}"
              fill="transparent" data-myi="${i}" role="button" tabindex="0"
-             aria-label="${d.title}"><title>${d.title}</title></circle>`).join('');
+             aria-label="${d.title}"><title>${d.title}</title></rect>`;}).join('');
   return `<div class="mychart"><svg viewBox="0 0 ${W} ${H}" role="img"
       aria-label="${_myRange==='week'?`直近${n}週`:`直近${n}日`}のWPの推移">
     <defs><linearGradient id="myg_wp" x1="0" y1="0" x2="0" y2="1">
@@ -1729,7 +1732,7 @@ function myBody(){
       <div class="mystat"><div class="k">売上</div><div class="v">${Math.round(t.sales).toLocaleString()}<small>💰</small></div></div>
     </div>
     <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:14px">
-      ※グラフの点をクリックで切り替え
+      ※グラフをクリックで切り替え
     </div>
     ${myChartSvg(b,sel)}`;
 }

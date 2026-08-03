@@ -526,5 +526,25 @@ console.log('\n[16] 製造機は「マスごとの深度」で描く（帯分割
   machTexOn=true; s._machFit=null; s.setPartsTheme(null); s.buildLayout([]);
 }
 
+/* ===== スプライトの長軸の向き =====
+   ゲームは「素材は +u(右斜め下 ↘) の1種類だけ」を前提に、もう一方の対角を実行時に
+   左右反転して使う(_machFlipTex)。逆向きの絵が混ざると、影・占有マス・素材アイコンは
+   正しい向きに並ぶのに**本体の絵だけが直交した向きに見える**。
+   絵は生成AI由来で、向きは何度も間違えられている所なので機械的に見張る。 */
+console.log('\n=== 製造機スプライトの長軸 ===');
+{
+  const { report } = await import('./mach_axis.mjs');
+  const rows = report();
+  ok(rows.length > 0, `テーマの絵が見つかる (${rows.length}テーマ)`);
+  const bad = rows.filter(r => r.axis === 'v');
+  ok(bad.length === 0, bad.length
+    ? `全テーマが +u(右斜め下) を向いている → 逆向き: ${bad.map(b => `${b.theme}(slope=${b.slope})`).join(', ')}。node tools/mach_axis.mjs --fix で揃える`
+    : `全${rows.length}テーマが +u(右斜め下) を向いている`);
+  const undecided = rows.filter(r => r.axis === '?');
+  ok(undecided.length === 0, undecided.length
+    ? `長軸が判定できる絵になっている → 判定不能: ${undecided.map(u => u.theme).join(', ')}`
+    : '全テーマで長軸が判定できる');
+}
+
 console.log(fail? `\n${fail} 件 FAIL` : '\nすべて通過');
 process.exit(fail?1:0);
