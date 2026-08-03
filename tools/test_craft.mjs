@@ -81,11 +81,12 @@ const roll=(key,n)=>{ const c={}; for(let i=0;i<n;i++){ const p=$.rollProduct(ke
   const got=Object.keys(roll(key,3000));
   ok(got.every(id=>want.has(id)), `${key}: 出たのは定義した製品だけ（${got.join(',')}）`);
   ok(!got.includes($.UNKNOWN_PRODUCT), `${key}: 🪨が混ざらない`); }
-{ // 明示した比率どおりに出るか（{pc:55,...} 形式）
-  const key='glass,iron,semic,wire', n=20000, c=roll(key,n);
-  const spec=$.RECIPES[key], sum=Object.values(spec).reduce((a,b)=>a+b,0);
-  const errs=Object.keys(spec).map(id=>Math.abs((c[id]||0)/n - spec[id]/sum));
-  ok(Math.max(...errs)<0.02, `${key}: 明示した比率と一致（最大誤差 ${(Math.max(...errs)*100).toFixed(2)}pt）`); }
+{ // 同じ m を共有する製品どうしは、レア度の既定重み（RAR[r].w）の比で出る
+  const key='rice,veg', n=20000, c=roll(key,n);
+  const pool=$.poolFor(key), sum=pool.reduce((s,x)=>s+x.w,0);
+  ok(pool.length>1, `${key}: 複数の製品が同じ組み合わせを共有（${pool.map(x=>x.p.e+x.p.n).join(' / ')}）`);
+  const errs=pool.map(x=>Math.abs((c[x.p.id]||0)/n - x.w/sum));
+  ok(Math.max(...errs)<0.02, `${key}: レア度の重みどおりの比率（最大誤差 ${(Math.max(...errs)*100).toFixed(2)}pt）`); }
 { // 未定義の同ジャンル組み合わせ → 🪨
   const c=roll('rice,sugar',500);
   ok(Object.keys(c).length===1 && c[$.UNKNOWN_PRODUCT]===500, 'レシピに無い同ジャンルの組み合わせ → 🪨 のみ'); }
@@ -110,6 +111,22 @@ console.log('\n[7] 到達性（全製品がどこかのレシピから出られ�
   const un=$.PRODS.filter(p=>!reach.has(p.id));
   const names=un.map(p=>p.e+p.n).join(' ');
   ok(!un.length, 'どのレシピからも出ない製品がない'+(un.length?' → '+names:'')); }
+
+console.log('\n[8] 製品 → 組み合わせ が1対1（違う組み合わせで同じ製品はできない）');
+{ const keysOf={};
+  for(const k of Object.keys($.RECIPES)) for(const x of $.normPool($.RECIPES[k])) (keysOf[x.p.id]=keysOf[x.p.id]||[]).push(k);
+  const dup=Object.keys(keysOf).filter(id=>keysOf[id].length>1);
+  ok(!dup.length, '複数の組み合わせから出る製品がない'
+    +(dup.length?' → '+dup.map(id=>`${$.PROD[id].e}${$.PROD[id].n}(${keysOf[id].join(' / ')})`).join(' , '):''));
+  // 逆向き（1組み合わせ → 複数製品）は意図して残している枠。0件になったら重み抽選が死ぬので見張る
+  const shared=Object.keys($.RECIPES).filter(k=>$.normPool($.RECIPES[k]).length>1);
+  ok(shared.length>0, `複数製品を共有する組み合わせが ${shared.length} 通り（レア度の重み抽選が働く枠）`); }
+{ // 原材料の数は製造機のマス数に収まること（MACH は s2..s5 なので 2〜5。ECON-DATA 側と揃える）
+  const bad=Object.keys($.RECIPES).filter(k=>{ const n=k.split(',').length; return n<2||n>5; });
+  ok(!bad.length, '全レシピの原材料数が 2〜5（製造機のマス数の範囲）'+(bad.length?' → '+bad.join(' / '):'')); }
+{ // m が空の通常製品はキー '' を作ってしまうので弾く
+  const bad=$.PRODS.filter(p=>p.g!==$.SECRET_G&&(p.m||[]).length<2);
+  ok(!bad.length, '通常製品の m が2個以上'+(bad.length?' → '+bad.map(p=>p.n):'')); }
 
 console.log(fail? `\n${fail} 件 FAIL` : '\nすべて通過');
 process.exit(fail?1:0);
