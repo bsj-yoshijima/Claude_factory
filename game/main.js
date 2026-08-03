@@ -44,6 +44,10 @@ const PART_SKIN_BY_THEME = {
 };
 // 製造機の見た目(セル比)。inset=マス境界からの余白 / height=筐体の高さ / slot=スロット穴の大きさ
 const MACH_GEO = { inset:0.10, height:0.42, slot:0.52 };
+// 製造機の描画倍率。絵は1マスの送りぴったりに焼いてあるが、他のオブジェクトと並べると
+// やや大きいので少しだけ小さく描く。絵・土台・素材アイコンを同じ倍率で縮めるので、
+// 投入口とアイコンの位置関係は崩れない(占有マス数は変わらない)。
+const MACH_DRAW = 0.88;
 // 製造機のサイズ。variant('s2'..'s5') が在庫キー兼サイズ。1マス=スロット1つ。1マス機は廃止(最小2マス)。
 const MACH_SIZES = [2,3,4,5];
 const KINDS = ['machine','deco','prop','emoji','prize'];   // 設置できる種類（belt/outlet は廃止）
@@ -405,38 +409,54 @@ class Main extends Phaser.Scene {
     let HG, spotPts=null;   // 天面の高さ(px) / 投入口の実位置(スプライトのときアンカーから算出)
     e._lit=[];              // 採光tintの対象。帯の数だけある
     if(tex){
-      // 1マスの送りがゲームと一致するよう焼いてある(tools/cut_machines.py)ので拡縮しない。
-      // 拡縮すると送りが崩れて素材アイコンが投入口からズレる。
+      // 絵は「1マスの送り=ゲームの1マス」で焼いてある(tools/cut_machines.py)。
+      // ただし他のオブジェクトと並べるとやや大きいので、MACH_DRAW ぶんだけ小さく描く。
+      // 縮めるのは 絵・土台・素材アイコン の3つを同じ倍率・同じ原点で。
+      // 絵だけ縮めると土台が縁からはみ出し、アイコンだけ据え置くと投入口からズレる。
+      const S=MACH_DRAW;
       const flip=(e.dir==='v');   // 素材はu方向。v方向は左右反転した絵で角度が合う
       const key=flip? this._machFlipTex(tex.key) : tex.key;
       const src=this.textures.get(key).getSourceImage(), iw=src.width, ih=src.height;
+      const dw=iw*S, dh=ih*S;
       const fitA=((this.machFit()[tex.theme])||{})[String(tex.n)];
       const ax=fitA ? (flip?1-fitA.ax:fitA.ax) : null;
-      // 投入口0番が「マス0の中心」の真上に来るよう横位置を合わせる。
-      // bbox中央で置くと絵ごとに数px〜十数px 横へズレ、マスの一部に床が見えてしまう。
+      const du=(cellXY(1,0).x-cellXY(0,0).x)*S, dv=(cellXY(1,0).y-cellXY(0,0).y)*S;   // 縮めた後の1マス送り
+      // 投入口の列の中点を、占有マスの中心の列の中点に合わせる。
+      // 投入口0番をマス0に固定すると、縮めたぶんが手前側にだけ寄って土台が見えてしまう。
       let imx=(bx0+bx1)/2;
-      if(fitA) imx += cellXY(e.cell.c,e.cell.r).x - ((imx-iw/2)+ax*iw);
-      const L=imx-iw/2;
-      if(fitA){ const sx=L+ax*iw, sy=(by1-ih)+fitA.ay*ih;
-        const du=cellXY(1,0).x-cellXY(0,0).x, dv=cellXY(1,0).y-cellXY(0,0).y;
-        spotPts=cells.map((q,i)=>({x:sx+(flip?-1:1)*du*i, y:sy+dv*i}));
+      if(fitA){
+        const p0=cellXY(cells[0].c,cells[0].r), pN=cellXY(cells[n-1].c,cells[n-1].r);
+        imx += (p0.x+pN.x)/2 - (((imx-dw/2)+ax*dw) + (flip?-1:1)*du*(n-1)/2);
+      }
+      const L=imx-dw/2;
+      const sx0=fitA ? L+ax*dw : 0;                       // 投入口0番の画面x
+      if(fitA){ const sy=(by1-dh)+fitA.ay*dh;
+        spotPts=cells.map((q,i)=>({x:sx0+(flip?-1:1)*du*i, y:sy+dv*i}));
         HG = Math.max(2, by1-sy);      // 天面の高さ = 接地点から投入口までの高さ
-      } else HG = Math.max(2, ih-(by1-by0));
-      // 帯の切れ目は「隣のマス中心との中点」。両端は絵の端まで伸ばす(端の飾りを落とさない)。
-      // 境界は整数pxに丸める(隣り合う帯が同じ値になる=継ぎ目に隙間も重なりも出ない)。
+      } else HG = Math.max(2, dh-(by1-by0));
+      // 帯の切れ目は「隣の投入口との中点」。マス中心ではなく絵側の送りで切る(縮めてあるので別物)。
+      // 両端は絵の端まで伸ばす(端の飾りを落とさない)。境界は元絵の整数pxに丸める
+      // (隣り合う帯が同じ値になる = 継ぎ目に隙間も重なりも出ない)。
       const cx=cells.map(q=>cellXY(q.c,q.r).x), asc=(cx[n-1]>=cx[0]), cut=[];
-      for(let i=1;i<n;i++) cut.push(Phaser.Math.Clamp(Math.round((cx[i-1]+cx[i])/2-L),0,iw));
+      for(let i=1;i<n;i++){
+        const bnd = fitA ? sx0+(flip?-1:1)*du*(i-0.5) : (cx[i-1]+cx[i])/2;
+        cut.push(Phaser.Math.Clamp(Math.round((bnd-L)/S),0,iw));
+      }
       const sh=this.add.image((bx0+bx1)/2+3, by1-2, 'shadow').setDepth(dBack-0.6)
-        .setDisplaySize(iw*0.9,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);   // 影は機械の一番奥より後ろ
+        .setDisplaySize(dw*0.9,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);   // 影は機械の一番奥より後ろ
+      // 土台も絵と同じだけ縮める。原点は接地点(足元の中央)。
+      const fx=(bx0+bx1)/2, fy=by1;
+      const shrink=(p)=>({x:fx+(p.x-fx)*S, y:fy+(p.y-fy)*S});
       cells.forEach((q,i)=>{
         // 絵の本体の奥行はゲームの1マスより浅いことがあり、占有マスの手前側に床が残る。
         // そこに後ろのキャラが覗くので、マスごとの暗い土台で塞いでから帯を重ねる。
+        const qd=quads[i].map(shrink);
         const bg=this.add.graphics().setDepth(dep[i]-0.3); objs.push(bg);
-        bg.fillStyle(sk.edge,1); bg.fillPoints(quads[i],true);
-        bg.lineStyle(2,sk.side,1); this._strokeOuter(bg,quads[i],i,n,e.dir);
+        bg.fillStyle(sk.edge,1); bg.fillPoints(qd,true);
+        bg.lineStyle(2,sk.side,1); this._strokeOuter(bg,qd,i,n,e.dir);
         const x0 = asc ? (i===0?0:cut[i-1]) : (i===n-1?0:cut[i]);
         const x1 = asc ? (i===n-1?iw:cut[i]) : (i===0?iw:cut[i-1]);
-        const im=this.add.image(imx, by1, key).setOrigin(0.5,1).setDepth(dep[i]).setTint(tint);
+        const im=this.add.image(imx, by1, key).setOrigin(0.5,1).setScale(S).setDepth(dep[i]).setTint(tint);
         im.setCrop(x0, 0, Math.max(0,x1-x0), ih);   // 位置は変えず、自分の帯だけを見せる
         objs.push(im); e._lit.push(im); this.lit.push({sp:im,u,v});
       });
