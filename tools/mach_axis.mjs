@@ -97,14 +97,18 @@ export function flipX({ w, h, ch, px }) {
 /** @returns {{slope:number, axis:'u'|'v'|'?'}} slope>0 なら ↘(+u) */
 export function axisOf(file) {
   const { w, h, ch, px } = readPng(file);
-  const top = [];
+  // 列ごとに「不透明な最後のy」= 接地側のシルエットを取る。
+  // 上端で測ると、背の高い背面装飾(頭骨・万国旗・太陽電池パネルなど)に引っぱられて
+  // 符号が反転する。接地側は必ず台の底面をなぞるので装飾に影響されない。
+  const bottom = [];
   for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) {
+    for (let y = h - 1; y >= 0; y--) {
       const i = (y * w + x) * ch;
       const a = (ch === 4 || ch === 2) ? px[i + ch - 1] : 255;
-      if (a > 32) { top.push([x, y]); break; }
+      if (a > 32) { bottom.push([x, y]); break; }
     }
   }
+  const top = bottom;
   if (top.length < 12) return { slope: 0, axis: '?' };
   const band = Math.floor(top.length / 6);
   const avg = (arr) => arr.reduce((s, t) => s + t[1], 0) / arr.length;

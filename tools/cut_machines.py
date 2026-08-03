@@ -210,6 +210,39 @@ def split_machines(sheet):
     return picks
 
 
+def isolate(sheet, box):
+    """bbox で切ると隣の台の破片まで写る(台が近いとbboxが重なる)。
+    切り出した中でいちばん大きい連結成分だけを残し、他は透明にする。"""
+    sp = sheet.crop(box).copy()
+    w, h = sp.size
+    px = sp.load()
+    seen = [[False] * h for _ in range(w)]
+    best, best_n = None, 0
+    for x in range(w):
+        for y in range(h):
+            if seen[x][y] or px[x, y][3] == 0:
+                continue
+            q = deque([(x, y)]); seen[x][y] = True; pts = []
+            while q:
+                cx, cy = q.popleft(); pts.append((cx, cy))
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        nx, ny = cx + dx, cy + dy
+                        if 0 <= nx < w and 0 <= ny < h and not seen[nx][ny] and px[nx, ny][3] != 0:
+                            seen[nx][ny] = True; q.append((nx, ny))
+            if len(pts) > best_n:
+                best, best_n = pts, len(pts)
+    if best is None:
+        return sp
+    keep = set(best)
+    for x in range(w):
+        for y in range(h):
+            if px[x, y][3] and (x, y) not in keep:
+                px[x, y] = (0, 0, 0, 0)
+    bb = sp.getbbox()
+    return sp.crop(bb) if bb else sp
+
+
 def target_height(n, W, H, GU, GV, iso, IN):
     """u方向にNマス並べたときの、占有外周の画面bbox高さ(px)。筐体の高さは含まない"""
     return abs((n - 2 * IN) / GU * iso['uy'] * H) + abs((1 - 2 * IN) / GV * iso['vy'] * H)
@@ -513,7 +546,8 @@ def synth_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
         res = im.resize((ow, oh), Image.LANCZOS)
         res.save(os.path.join(OUT, f'mach-{theme}-s{n}.png'))
         ax, ay = o[0] * scale / ow, o[1] * scale / oh
-        out_fit[str(n)] = {'ax': round(ax, 4), 'ay': round(ay, 4)}
+        out_fit[str(n)] = {'ax': round(ax, 4), 'ay': round(ay, 4),
+                           'step': round(Dx * scale, 3), 'src': 'synth'}
         print(f'   s{n}: 合成 {im.width}x{im.height} → {ow}x{oh}  '
               f'送り ({Dx*scale:.3f}, {Py*scale:.3f})px  アンカー ({ax:.4f}, {ay:.4f})')
     dy_err = abs(Py * scale - step_y)
@@ -521,6 +555,44 @@ def synth_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
           f'縦の残差 {dy_err:.3f}px/マス (5マス機の端で {dy_err*4:.2f}px)')
     return out_fit
 
+
+
+def direct_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
+    """シートに描かれた台を **そのまま** 切り取って使う。合成しない。
+
+    台の割り当ては幅の順ではなく **検出できた投入口の数** で決める(生成側は個数を
+    間違えることがあるので、幅の順に 2,3,4,5 と決めつけると絵とマス数がずれる)。
+    倍率は台ごとに「その台の送りがゲームの1マスに一致する」ように取る。だから
+    送りは全サイズぴったり合うが、シート側の送りがバラついているぶん
+    **短い台のほうが筐体が大きく見える**(それがそのまま使うことの代償)。
+
+    書けたサイズの fit を返す。書けなかったサイズは呼び出し側の合成結果が残る。
+    """
+    step_x = abs(iso['ux'] * W / GU) * draw
+    step_y = abs(iso['uy'] * H / GU) * draw
+    out = {}
+    for _n, sp, spots in found:
+        if not spots or len(spots) < 2:
+            continue
+        k = len(spots)
+        if k not in SIZES or str(k) in out:
+            continue
+        cs = sorted([t[0] for t in spots], key=lambda c: c[0])
+        if cs[-1][1] < cs[0][1]:                       # 長軸が右斜め上 → ゲームの向きへ反転
+            sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
+            cs = [(sp.width - 1 - c[0], c[1]) for c in cs][::-1]
+        own = (cs[-1][0] - cs[0][0]) / (k - 1)
+        if own < 4:
+            continue
+        sc = step_x / own
+        ow, oh = max(1, round(sp.width * sc)), max(1, round(sp.height * sc))
+        sp.resize((ow, oh), Image.LANCZOS).save(os.path.join(OUT, f'mach-{theme}-s{k}.png'))
+        ax, ay = cs[0][0] * sc / ow, cs[0][1] * sc / oh
+        out[str(k)] = {'ax': round(ax, 4), 'ay': round(ay, 4),
+                       'step': round(own * sc, 3), 'src': 'direct'}
+        print(f'   s{k}: そのまま切取 {sp.width}x{sp.height} → {ow}x{oh}  '
+              f'送り ({own*sc:.3f}, {own*sc*step_y/step_x:.3f})px  アンカー ({ax:.4f}, {ay:.4f})')
+    return out
 
 def main():
     import json
@@ -551,7 +623,7 @@ def main():
         # 投入口を検出する。4台ぶん測るのは「生成された絵がどれだけ詰まっているか」をログに残すため
         found = []
         for n, bb in zip(SIZES, picks):
-            sp = sheet.crop(bb)
+            sp = isolate(sheet, bb)
             cands = spot_blobs(sp, test) if test else []
             top = SPOT_TOP.get(theme)
             if top:
@@ -568,6 +640,9 @@ def main():
 
         got = synth_fit(theme, found, W, H, GU, GV, iso, DRAW) if test else None
         if got:
+            # シートに描かれている台は、合成物ではなく その絵をそのまま使う。
+            # 描かれていないサイズ(生成側が個数を間違えた分)だけ合成結果を残す。
+            got.update(direct_fit(theme, found, W, H, GU, GV, iso, DRAW))
             fit[theme] = got
         else:
             print('   !! 2マス機の投入口を検出できないテーマなので、従来の幅合わせにフォールバック')
@@ -579,7 +654,8 @@ def main():
 
 
 def axis_slope(sp):
-    """長軸の向きを測る。列ごとに「不透明な最初のy」を取り、左端1/6と右端1/6の平均を比べる。
+    """長軸の向きを測る。列ごとに「不透明な最後のy」= 接地側のシルエットを取り、
+    左端1/6と右端1/6の平均を比べる。上端で測ると背の高い背面装飾に引っぱられる。
     正 = 右へ行くほど下がる = ↘(+u、ゲームが期待する向き)。負なら左右反転が必要。
     tools/mach_axis.mjs と同じ判定をこちらでも持つ(切り出しの時点で揃えてしまう)。"""
     a = np.asarray(sp.convert('RGBA'))
@@ -587,7 +663,7 @@ def axis_slope(sp):
     top = []
     for x in range(w):
         col = np.nonzero(a[:, x, 3] > 128)[0]
-        top.append(col[0] if len(col) else None)
+        top.append(col[-1] if len(col) else None)
     k = max(1, w // 6)
     L = [t for t in top[:k] if t is not None]
     R = [t for t in top[-k:] if t is not None]

@@ -436,15 +436,16 @@ console.log('\n[14] グローバル名の衝突（main.js と factory-phaser.htm
   ok(dup.length===0, `グローバル名の衝突なし${dup.length?' → '+dup.join(','):''}`);
 }
 
-console.log('\n[15] 合成した製造機スプライトの1マス送り（tools/cut_machines.py の成果物）');
-{ // 3/4/5マス機は2マス機の絵から合成しているので、
-  //   ・投入口0番の横位置(px)は4サイズとも同一（奥側は一切ずらさないから）
-  //   ・投入口0番と絵の下端との距離は、サイズが1つ増えるごとに ちょうど1マスぶん 開く
-  // が成り立つ。崩れていたら素材アイコンが投入口からズレる。
+console.log('\n[15] 製造機スプライトの1マス送り（tools/cut_machines.py の成果物）');
+{ // シートに描かれた台は そのまま切り取って使う（絵が無いサイズだけ2マス機から合成する）。
+  // ゲームが必要とするのは「投入口 i がマス i の真上に来る」ことだけで、それは
+  //   その絵の投入口の間隔 == ゲームの1マスの送り
+  // に尽きる。切り出し側が実測した送りを mach-fit.json に書いているので、そこを検証する。
   //
-  // 縦は「上端から」ではなく「下端から」で測る。main.js は絵の下端を基準に置くうえ、
-  // 短い機体では手前側の飾り(煙・帆・煙突)が奥側より高い位置に来て上端を決めてしまい、
-  // 上端基準だとサイズごとに数px動いて見える。ゲームの見え方には関係しない。
+  // 逆に「4サイズで絵の幅が1マスずつ増える」「投入口0番の位置が4サイズとも同じ」は
+  // 合成していたときだけ成り立つ性質で、そのまま切り取りでは成り立たない（台ごとに
+  // 別の絵で、装飾の張り出しも違う）。main.js は投入口の列を占有マスの中心に合わせ、
+  // 縦は絵の下端を接地させるので、絵の外形が揃っていなくても位置は破綻しない。
   const pngSize=(p)=>{ const b=fs.readFileSync(p);
     return { w:b.readUInt32BE(16), h:b.readUInt32BE(20) }; };            // IHDR
   const dir=new URL('../assets/', import.meta.url);
@@ -452,26 +453,28 @@ console.log('\n[15] 合成した製造機スプライトの1マス送り（tools
   const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
   const [,W,H,GU] = src.match(/const W = (\d+), H = (\d+), GU = (\d+), GV = \d+/).map(Number);
   const iso = Object.fromEntries([...src.matchAll(/(ux|uy):\s*(-?[\d.]+)/g)].map(m=>[m[1],+m[2]]));
-  // 絵は MACH_DRAW ぶん小さく焼いてある(描画時に縮めると NEAREST でドットが壊れるため)。
-  // なので1マスの送りも同じだけ小さいのが正しい。
+  // 絵は MACH_DRAW ぶん小さく焼いてある（描画時に縮めると NEAREST でドットが壊れる）
   const draw = +src.match(/const MACH_DRAW = ([\d.]+)/)[1];
-  const stepX = Math.abs(iso.ux*W/GU)*draw, stepY = Math.abs(iso.uy*H/GU)*draw;
-  ok(Object.keys(fit).length>0, `mach-fit.json にテーマがある (${Object.keys(fit).join(', ')})`);
-  for(const th of Object.keys(fit)){
-    const at=[2,3,4,5].map(n=>{ const a=fit[th][String(n)];
-      const s=pngSize(new URL(`mach-${th}-s${n}.png`, dir));
-      return { n, ...s, px:a.ax*s.w, up:s.h-a.ay*s.h }; });                // up = 投入口0番から下端まで
-    const dx=Math.max(...at.map(a=>a.px))-Math.min(...at.map(a=>a.px));
-    ok(dx<1, `${th}: 投入口0番の横位置が4サイズとも同じ (ブレ ${dx.toFixed(2)}px)`);
-    for(let i=1;i<4;i++){   // 画像サイズは整数なので1マス送りの丸めで ±1px は出る
-      const gw=at[i].w-at[i-1].w, gh=at[i].up-at[i-1].up;
-      ok(Math.abs(gw-stepX)<=1, `${th}: s${at[i].n} は s${at[i-1].n} より横に1マス分だけ広い (${gw}px / 目標 ${stepX.toFixed(2)})`);
-      ok(Math.abs(gh-stepY)<=1.5, `${th}: s${at[i].n} は s${at[i-1].n} より投入口0番が1マス分だけ高い位置になる (${gh.toFixed(1)}px / 目標 ${stepY.toFixed(2)})`);
-    }
-    const gw=at[3].w-at[0].w, gh=at[3].up-at[0].up;   // 丸めが溜まっていないこと
-    ok(Math.abs(gw-3*stepX)<=1, `${th}: s2→s5 で横に3マス分ちょうど (${gw}px / 目標 ${(3*stepX).toFixed(2)})`);
-    ok(Math.abs(gh-3*stepY)<=2, `${th}: s2→s5 で縦に3マス分ちょうど (${gh.toFixed(1)}px / 目標 ${(3*stepY).toFixed(2)})`);
+  const stepX = Math.abs(iso.ux*W/GU)*draw;
+  const themes=Object.keys(fit);
+  ok(themes.length>0, `mach-fit.json にテーマがある (${themes.length}件)`);
+  let offStep=[], offAnchor=[], missing=[], nDirect=0, nSynth=0;
+  for(const th of themes) for(const n of ['2','3','4','5']){
+    const a=fit[th][n];
+    if(!a){ missing.push(`${th}/s${n}`); continue; }
+    if(a.src==='direct') nDirect++; else nSynth++;
+    if(Math.abs(a.step-stepX)>0.05) offStep.push(`${th}/s${n}=${a.step}`);
+    const s=pngSize(new URL(`mach-${th}-s${n}.png`, dir));
+    // アンカー（投入口0番）は絵の内側にあること。外に出ていたら素材アイコンが宙に浮く
+    if(!(a.ax>0.02 && a.ax<0.98 && a.ay>0.02 && a.ay<0.98)) offAnchor.push(`${th}/s${n}`);
+    ok(s.w>0 && s.h>0, `${th}/s${n} のPNGがある (${s.w}x${s.h})`);
   }
+  ok(missing.length===0, `全テーマ 2〜5マスの4サイズが揃っている${missing.length?' → 欠け: '+missing.join(', '):''}`);
+  ok(offStep.length===0,
+     `全サイズの1マス送りがゲームと一致 (目標 ${stepX.toFixed(3)}px)${offStep.length?' → ずれ: '+offStep.join(', '):''}`);
+  ok(offAnchor.length===0,
+     `投入口0番のアンカーが絵の内側にある${offAnchor.length?' → 外: '+offAnchor.join(', '):''}`);
+  console.log(`  （シートそのまま切取 ${nDirect}枚 / 絵が無いサイズを合成 ${nSynth}枚）`);
 }
 
 console.log('\n[16] 製造機は「マスごとの深度」で描く（帯分割）');
