@@ -35,7 +35,7 @@ vm.runInContext(
 const $ = ctx.$;
 
 /** 1製品あたりの必要WP = マス数 × WP_PER_SLOT（factory-phaser.html と同値） */
-export const WP_PER_SLOT = 50;
+export const WP_PER_SLOT = 2000;
 /** 製品の売価（レア度別）。製品が完成した瞬間に 💰 に加算される */
 export const PROD_PRICE = { 1: 50, 2: 100, 3: 250, 4: 500, 5: 1000 };
 /** 製造機のマス数。's2' → 2 */

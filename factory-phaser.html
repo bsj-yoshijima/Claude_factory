@@ -915,8 +915,9 @@ document.getElementById('recipeBtn').addEventListener('click',()=>openRecipes())
    WP は /api/otel（OTel実測）の累計を参照する。セッション開始時点の累計を
    startWp として記録し、差分を「現セッションWP」として扱う。
    ========================================================================= */
-// 1製品あたりの必要WP = マス数 × WP_PER_SLOT。今後変わる可能性があるのでここ1箇所で調整する
-const WP_PER_SLOT = 50;
+/* 1製品あたりの必要WP = マス数 × WP_PER_SLOT（2マス4000 / 3マス6000 / 4マス8000 / 5マス10000）。
+   server/game-data.mjs にも同じ値があり、tools/test_server.mjs が一致を検証する。片方だけ直さないこと。 */
+const WP_PER_SLOT = 2000;
 const needWp = (m)=> Math.max(1, (m && m.size) || 1) * WP_PER_SLOT;
 /* 製品の売価（レア度別）。製品が完成した瞬間に 💰 と売上に加算される。
    server/game-data.mjs にも同じ表があり、tools/test_server.mjs が一致を検証する。片方だけ直さないこと。 */
