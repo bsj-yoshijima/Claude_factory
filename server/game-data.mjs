@@ -8,7 +8,7 @@
 //
 // ここは「サーバから見た窓口」に徹する。マスタを増やすときは game/data/ を触ること。
 export {
-  RAR, PRIZES, SELL, MACH, machVariant, lvCost, DECO, PROP, BG, FLOOR, SERIES,
+  RAR, MACH, machVariant, lvCost, DECO, PROP, BG, FLOOR, SERIES,
 } from '../game/data/econ.mjs';
 export {
   GENRES, GENRE, SECRET_G, MATS, MAT, PRODS, PROD, RECIPES, SECRETS, UNKNOWN_PRODUCT,

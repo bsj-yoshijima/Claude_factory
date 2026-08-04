@@ -2,16 +2,9 @@
    クライアント(factory-phaser.html)とサーバ(server/game-data.mjs)が同じこれを import する。
    純データだけを置くこと（document / window / fetch を参照しない）。 */
 
+/* レア度。w は同じ組み合わせから複数の製品が出るときの引き分け重み。 */
 export const RAR={1:{n:'N',c:'#9fb0c0',w:58},2:{n:'R',c:'#5fa8e0',w:27},3:{n:'SR',c:'#b57be0',w:11},4:{n:'SSR',c:'#f6c04a',w:3.2},5:{n:'UR',c:'#ff5d6c',w:0.8}};
-export const PRIZES=[
-  {id:'p_bolt',e:'🔩',n:'謎のボルト',r:1},{id:'p_clip',e:'📎',n:'クリップ',r:1},{id:'p_cone',e:'🚧',n:'コーン',r:1},{id:'p_seed',e:'🌱',n:'観葉の芽',r:1},
-  {id:'p_guitar',e:'🎸',n:'ギター',r:2},{id:'p_lamp',e:'💡',n:'ランプ',r:2},{id:'p_bronze',e:'🥉',n:'銅トロフィー',r:2},
-  {id:'p_robot',e:'🤖',n:'ロボ人形',r:3},{id:'p_arcade',e:'🕹️',n:'アーケード',r:3},{id:'p_gold',e:'🥇',n:'金メダル',r:3},
-  {id:'p_crystal',e:'💎',n:'クリスタル',r:4},{id:'p_rocket',e:'🚀',n:'ロケット',r:4},
-  {id:'p_crown',e:'👑',n:'王冠',r:5},{id:'p_dragon',e:'🐉',n:'ドラゴン像',r:5},
-];
 // ===== 価格・レート（すべて調整可） =====
-export const SELL={1:60,2:180,3:600,4:2400,5:9000};         // 景品売却額(レア度別)
 // 製造機は「マス数」で選ぶ。1マス=素材スロット1つ。入っている素材の組合せで作れる物が変わる。
 // 製造機は2〜5マス（1マス機は廃止）。最小の2マス機が最初の1台。
 export const MACH={ s2:{e:'2️⃣',n:'製造機 2マス',price:0},      s3:{e:'3️⃣',n:'製造機 3マス',price:6500},

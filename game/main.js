@@ -54,7 +54,7 @@ const MACH_GEO = { inset:0.10, height:0.42, slot:0.52 };
 const MACH_DRAW = 1.0;
 // 製造機のサイズ。variant('s2'..'s5') が在庫キー兼サイズ。1マス=スロット1つ。1マス機は廃止(最小2マス)。
 const MACH_SIZES = [2,3,4,5];
-const KINDS = ['machine','deco','prop','emoji','prize'];   // 設置できる種類（belt/outlet は廃止）
+const KINDS = ['machine','deco','prop','emoji'];   // 設置できる種類（belt/outlet/prize は廃止）
 const MACH_MIN = 2;
 const MACH_ART = ['normal','arabia','diner','halloween','scifi','egypt','western','onsen','japan','pirate','steampunk','dwarf','china','sushi','haunted','tokyo','beehive','carnival','circus','desert','space','ice','mushroom','undersea','fantasy','christmas','jungle','circuit','retrofuture','cabin','dino','hell'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
 const machSize = (variant)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(variant||'').replace(/\D/g,''))||MACH_MIN));
@@ -369,13 +369,6 @@ class Main extends Phaser.Scene {
       const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.05,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.72,CELL*0.32).setAlpha(0.42);
       const t=this.add.text(p.x,p.y-CELL*0.12,e.variant,{fontSize:Math.round(CELL*1.05)+'px'}).setOrigin(0.5,1).setDepth(p.y);
       objs.push(sh,t); main=t;
-    } else if(e.kind==='prize'){
-      const col=Phaser.Display.Color.HexStringToColor(e.variant.color).color;
-      const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.06,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.8,CELL*0.36).setAlpha(0.5);
-      const gl=this.add.ellipse(p.x,p.y-2,CELL*0.95,CELL*0.5,col,0.5).setDepth(p.y-1).setBlendMode(Phaser.BlendModes.ADD);
-      const base=this.add.rectangle(p.x,p.y-2,CELL*0.5,CELL*0.2,0x2b3138).setOrigin(0.5,1).setDepth(p.y); base.setStrokeStyle(1,0x14171c);
-      const t=this.add.text(p.x,p.y-CELL*0.26,e.variant.e,{fontSize:Math.round(CELL*0.95)+'px'}).setOrigin(0.5,1).setDepth(p.y+0.1);
-      objs.push(sh,gl,base,t); main=t;
     }
     if(e.kind!=='machine'){ e.objs=objs; e.main=main; }
     return e;
@@ -700,7 +693,6 @@ class Main extends Phaser.Scene {
   placeDeco(variant){ return this.addPlaced('deco', variant); }
   placeEmojiDeco(emoji){ return this.addPlaced('emoji', emoji); }
   placeProp(name){ if(!this.textures.exists('prop_'+name)) return null; return this.addPlaced('prop', name); }
-  placePrize(emoji,color){ return this.addPlaced('prize', {e:emoji,color}); }
   syncMachines(list){ for(const m of (list||[])) this.addPlaced('machine', 's'+machSize(m.variant), {lvl:m.lvl||1}); }
   /* 設置時のポップ演出 */
   _spawnPop(x,y){ const g=this.add.circle(x,y-CELL*0.5,CELL*0.6,0xffe9a8,0.5).setDepth(9000).setBlendMode(Phaser.BlendModes.ADD);

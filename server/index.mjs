@@ -287,7 +287,6 @@ async function handle(req, res) {
         case 'GET /api/factory':      r = await API.getFactory(user); break;
         case 'POST /api/claim':       r = await API.postClaim(user); break;
         case 'POST /api/shop/buy':    r = await API.postBuy(user, body); break;
-        case 'POST /api/shop/sell':   r = await API.postSell(user, body); break;
         case 'POST /api/machine/level': r = await API.postLevelUp(user, body); break;
         case 'PUT /api/layout':       r = await API.putLayout(user, body); break;
         case 'PUT /api/machine/slots': r = await API.putSlots(user, body); break;

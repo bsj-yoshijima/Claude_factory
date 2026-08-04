@@ -340,7 +340,7 @@
 /* マスタデータは game/data/ の3モジュールが唯一の定義。サーバ(server/game-data.mjs)も
    同じものを import するので、クライアントとサーバで値がズレようがない。
    増やすときは game/data/ を触ること（この画面のコードは触らなくてよい）。 */
-import { RAR, PRIZES, SELL, MACH, machVariant, lvCost,
+import { RAR, MACH, machVariant, lvCost,
          DECO, PROP, PROP_GROUPS, BG, FLOOR, SERIES } from './game/data/econ.mjs';
 import { GENRES, GENRE, SECRET_G, genreOf, genresOfMats, MATS, MAT,
          PRODS, UNKNOWN_PRODUCT, PROD, recipeKeyOf, RECIPES, SECRETS,
@@ -348,7 +348,7 @@ import { GENRES, GENRE, SECRET_G, genreOf, genresOfMats, MATS, MAT,
 import { WP_PER_SLOT, PROD_PRICE, needWpForSize } from './game/data/rules.mjs';
 
 
-let G={ pity:0, inv:{}, money:0, machines:[{variant:'s2',lvl:1}], decos:{},
+let G={ money:0, machines:[{variant:'s2',lvl:1}], decos:{},
         bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[],
         stock:{machine:{},prop:{},deco:{}}, lastT:null };
 /* =========================================================================
@@ -424,7 +424,7 @@ async function loadGame(){
   if(d){ const c=craftState();
     c.collection=Object.fromEntries(
       Object.entries(d.collection||{}).map(([k,v])=>[k,v.owned]));
-    c.collectionMeta=d.collection||{}; G.inv=d.inv||{}; NET.collectionLoaded=true; }
+    c.collectionMeta=d.collection||{}; NET.collectionLoaded=true; }
   const sk=await NET.call('GET','/api/skins'); if(sk) G.skins=sk.skins||{};
   return true;
 }
@@ -1328,16 +1328,12 @@ function openAgents(){
 document.getElementById('hud').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openAgents(); });
 document.getElementById('hud').title='クリックでエージェント一覧';
 
-/* ===== ショップ（景品の売却＋購入/強化） ===== */
+/* ===== ショップ（製造機・設備・内装の購入と強化） ===== */
 /* 💰 の増減は必ずサーバが決める（クライアントの申告を信じない） */
 async function apiBuy(kind,id,okMsg){
   const r=await NET.call('POST','/api/shop/buy',{kind,id});
   if(!r) return false; applyFactory(r.factory); updateBadge(); if(okMsg) toast(okMsg); return true;
 }
-function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
-  NET.call('POST','/api/shop/sell',{itemId:id,qty}).then(r=>{ if(!r)return;
-    applyFactory(r.factory); G.inv[id]=Math.max(0,have-qty); updateBadge();
-    toast(`${p.e} ${p.n}×${qty} を売却 (+💰${r.gain})`); }); }
 // 購入=在庫(owned)に追加。設置は編集パレットから床クリックで行う
 function buyMachine(type){ if(!MACH[type])return; if(G.money<MACH[type].price)return;
   apiBuy('machine',type,`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
@@ -1364,18 +1360,11 @@ function buySeries(k){ const S=SERIES[k];
   apiBuy('series',k,`${S.n} シリーズを適用`).then(okk=>{ if(okk&&window.__scene){
     window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } }); }
 
-let _shopTab='sell';
-const SHOP_TABS=[['sell','💵 売却'],['mach','🏭 製造機'],['equip','🧰 設備'],['decor','🎨 内装'],['series','🌏 シリーズ']];
+let _shopTab='mach';
+const SHOP_TABS=[['mach','🏭 製造機'],['equip','🧰 設備'],['decor','🎨 内装'],['series','🌏 シリーズ']];
 function shopBody(){
     let body='';
-    if(_shopTab==='sell'){
-      const owned=PRIZES.filter(p=>G.inv[p.id]>0);
-      body = owned.length ? owned.map(p=>{ const have=G.inv[p.id],col=RAR[p.r].c;
-        return `<div class="rc"><div class="ic">${p.e}</div><div class="mid"><div class="nm">${p.n} <span style="color:${col};font-size:10px">${RAR[p.r].n}</span> ×${have}</div>
-          <div class="cost">売却額 💰${SELL[p.r]} /個</div></div>
-          <button data-sell="${p.id}" data-q="1">1個</button><button data-sell="${p.id}" data-q="all" style="margin-left:5px">全部</button></div>`;
-      }).join('') : '<div class="cost" style="padding:12px">売れる景品がありません。🎁ガチャで景品を集めよう。</div>';
-    } else if(_shopTab==='mach'){
+    if(_shopTab==='mach'){
       body = '<div class="cost" style="margin:2px 0 6px">設置済みの製造機（Lv↑で生産量が増える。素材は🏭製造タブでセット）</div>';
       const machs=(G.layout||[]).filter(e=>e.kind==='machine');
       body += (machs.length?machs:[]).map(e=>{ const c=lvCost(e.lvl), M=MACH[machVariant(e.variant)];
@@ -1433,7 +1422,6 @@ function openShop(tab){ if(tab)_shopTab=tab;
     body:shopBody,
     onRender:(p,d)=>{
       const re=()=>d.refresh();
-      p.querySelectorAll('[data-sell]').forEach(b=>b.onclick=()=>{ const q=b.dataset.q==='all'?(G.inv[b.dataset.sell]||0):1; sellPrize(b.dataset.sell,q); re(); });
       p.querySelectorAll('[data-lv]').forEach(b=>b.onclick=()=>{ levelUp(b.dataset.lv); re(); });
       p.querySelectorAll('[data-buymach]').forEach(b=>b.onclick=()=>{ buyMachine(b.dataset.buymach); re(); });
       p.querySelectorAll('[data-deco]').forEach(b=>b.onclick=()=>{ buyDeco(b.dataset.deco); re(); });
