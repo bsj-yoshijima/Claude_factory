@@ -28,7 +28,7 @@ const obj = () => { const o = chain(); return o; };
 const pngWH=(p)=>{ const b=fs.readFileSync(p); return { width:b.readUInt32BE(16), height:b.readUInt32BE(20) }; };   // IHDR
 const MACH_PNG={};
 for(const th of ['normal','arabia','diner','halloween','scifi']) for(const n of [2,3,4,5]){
-  try{ MACH_PNG[`mach_${th}_s${n}`]=pngWH(new URL(`../assets/mach-${th}-s${n}.png`, import.meta.url)); }catch(_){}
+  try{ MACH_PNG[`mach_${th}_s${n}`]=pngWH(new URL(`../assets/machines/mach-${th}-s${n}.png`, import.meta.url)); }catch(_){}
 }
 let machTexOn=true;            // false にすると手続き描画のフォールバックを通せる
 const canvasTex={};            // addCanvas で焼いたテクスチャ(v向きの反転絵など)
@@ -96,7 +96,7 @@ s.input = { _h:{}, on(ev,fn){ (this._h[ev]=this._h[ev]||[]).push(fn); }, setDrag
 s.time = { addEvent(){} };
 s.tweens = { add(){} };
 // 投入口アンカーは実物を読ませる(帯の切り出しと素材アイコンの位置がこれに依る)
-const machFitSrc=fs.readFileSync(new URL('../assets/mach-fit.json', import.meta.url)).toString();
+const machFitSrc=fs.readFileSync(new URL('../assets/machines/mach-fit.json', import.meta.url)).toString();
 s.cache = { json:{ get:()=>({}) }, text:{ get:(k)=> k==='machfit'? machFitSrc : '{}' } };
 s.poll = async()=>{};
 s.createNightFx = function(){ this.windows=[]; this.uLen=0.55; this.sh=0.04;
@@ -466,7 +466,7 @@ console.log('\n[15] 製造機スプライトの1マス送り（tools/assets/cut_
   // 縦は絵の下端を接地させるので、絵の外形が揃っていなくても位置は破綻しない。
   const pngSize=(p)=>{ const b=fs.readFileSync(p);
     return { w:b.readUInt32BE(16), h:b.readUInt32BE(20) }; };            // IHDR
-  const dir=new URL('../assets/', import.meta.url);
+  const dir=new URL('../assets/machines/', import.meta.url);
   const fit=JSON.parse(fs.readFileSync(new URL('mach-fit.json', dir)).toString());
   const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
   const [,W,H,GU] = src.match(/const W = (\d+), H = (\d+), GU = (\d+), GV = \d+/).map(Number);

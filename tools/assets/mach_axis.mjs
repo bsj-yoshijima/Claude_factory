@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import path from 'node:path';
 
-const ASSETS = path.join(import.meta.dirname, '..', '..', 'assets');
+const ASSETS = path.join(import.meta.dirname, '..', '..', 'assets', 'machines');
 /** 判定に使うサイズ。マス数が多いほど長軸がはっきり出る */
 const PROBE_SIZE = 5;
 /** これ以下の傾きは「判定できない」として扱う（±1マスの送りは約14px） */

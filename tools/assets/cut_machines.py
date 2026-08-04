@@ -5,7 +5,7 @@
 
 入力 : assets/mach-sheets/<theme>.png   … 2/3/4/5 マス機が4台。並びは 2x2 でも縦1列でもよい
 出力 : assets/mach-<theme>-s<N>.png     … 透過PNG。1マスの送りがゲームの1マスと一致する大きさ
-       assets/mach-fit.json             … 素材アイコンを絵の投入口に乗せるためのアンカー
+       assets/machines/mach-fit.json             … 素材アイコンを絵の投入口に乗せるためのアンカー
 
 なぜ合成するのか:
   4台は「同じ機械の長さ違い」なので1マスの送りは4台とも同じはず。ところが生成AIは
@@ -786,7 +786,7 @@ def main():
 
     with open(os.path.join(OUT, 'mach-fit.json'), 'w', encoding='utf-8') as fp:
         json.dump(fit, fp, ensure_ascii=False, indent=1)
-    print('\nwrote assets/mach-fit.json')
+    print('\nwrote assets/machines/mach-fit.json')
 
 
 def axis_slope(sp):

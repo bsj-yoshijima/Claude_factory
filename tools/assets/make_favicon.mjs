@@ -1,6 +1,6 @@
 /* ファビコンを生成する。依存ゼロ（Node標準のzlibだけでPNGを書く）。
      使い方: node tools/assets/make_favicon.mjs
-     出力  : assets/favicon.png (96px) / assets/favicon-192.png (Appleのホーム画面用)
+     出力  : assets/ui/favicon.png (96px) / assets/ui/favicon-192.png (Appleのホーム画面用)
 
    絵の中身は「工場 + 左下にClaude君」。
    Claude君は画面左下のHUDに出ているアイコンと同じもの ——

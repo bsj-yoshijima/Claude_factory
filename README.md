@@ -240,17 +240,17 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 | `game/ui/*.mjs` | 画面ごと（`dialog` `parts` `collection` `recipes` `craft-dialog` `shop` `leaderboard` `mypage` `agents` `palette` `morph`） |
 | `game/main.js` | Phaser のシーン（クラシックスクリプト）。UI へは `window.__*` 経由 |
 | `assets/room-*.png` | Stitch 生成のテーマ別背景（`docs/stitch-prompts.md` にプロンプト） |
-| `assets/prop_*.png` | 装飾プロップ（汎用12種 + テーマ別6種×5テーマ）。**表示サイズに合わせて縮小済み** |
+| `assets/props/prop_*.png` | 装飾プロップ（汎用12種 + テーマ別6種×5テーマ）。**表示サイズに合わせて縮小済み** |
 | `assets/prop-src/prop_*.png` | 上記の原寸版（切り出したまま・200〜400px）。サイズを変えるときの元データ |
 | `assets/prop-sheets/*.jpg` | Stitch が生成したアセットシート（1枚に3×2で6体） |
 | `tools/assets/cut_props.py` | シートから1体ずつ切り出し、背景と接地影を抜いて `assets/prop-src/` を作る |
-| `tools/assets/fit_props.py` | 原寸版をゲーム内の表示サイズへ縮小して `assets/prop_*.png` を作る |
+| `tools/assets/fit_props.py` | 原寸版をゲーム内の表示サイズへ縮小して `assets/props/prop_*.png` を作る |
 | `docs/archive/index.html` / `docs/archive/machine-concepts.html` | 初期のシンプル版（カードUI）／機械のコンセプトボード |
 | `docs/archive/proposal.html` / `docs/archive/slides.html` / `docs/archive/slides-en.html` / `docs/archive/Claude-Factory.pdf` | 企画書・発表スライド |
 | `docs/machine-sprite-prompt.md` | 製造機スプライトを Stitch に依頼するテンプレ（向きをピクセル送りで数値指定する。文章だと横一列で返ってくる） |
 | `tools/assets/cut_machines.py` | 製造機シートから**2マス機の絵だけを正**として3/4/5マス機を合成し、表示サイズへ縮小＋投入口のアンカーを書き出す（`python3 tools/assets/cut_machines.py`） |
 | `tools/assets/mach_axis.mjs` | 製造機スプライトの長軸が全テーマ `+u`（右斜め下）を向いているか検査する（`node tools/assets/mach_axis.mjs`／`--fix` で左右反転して揃える）。逆向きの絵は**影・占有マス・素材アイコンが正しい向きなのに本体だけ直交して見える**。`test/test_machines.mjs` から呼ばれる |
-| `tools/assets/make_favicon.mjs` | ファビコン（工場＋左下にClaude君）を描いて `assets/favicon.png` / `favicon-192.png` を出す（`node tools/assets/make_favicon.mjs`。依存ゼロ。Claude君は `mascotCanvas()` の手順を移植したものなので、マスコットの形を変えたら再実行する） |
+| `tools/assets/make_favicon.mjs` | ファビコン（工場＋左下にClaude君）を描いて `assets/ui/favicon.png` / `favicon-192.png` を出す（`node tools/assets/make_favicon.mjs`。依存ゼロ。Claude君は `mascotCanvas()` の手順を移植したものなので、マスコットの形を変えたら再実行する） |
 | `test/test_ui_browser.mjs` | 実ブラウザ(headless Chrome)でUIを操作して確認（`node test/test_ui_browser.mjs`。サーバ起動が前提。`CF_URL` で接続先を変えられる）。「構文は通るが実行時に壊れる」類はこれでしか出ない |
 | `test/test_machines.mjs` | 製造機／設置ロジックの検証（`node test/test_machines.mjs`。Phaser をスタブして描画なしで走る） |
 | `test/test_craft.mjs` | ジャンル／原材料／製品／レシピ＋確率の検証（`node test/test_craft.mjs`。`game/data/craft.mjs` を import するだけ。ブラウザ不要） |
@@ -293,7 +293,7 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 
 **素材アイコンは占有マスの真上に置く**。絵の意匠には依存しない（スロットの穴を描く必要はない）。
 
-生成された絵は台ごとにマスピッチが違う（halloween ±13% / scifi ±57%）。生成AIは何度指示しても長い台ほどマスを詰めてくるので、**投入口を検出できるテーマは 2マス機の絵1枚だけを正とし、1ベイ（1マスぶんの縦帯）を繰り返して3/4/5マス機を合成する**（`tools/assets/cut_machines.py`）。送りは定義上ぴったり一定になり、デザインも4サイズで完全に同一になる。投入口の位置は `assets/mach-fit.json` にアンカーとして書き出し、`machFit()` が素材アイコンを絵の口に乗せる。
+生成された絵は台ごとにマスピッチが違う（halloween ±13% / scifi ±57%）。生成AIは何度指示しても長い台ほどマスを詰めてくるので、**投入口を検出できるテーマは 2マス機の絵1枚だけを正とし、1ベイ（1マスぶんの縦帯）を繰り返して3/4/5マス機を合成する**（`tools/assets/cut_machines.py`）。送りは定義上ぴったり一定になり、デザインも4サイズで完全に同一になる。投入口の位置は `assets/machines/mach-fit.json` にアンカーとして書き出し、`machFit()` が素材アイコンを絵の口に乗せる。
 
 投入口を検出できないテーマ（`SPOT_TEST` 未登録）は従来どおり **幅=占有外周の幅 / 高さ=占有外周の高さ+共通の筐体高（4台の中央値）** の幅合わせにフォールバックする。歪みは数%に収まり、超えると警告が出る。
 

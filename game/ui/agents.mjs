@@ -11,7 +11,7 @@ function agentRows(){                   // プロジェクト単位に集約(同
   return Object.values(by);
 }
 const skinName=(id)=>{ const s=((window.__factory&&window.__factory.skinList)||[]).find(x=>x.id===id); return s?s.n:'デフォルト'; };
-/* 被り物の画像(assets/hat-*.png)は未生成のものが多い。
+/* 被り物の画像(assets/hats/hat-*.png)は未生成のものが多い。
    onerror で DOM を差し替える手は、差分適用のたびに元の <img> へ戻されて
    読み直し→また差し替え…とちらつくので使わない。
    「その画像があるか」を一度だけ判定してキャッシュし、描画は常に決定的にする。 */
@@ -23,13 +23,13 @@ function hatReady(id){
   const im=new Image();
   im.onload =()=>{ _hatOk.set(id,true); if(_dlg) _dlg.refresh(); };   // 届いたら次の描画から画像に変わる
   im.onerror=()=>{ _hatOk.set(id,false); };
-  im.src='assets/hat-'+id+'.png';
+  im.src='assets/hats/hat-'+id+'.png';
   return false;
 }
 // スキンの見本。画像が無いスキンは絵文字の仮アイコンで出す
 function skinThumb(id,px){ const e=(id==='none')?'🧑‍🏭':((BG_META[id]&&BG_META[id].e)||'🎨');
   return hatReady(id)
-    ? `<img src="assets/hat-${id}.png" alt="" style="width:${px+16}px;height:${px+16}px;object-fit:contain">`
+    ? `<img src="assets/hats/hat-${id}.png" alt="" style="width:${px+16}px;height:${px+16}px;object-fit:contain">`
     : `<span style="font-size:${px}px">${e}</span>`;
 }
 export function openAgents(){
@@ -43,7 +43,7 @@ export function openAgents(){
       const skins=(window.__factory&&window.__factory.skinList)||[];
       return rows.map(p=>{
         const key=encodeURIComponent(p.proj), nm=esc(p.proj)||'(無名)', open=_agentSel===p.proj;
-        const hat=hatReady(p.skinId)?`<img src="assets/hat-${p.skinId}.png" alt="">`:'';
+        const hat=hatReady(p.skinId)?`<img src="assets/hats/hat-${p.skinId}.png" alt="">`:'';
         // 1プロジェクト = 1ノード。data-key で、稼働状況の変化で並びが動いてもノードを持ち回す
         // （＝ 開いているスキン一覧のスクロール位置が live更新で戻らない）
         let h=`<div data-key="ag:${key}"><div class="rc">
