@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """原寸プロップ(assets/prop-src)を、ゲーム内の表示サイズに合わせて縮小し assets/ に書き出す。
 
-    使い方: python3 tools/fit_props.py [supersample=1]
+    使い方: python3 tools/assets/fit_props.py [supersample=1]
 
 なぜ必要か:
   Phaser 側は pixelArt:true (=NEAREST) なので、330px の素材を 42px で描くと
@@ -23,7 +23,7 @@ import sys
 
 from PIL import Image, ImageEnhance, ImageFilter
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MAIN_JS = os.path.join(ROOT, 'game', 'main.js')
 SRC_DIR = os.path.join(ROOT, 'assets', 'prop-src')
 OUT_DIR = os.path.join(ROOT, 'assets')

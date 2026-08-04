@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """部屋の背景画像を拡縮＋平行移動して、床をゲームのグリッドに合わせる。
 
-    測るだけ: python3 tools/fit_room.py <theme>
-    表を書く: python3 tools/fit_room.py --json     … 全テーマぶん assets/room-fit.json へ
-    画像を焼く: python3 tools/fit_room.py <theme> --apply   (非推奨。下記参照)
-    別画像から: python3 tools/fit_room.py <theme> --from <path> --apply
+    測るだけ: python3 tools/assets/fit_room.py <theme>
+    表を書く: python3 tools/assets/fit_room.py --json     … 全テーマぶん assets/rooms/room-fit.json へ
+    画像を焼く: python3 tools/assets/fit_room.py <theme> --apply   (非推奨。下記参照)
+    別画像から: python3 tools/assets/fit_room.py <theme> --from <path> --apply
 
 画像を焼き直さないこと(--json を使う理由):
   背景は setDisplaySize(1024,572) で描かれる。元画像は 1376x768 なので、表示の時点で
@@ -33,7 +33,7 @@ import os, re, sys
 import numpy as np
 from PIL import Image
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SKIRT_PROBE = 40      # 下端から上へ何px ぶん明るさを見るか
 SKIRT_JUMP = 135      # 明るさの合計がこれ以上跳ねたらスカート→床上面の境目
 
@@ -81,7 +81,7 @@ def edge_gap(arr, mask, R, F):
 
 
 def write_json():
-    """全テーマの補正値を assets/room-fit.json に書く。
+    """全テーマの補正値を assets/rooms/room-fit.json に書く。
     game/main.js はこれを読んで背景の表示サイズと位置を補正する(画像は焼き直さない)。"""
     import glob, json
     W, H, A, R, F, D = grid()
@@ -108,7 +108,7 @@ def write_json():
         print(f'{theme:13s} 倍率 {s:.4f}  ずらし ({dx:+7.1f}, {dy:+6.1f})')
     with open(os.path.join(ROOT, 'assets', 'room-fit.json'), 'w', encoding='utf-8') as fp:
         json.dump(out, fp, ensure_ascii=False, indent=1)
-    print(f'\nwrote assets/room-fit.json  ({len(out)} テーマ)')
+    print(f'\nwrote assets/rooms/room-fit.json  ({len(out)} テーマ)')
 
 
 def main():

@@ -54,9 +54,9 @@ const MACH_GEO = { inset:0.10, height:0.42, slot:0.52 };
 const MACH_DRAW = 1.0;
 // 製造機のサイズ。variant('s2'..'s5') が在庫キー兼サイズ。1マス=スロット1つ。1マス機は廃止(最小2マス)。
 const MACH_SIZES = [2,3,4,5];
-const KINDS = ['machine','deco','prop','emoji','prize'];   // 設置できる種類（belt/outlet は廃止）
+const KINDS = ['machine','deco','prop','emoji'];   // 設置できる種類（belt/outlet/prize は廃止）
 const MACH_MIN = 2;
-const MACH_ART = ['normal','arabia','diner','halloween','scifi','egypt','western','onsen','japan','pirate','steampunk','dwarf','china','sushi','haunted','tokyo','beehive','carnival','circus','desert','space','ice','mushroom','undersea','fantasy','christmas','jungle','circuit','retrofuture','cabin','dino','hell'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
+const MACH_ART = ['normal','arabia','diner','halloween','scifi','egypt','western','onsen','japan','pirate','steampunk','dwarf','china','sushi','haunted','tokyo','beehive','carnival','circus','desert','space','ice','mushroom','undersea','fantasy','christmas','jungle','circuit','retrofuture','cabin','dino','hell'];   // スプライトを用意したテーマ(assets/machines/mach-<theme>-s<N>.png)
 const machSize = (variant)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(variant||'').replace(/\D/g,''))||MACH_MIN));
 
 /* ===== 素材の見た目 =====
@@ -231,35 +231,35 @@ const DEMO = [
 
 class Main extends Phaser.Scene {
   preload(){
-    this.load.image('bg_room','assets/factory-room.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
+    this.load.image('bg_room','assets/rooms/factory-room.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
     // 背景の床をグリッドに合わせる補正表(tools/fit_room.py --json)。
     // 画像を焼き直すとリサンプルが2回になって甘くなるので、表示時の倍率と位置で直す。
     // load.json は中身が壊れているとローダーごと死ぬので text で読んで自前で parse する。
-    this.load.text('roomfit','assets/room-fit.json');
-    this.load.image('room_arabia','assets/room-arabia.png');   // Stitch製 テーマ部屋(壁/床/窓 焼き込み)
-    this.load.image('room_undersea','assets/room-undersea.png');
-    this.load.image('room_japan','assets/room-japan.png');
-    this.load.image('room_china','assets/room-china.png');
-    this.load.image('room_diner','assets/room-diner.png');
-    this.load.image('room_fantasy','assets/room-fantasy.png');
-    this.load.image('room_scifi','assets/room-scifi.png');
-    this.load.image('room_cabin','assets/room-cabin.png');
-    this.load.image('room_dino','assets/room-dino.png');
-    for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/room-${n}.png`);
-    for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
-    this.load.text('machfit','assets/mach-fit.json');   // 投入口のアンカー。素材アイコンを絵の口に乗せる
-    this.load.text('hatfit','assets/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る(load.json は中身が壊れるとローダーごと落ちるので text 読み)
+    this.load.text('roomfit','assets/rooms/room-fit.json');
+    this.load.image('room_arabia','assets/rooms/room-arabia.png');   // Stitch製 テーマ部屋(壁/床/窓 焼き込み)
+    this.load.image('room_undersea','assets/rooms/room-undersea.png');
+    this.load.image('room_japan','assets/rooms/room-japan.png');
+    this.load.image('room_china','assets/rooms/room-china.png');
+    this.load.image('room_diner','assets/rooms/room-diner.png');
+    this.load.image('room_fantasy','assets/rooms/room-fantasy.png');
+    this.load.image('room_scifi','assets/rooms/room-scifi.png');
+    this.load.image('room_cabin','assets/rooms/room-cabin.png');
+    this.load.image('room_dino','assets/rooms/room-dino.png');
+    for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/rooms/room-${n}.png`);
+    for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/props/prop_${n}.png`);
+    this.load.text('machfit','assets/machines/mach-fit.json');   // 投入口のアンカー。素材アイコンを絵の口に乗せる
+    this.load.text('hatfit','assets/hats/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る(load.json は中身が壊れるとローダーごと落ちるので text 読み)
     /* 被り物は「用意できているテーマだけ」読む。どれが用意済みかの正は hat-fit.json のキー。
        SKINS 全部(32種)を投機的に読むと、絵が無いぶんだけ 404 がコンソールに並んで
        初見の人には壊れているように見える（描画側は exists チェックで無視していた）。
        hat-fit.json が読めた時点で追加投入する。Phaser はロード中の追加を受け付ける。 */
     this.load.once('filecomplete-text-hatfit', (_key,_type,data)=>{
       let ready={}; try{ ready=JSON.parse(data)||{}; }catch(_){}
-      for(const s of SKINS) if(s.id!=='none' && ready[s.id]) this.load.image('hat_'+s.id, `assets/hat-${s.id}.png`);
+      for(const s of SKINS) if(s.id!=='none' && ready[s.id]) this.load.image('hat_'+s.id, `assets/hats/hat-${s.id}.png`);
     });
-    for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
+    for(const d of DECOR) this.load.image('dec_'+d, `assets/objects/obj_${d}.png`);
     // 製造機スプライト(Stitch製)。命名規約 mach_<theme>_s<N>。無いテーマは normal → 手続き描画 の順にフォールバック
-    for(const th of MACH_ART) for(const n of MACH_SIZES) this.load.image(`mach_${th}_s${n}`, `assets/mach-${th}-s${n}.png`);
+    for(const th of MACH_ART) for(const n of MACH_SIZES) this.load.image(`mach_${th}_s${n}`, `assets/machines/mach-${th}-s${n}.png`);
     // 絵から実測したスロット中心(幅/高さ比)。素材アイコンを穴にぴったり載せる。
     // load.json は中身が壊れているとローダーごと例外で落ちる(=create()が走らない)ので text で読んで自前parse
 
@@ -376,13 +376,6 @@ class Main extends Phaser.Scene {
       const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.05,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.72,CELL*0.32).setAlpha(0.42);
       const t=this.add.text(p.x,p.y-CELL*0.12,e.variant,{fontSize:Math.round(CELL*1.05)+'px'}).setOrigin(0.5,1).setDepth(p.y);
       objs.push(sh,t); main=t;
-    } else if(e.kind==='prize'){
-      const col=Phaser.Display.Color.HexStringToColor(e.variant.color).color;
-      const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.06,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.8,CELL*0.36).setAlpha(0.5);
-      const gl=this.add.ellipse(p.x,p.y-2,CELL*0.95,CELL*0.5,col,0.5).setDepth(p.y-1).setBlendMode(Phaser.BlendModes.ADD);
-      const base=this.add.rectangle(p.x,p.y-2,CELL*0.5,CELL*0.2,0x2b3138).setOrigin(0.5,1).setDepth(p.y); base.setStrokeStyle(1,0x14171c);
-      const t=this.add.text(p.x,p.y-CELL*0.26,e.variant.e,{fontSize:Math.round(CELL*0.95)+'px'}).setOrigin(0.5,1).setDepth(p.y+0.1);
-      objs.push(sh,gl,base,t); main=t;
     }
     if(e.kind!=='machine'){ e.objs=objs; e.main=main; }
     return e;
@@ -707,7 +700,6 @@ class Main extends Phaser.Scene {
   placeDeco(variant){ return this.addPlaced('deco', variant); }
   placeEmojiDeco(emoji){ return this.addPlaced('emoji', emoji); }
   placeProp(name){ if(!this.textures.exists('prop_'+name)) return null; return this.addPlaced('prop', name); }
-  placePrize(emoji,color){ return this.addPlaced('prize', {e:emoji,color}); }
   syncMachines(list){ for(const m of (list||[])) this.addPlaced('machine', 's'+machSize(m.variant), {lvl:m.lvl||1}); }
   /* 設置時のポップ演出 */
   _spawnPop(x,y){ const g=this.add.circle(x,y-CELL*0.5,CELL*0.6,0xffe9a8,0.5).setDepth(9000).setBlendMode(Phaser.BlendModes.ADD);

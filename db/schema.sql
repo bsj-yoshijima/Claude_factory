@@ -198,13 +198,9 @@ CREATE TABLE IF NOT EXISTS collection (
   PRIMARY KEY (user_id, product_id)
 );
 
--- ガチャ景品の在庫
-CREATE TABLE IF NOT EXISTS inventory (
-  user_id bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  item_id text NOT NULL,
-  qty     integer NOT NULL DEFAULT 0,
-  PRIMARY KEY (user_id, item_id)
-);
+-- ガチャ景品の在庫(inventory)は概念ごと廃止した。
+-- schema.sql は起動のたびに流れるので、取り残された表をここで落とす。
+DROP TABLE IF EXISTS inventory;
 
 -- 売上（JST の暦日ごと）。7日トリムは廃止 → 月次実績が出せる
 CREATE TABLE IF NOT EXISTS sales_daily (

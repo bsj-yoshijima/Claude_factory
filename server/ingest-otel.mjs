@@ -50,7 +50,7 @@ const norm = (name) => String(name).replace(/^claude_code\./, '');
 
    旧 otel.mjs は Agent の duration_ms から実行区間も併用していたが、同期エージェントも
    api_request を agent:* で出すため、この判定だけで両方カバーできる
-   （tools/test_server.mjs が実ログで旧実装との一致を検証する）。
+   （test/test_server.mjs が実ログで旧実装との一致を検証する）。
    並列に多数のバックグラウンドエージェントが走る間は近似になるのは旧実装と同じ。 */
 const lastQs = new Map();          // sessionId -> 直近の query_source
 const LASTQS_MAX = 5000;

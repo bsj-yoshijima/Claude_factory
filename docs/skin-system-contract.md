@@ -25,7 +25,7 @@ const SKINS = [
 
 ## テクスチャ規約
 
-- preload: **用意できている id だけ**読む。どれが用意済みかの正は `assets/hat-fit.json` のキーで、
+- preload: **用意できている id だけ**読む。どれが用意済みかの正は `assets/hats/hat-fit.json` のキーで、
   `hat-fit.json` を先に読み、その `filecomplete` で該当ぶんだけ `this.load.image('hat_'+id, ...)` を追加投入する。
   ※ Phaser は404を欠損テクスチャとして扱うだけなので全idを投機的に読んでも動くが、
   未生成のぶん（現状25件）がコンソールに404として並び、初見では壊れて見える。

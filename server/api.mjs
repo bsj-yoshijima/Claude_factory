@@ -150,30 +150,6 @@ export async function postBuy(user, body) {
   });
 }
 
-export async function postSell(user, body) {
-  const itemId = String(body?.itemId || '');
-  const prize = GD.PRIZES.find((p) => p.id === itemId);
-  if (!prize) return bad(`売れないものです: ${itemId}`);
-  return tx(async (c) => {
-    const inv = (await c.query(
-      `SELECT qty FROM inventory WHERE user_id=$1 AND item_id=$2 FOR UPDATE`,
-      [user.id, itemId])).rows[0];
-    const have = Number(inv?.qty || 0);
-    const want = body?.qty === 'all' ? have : Math.max(1, Number(body?.qty) || 1);
-    if (have < want || want <= 0) return bad('在庫がありません');
-    const gain = (GD.SELL[prize.r] || 0) * want;
-    await c.query(`UPDATE inventory SET qty = qty - $3 WHERE user_id=$1 AND item_id=$2`,
-      [user.id, itemId, want]);
-    await c.query(`UPDATE factories SET money = money + $2 WHERE user_id=$1`, [user.id, gain]);
-    await c.query(
-      `INSERT INTO sales_daily(user_id, day, amount) VALUES ($1,$2,$3)
-       ON CONFLICT (user_id, day) DO UPDATE SET amount = sales_daily.amount + EXCLUDED.amount`,
-      [user.id, jstDay(), gain]);
-    await bumpRev(c, user.id);
-    return jsonOk({ ok: true, gain, factory: await factoryOf(user.id) });
-  });
-}
-
 export async function postLevelUp(user, body) {
   const id = String(body?.id || '');
   return tx(async (c) => {
@@ -283,9 +259,6 @@ export async function getCollection(user) {
   return jsonOk({
     collection: Object.fromEntries(
       rows.map((r) => [r.product_id, { owned: r.owned, firstAt: r.first_at }])),
-    inv: Object.fromEntries((await all(
-      `SELECT item_id, qty FROM inventory WHERE user_id=$1 AND qty>0`, [user.id]))
-      .map((r) => [r.item_id, r.qty])),
   });
 }
 

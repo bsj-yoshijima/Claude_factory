@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Stitch生成の製造機シート(マゼンタ背景・4台)から、3/4/5マス機を「2マス機の絵」で合成する。
 
-    使い方: python3 tools/cut_machines.py
+    使い方: python3 tools/assets/cut_machines.py
 
 入力 : assets/mach-sheets/<theme>.png   … 2/3/4/5 マス機が4台。並びは 2x2 でも縦1列でもよい
 出力 : assets/mach-<theme>-s<N>.png     … 透過PNG。1マスの送りがゲームの1マスと一致する大きさ
-       assets/mach-fit.json             … 素材アイコンを絵の投入口に乗せるためのアンカー
+       assets/machines/mach-fit.json             … 素材アイコンを絵の投入口に乗せるためのアンカー
 
 なぜ合成するのか:
   4台は「同じ機械の長さ違い」なので1マスの送りは4台とも同じはず。ところが生成AIは
@@ -41,7 +41,7 @@ from collections import deque
 import numpy as np
 from PIL import Image
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SHEETS = os.path.join(ROOT, 'assets', 'mach-sheets')
 OUT = os.path.join(ROOT, 'assets')
 SIZES = [2, 3, 4, 5]          # 幅の小さい順に割り当てる
@@ -95,7 +95,7 @@ SPOT_TOP = {'western': 0.62}
 # 「幅が最小の台」の絵の中での、隣り合う投入口2つの中心座標を直接与える。
 #   beehive  : 蜂の巣の房が天板と同じ蜜色で、輪郭も無いので塊にならない
 #   mushroom : 穴が暗いが、天板そのものが暗褐色なので穴と地が繋がる
-# 座標は tools/cut_machines.py が切り出す2マス機の画像を3倍表示して読み取る。
+# 座標は tools/assets/cut_machines.py が切り出す2マス機の画像を3倍表示して読み取る。
 SPOT_HINT = {
     'beehive':  [(77, 53), (141, 86)],
     'mushroom': [(67, 75), (112, 97)],
@@ -786,14 +786,14 @@ def main():
 
     with open(os.path.join(OUT, 'mach-fit.json'), 'w', encoding='utf-8') as fp:
         json.dump(fit, fp, ensure_ascii=False, indent=1)
-    print('\nwrote assets/mach-fit.json')
+    print('\nwrote assets/machines/mach-fit.json')
 
 
 def axis_slope(sp):
     """長軸の向きを測る。列ごとに「不透明な最後のy」= 接地側のシルエットを取り、
     左端1/6と右端1/6の平均を比べる。上端で測ると背の高い背面装飾に引っぱられる。
     正 = 右へ行くほど下がる = ↘(+u、ゲームが期待する向き)。負なら左右反転が必要。
-    tools/mach_axis.mjs と同じ判定をこちらでも持つ(切り出しの時点で揃えてしまう)。"""
+    tools/assets/mach_axis.mjs と同じ判定をこちらでも持つ(切り出しの時点で揃えてしまう)。"""
     a = np.asarray(sp.convert('RGBA'))
     h, w = a.shape[0], a.shape[1]
     top = []

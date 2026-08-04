@@ -46,7 +46,7 @@ npm install && docker compose up -d && npm run dev
 | ファイル | 役割 |
 |---|---|
 | `server/index.mjs` | HTTP。OTLP 受信 / hooks 受信 / API / 静的配信 / ログイン画面 |
-| `server/game-data.mjs` | マスタの読み込み。定義の正は `factory-phaser.html` の2ブロックのまま |
+| `server/game-data.mjs` | マスタの窓口。定義の正は `game/data/*.mjs`（クライアントと同じものを import する） |
 | `server/ingest-otel.mjs` | OTLP → 分バケット。親子判定・重複排除 |
 | `server/ingest-hooks.mjs` | hooks → `agent_sessions`。在/不在の減衰ルール |
 | `server/wp.mjs` | 重みの定義と WP の集計 |
@@ -96,7 +96,7 @@ OTLP のペイロードに入る `user.email` はクライアントの自己申�
 
 `agent_sessions` と `machines` の主キーは `(user_id, id)`。
 `id` 単独にすると、他人と同じ session_id / レイアウトID を送るだけで相手の行を
-書き換えられる（実装中に実際に踏んだ。`tools/test_server.mjs` に回帰テストがある）。
+書き換えられる（実装中に実際に踏んだ。`test/test_server.mjs` に回帰テストがある）。
 
 ### 5. ポーリングを削る
 
@@ -109,7 +109,7 @@ OTLP のペイロードに入る `user.email` はクライアントの自己申�
 `factories.rev` を持たせ、クライアントは `GET /api/state?rev=N` で自分の版を申告する。
 一致していればサーバは `factory` を省略し、毎回変わる分（💰・各機械の `wp`/`running`・
 エージェント・WP・今日の集計）だけを返す。
-`rev` はミューテーション（購入・売却・強化・配置・素材セット・稼働切替・回収）でだけ +1 する。
+`rev` はミューテーション（購入・強化・配置・素材セット・稼働切替・回収）でだけ +1 する。
 
 **(b) 間隔は5秒。** OTLP の logs バッチがちょうど5秒間隔なので、**これより速く叩いても
 新しい値は存在しない**（同じ値を取り直すだけ）。逆にこれより遅くすると届いているデータを
@@ -168,8 +168,6 @@ OTel 基準を延ばすほど「`kill -9` で `Stop` が飛ばずに落ちたセ
 | 3 | **`wp_daily` のマテリアライズ**。いまはビューなので履歴が伸びると重くなる |
 | 4 | **`ingest_seen` の刈り取り**。重複排除キーが無限に増える（2日で消せばよい） |
 | 5 | **マイページ**。`/api/me` が日次データを返すところまでは実装済み、画面が未作成 |
-| 6 | `factory-phaser.html` の ESM 分割と UI 部品化（設計メモの段階1。まだ1ファイルのまま） |
-| 7 | **`inventory` テーブルの撤去**。ガチャ・景品の概念が無くなったので投入経路ごと不要（🏪ショップの売却タブが残参照） |
 
 ## 既知の挙動（仕様として維持しているもの）
 

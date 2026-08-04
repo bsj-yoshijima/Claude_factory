@@ -1,5 +1,5 @@
 // マルチユーザー版サーバのエンドツーエンド検証。
-//   実行: node tools/test_server.mjs        （docker compose up -d が前提）
+//   実行: node test/test_server.mjs        （docker compose up -d が前提）
 //
 // サーバを別プロセスで立ち上げ、HTTP 越しに
 //   ログイン → トークン発行 → hooks → OTLP → 製造 → 回収 → ショップ → リーダーボード
