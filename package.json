@@ -6,7 +6,6 @@
   "description": "Claude Code のセッションを工場として可視化する育成ゲーム（マルチユーザー版）",
   "scripts": {
     "dev": "node server/index.mjs",
-    "legacy": "node server.mjs",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:reset": "docker compose down -v && docker compose up -d",

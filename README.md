@@ -4,39 +4,30 @@
 
 - **busy のエージェント → 工場**でせっせと作業（火花を散らして working）
 - **idle のエージェント → 休憩室**でソファに座って休む（💤）
-- **朝 / 夕 / 夜**は日本時間(JST)に応じて背景が自動で切り替わる
-- **設置モード**で、決まった背景の上に自分で機械や小物を配置できる（自由な工場づくり）
-- **生産ダッシュボード**が busy の合計時間を「生産量」として積み上げていく
+- **朝 / 夕 / 夜**は日本時間(JST)に応じて採光が自動で切り替わる
+- **🔧レイアウト編集**で、自分で製造機や小物を配置できる（自由な工場づくり）
+- 実測の**労働量(WP)**で製品を製造し、**📖図鑑を埋めていく**のがゴール
 
-背景は Stitch で生成した「空の工場（朝/夕/夜）」のドット絵を採用し、その上にエージェントとオブジェクトを重ねて描画しています。
+サーバでホスティングし、**各ユーザーが自分の工場を持つ**。工場のデータはすべてサーバが持つ。
 
 ## 使い方
 
-### マルチユーザー版（Postgres + Google SSO）
-
-各ユーザーが自分の工場を持つ版。詳細は [docs/multiuser.md](docs/multiuser.md)。
+サーバでホスティングし、**各ユーザーが自分の工場を持つ**構成（Postgres + Google SSO）。
+詳細は [docs/multiuser.md](docs/multiuser.md)。
 
 ```bash
-npm install && docker compose up -d && node server/index.mjs
+npm install && docker compose up -d && npm run dev
 # → http://localhost:4321
-```
-
-### 単一ユーザー版（依存ゼロ・ローカル専用）
-
-Node標準モジュールのみ。`~/.claude/sessions/*.json` を直接読む。
-
-```bash
-node server.mjs
-# → http://localhost:4321 をブラウザで開く
 ```
 
 停止 / 再起動:
 
 ```bash
 lsof -ti tcp:4321 | xargs kill        # 停止
-node server.mjs                       # 再起動
+npm run dev                           # 再起動
 ```
 
+工場のデータ（💰 / 在庫 / 図鑑 / 製造）はすべてサーバが持つ唯一の真実で、ブラウザには保存しない。
 別のディレクトリで `claude` を起動して作業させると、その子が工場に現れて働き出します。
 
 ## 画面の見かた
@@ -49,26 +40,22 @@ node server.mjs                       # 再起動
 実績ボードと製造パネルは横並び。ウィンドウ幅が足りなければ上下に折り返す。
 | 右中央 🎁 **完成品** | 製品が完成すると出る。開くと図鑑に登録され、**中身は空になる**（＝常に新着だけ） |
 | 右下 🔧 **レイアウト編集** | 常時表示。パレットから床クリックで配置／ドラッグで移動／🗑で撤去 |
-| 右上 ☰ **メニュー** | 📖図鑑 / 🏆リーダーボード / 🏪ショップ / 📊メトリクス |
+| 右上 ☰ **メニュー** | 🏠マイページ / 🧾製造レシピ / 🏪ショップ / 🔧レイアウト編集 / 📖図鑑 / 🏆リーダーボード |
 | 左下 | Claude君の絵で稼働中(✨) / 休憩中(☕)の数を表示 |
 | 抽出機をクリック | 原材料をセットする |
 | エージェントをクリック | 頭アクセサリを巡回で変更（セッションごとに保持） |
 
-`/legacy` の旧Canvas版は 工場/休憩室タブ・設置モードの構成のまま残してある。
-
 ### URL パラメータ（プレビュー / 共有リンク）
 
 - `?hour=17.5` … 任意時刻の採光をプレビュー（朝/夕/夜の切替確認）
-- `?view=lounge` … 休憩室ビューで開く
-- `?build=1` … 設置モードで開く
-- `?demo=1` … サンプルの設置レイアウトを一時表示（未配置のときのみ）
-- `?dummy=12` … サーバ未接続時にダミーのエージェントを表示（プレビュー用）
+- `?edit=1` … レイアウト編集モードで開く
+- `?shop=mach` … ショップの指定タブで開く（`1` で既定タブ）
 
 ## 🏭 製造（プロトタイプ）
 
 実WPを溜めて製品を作り、**📖図鑑を埋めていく**のがゴール。
 
-1. 右下の 🔧**レイアウト編集** で **抽出機（🟥）を最大3台**設置する
+1. ☰メニューの 🔧**レイアウト編集** で製造機を設置する
 2. 抽出機をクリック → **ジャンルを選んで原材料を1つ選ぶ**（🍳食品 / ⚙️機械 / 🧺生活品 の32種）
 3. ☰メニューの 🏭**製造** で全機械が縦一覧（マス数の昇順）。行ごとに素材セット・進捗・**▶製造開始**。マスをクリックすると**ジャンルごとの見出しの下に全原材料が並ぶ**（タブ切り替えはしない）
 4. 押した時点からの **実WP** がその機械に加算され、**マス数 × 50WP** で1製品が完成
@@ -85,7 +72,7 @@ node server.mjs                       # 再起動
 | 作れる物の表示 | **出さない**（探す楽しみを残すため）。筐体の上と一覧には稼働状態と進捗だけ出す |
 | `NEW` | 図鑑に未登録の製品**すべて**に付く（同じ新製品が3個できていれば3個とも） |
 | 💰の稼ぎ方 | **製品が完成した瞬間**にレア度別の売価が加算される（N 60 / R 200 / SR 700 / SSR 2,600 / UR 9,000）。🎁完成品のダイアログに出すのは**今回開いた分の合計と内訳（加算済み）**（所持額は🏪ショップで見る） |
-| 製造の記録 | 🎁完成品とは別に `G.craft.log` に残す（7日ぶん）。**📊今日の製造**はこちらを見るので、完成品を開いても消えない。売上は日付ごとに `G.craft.sales` |
+| 製造の記録 | サーバの `products_made` に残る。**📊今日の製造**は `/api/made` を見るので、🎁完成品を開いても消えない。売上も日付ごとにサーバが集計する |
 | 超過WP | 次の製品に繰り越す |
 | 原材料の変更・解除 | **製造は止まらず、WPもリセットしない**（溜めた分はそのまま次の製品に使われる） |
 | セッションの永続 | リロードしても継続（閉じている間に稼いだWPも反映される） |
@@ -123,9 +110,10 @@ node server.mjs                       # 再起動
 
 > 必要WP（`WP_PER_SLOT`）も同じファイルの先頭付近。
 
-## 📊 メトリクス（OTel プロトタイプ）
+## 📊 テレメトリ（OTel）
 
-`http://localhost:4321/metrics` — Claude Code から OpenTelemetry で送られてくる実績値を全部そのまま並べ、WP（Work Point）を集計する検証用ページ。
+Claude Code から OpenTelemetry で送られてくる実績値を受けて WP（Work Point）を集計する。
+集計結果は 🏠マイページ・🏆リーダーボードで見る（検証用の `/metrics` ページは廃止した）。
 
 有効化するには `~/.claude/settings.json` の `env` に以下を入れて、**新しい** claude セッションを開始する（起動中のセッションには反映されない）。
 
@@ -143,16 +131,16 @@ node server.mjs                       # 再起動
 "OTEL_LOG_TOOL_CONTENT": "0"
 ```
 
-`http/json` が使えるので **OTel Collector は不要**。`otel.mjs` が素の Node で OTLP を直接受ける（依存ゼロを維持）。
+`http/json` が使えるので **OTel Collector は不要**。`server/ingest-otel.mjs` が OTLP を直接受ける。
 
 ```
-Claude Code ──OTLP/JSON──▶ :4318 /v1/metrics, /v1/logs   ← otel.mjs（受信 + WP集計）
-                                    │  生ログを ~/.claude/factory/otel-raw.jsonl に追記
+Claude Code ──OTLP/JSON──▶ :4321 /v1/metrics, /v1/logs   ← server/ingest-otel.mjs（受信）
+                                    │  分バケットで Postgres に格納
                                     ▼
-                           :4321 /api/otel ──▶ /metrics（表示）
+                           :4321 /api/state, /api/mypage, /api/leaderboard（表示）
 ```
 
-生ログを残しているので、`otel.mjs` の `WP` の重みを書き換えて再起動すれば**過去データを自動リプレイして再集計**される。
+重みはDBの表にあるので、**`UPDATE` するだけで全期間のWPが再集計**される（再取り込みは不要）。
 
 ### 実測でわかったドキュメントとの差異
 
@@ -165,7 +153,7 @@ Claude Code ──OTLP/JSON──▶ :4318 /v1/metrics, /v1/logs   ← otel.mjs�
 | プロンプト内容 | `prompt` / `response` 属性は存在するが値は `<REDACTED>`（既定で内容は送られない） |
 | `DISABLE_TELEMETRY=1` との併存 | 併存可。OTel 送信はブロックされない |
 
-### WP の重み（`otel.mjs` の `WP`）
+### WP の重み（`server/wp.mjs` の `WP` → DBの重み表）
 
 > 計測ロジックの全体・較正データ・**指標としての妥当性の限界**は [WP.md](WP.md) にまとめてある。
 >
@@ -218,40 +206,34 @@ Claude Code ──OTLP/JSON──▶ :4318 /v1/metrics, /v1/logs   ← otel.mjs�
 ## 仕組み
 
 ```
-~/.claude/sessions/*.json     起動中セッションの実体（1ファイル = 1エージェント）
-      │  1.5秒ごとに読み取り／ps で死活判定（終了済みの残骸を除外）
-      ▼
-server.mjs (Node 常駐)         → /api/sessions で稼働状況を JSON 配信 + 静的ファイル配信
-      │  1.5秒ポーリング
-      ▼
-claude-factory.html           Canvas ゲーム画面。背景画像＋エージェント＋設置物を描画
+Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
+                                        │  WP集計・製造判定(craft.mjs)・図鑑登録
+                                        ▼
+                              /api/state ほか（JSON）
+                                        │  5秒ポーリング
+                                        ▼
+             factory-phaser.html + game/main.js   Phaser のゲーム画面
 ```
 
-- 完全ローカル・オフライン動作。セッション情報が外部に出ることはありません。
-- 設置したオブジェクトはブラウザの localStorage に保存されます。
-- 生産量は「busy になっている合計時間」から算出する擬似生産です（稼働30分で1個）。
+- 💰 / 在庫 / 図鑑 / 製造の判定は**すべてサーバが唯一の真実**。クライアントの申告は信じない。
+- 工場のデータはブラウザに保存しない（ログインした本人の工場がサーバにある）。
+- 製造は実測WPで進む（1製品 = マス数 × `WP_PER_SLOT`）。
 
 ## ファイル
 
 | ファイル | 内容 |
 |---|---|
-| `server/*.mjs` | **マルチユーザー版サーバ**（Postgres / OTLP / hooks / ゲームAPI）。[docs/multiuser.md](docs/multiuser.md) |
-| `db/schema.sql` | マルチユーザー版のスキーマ |
-| `server.mjs` | 旧・単一ユーザー版。セッションを読んで配信＋静的ファイル配信する常駐サーバ |
-| `factory-phaser.html` / `game/main.js` | **現行のゲーム画面**（Phaser版。`/` と `/next`） |
-| `metrics.html` / `otel.mjs` | 📊 メトリクス（`/metrics`）。OTel 受信 + WP / スコアカード集計 |
+| `server/*.mjs` | **サーバ**（Postgres / OTLP / hooks / ゲームAPI）。[docs/multiuser.md](docs/multiuser.md) |
+| `db/schema.sql` | スキーマ |
+| `factory-phaser.html` / `game/main.js` | **ゲーム画面**（Phaser版。`/`） |
 | `assets/room-*.png` | Stitch 生成のテーマ別背景（`docs/stitch-prompts.md` にプロンプト） |
 | `assets/prop_*.png` | 装飾プロップ（汎用12種 + テーマ別6種×5テーマ）。**表示サイズに合わせて縮小済み** |
 | `assets/prop-src/prop_*.png` | 上記の原寸版（切り出したまま・200〜400px）。サイズを変えるときの元データ |
 | `assets/prop-sheets/*.jpg` | Stitch が生成したアセットシート（1枚に3×2で6体） |
 | `tools/cut_props.py` | シートから1体ずつ切り出し、背景と接地影を抜いて `assets/prop-src/` を作る |
 | `tools/fit_props.py` | 原寸版をゲーム内の表示サイズへ縮小して `assets/prop_*.png` を作る |
-| `claude-factory.html` | 旧・Canvas版（`/legacy`） |
-| `assets/factory-*.jpg` | 旧Canvas版の空部屋背景（morning / evening / night） |
-| `pixel-factory.html` | 旧・全手描きドット絵版（`/classic`） |
-| `index.html` | 初期のシンプル版（カードUI） |
-| `machine-concepts.html` | 工場に足す機械のコンセプトボード |
-| `proposal.html` / `slides.html` / `slides-en.html` / `Claude-Factory.pdf` | 企画書・発表スライド |
+| `docs/index.html` / `docs/machine-concepts.html` | 初期のシンプル版（カードUI）／機械のコンセプトボード |
+| `docs/proposal.html` / `docs/slides.html` / `docs/slides-en.html` / `docs/Claude-Factory.pdf` | 企画書・発表スライド |
 
 ### プロップの大きさ（コマ数）
 
@@ -304,8 +286,8 @@ claude-factory.html           Canvas ゲーム画面。背景画像＋エージ�
 
 ## 必要環境
 
-- Node.js（`node server.mjs` が動けばOK）
-- macOS 向け（`ps` によるプロセス死活判定を使用）
+- Node.js 20 以上
+- Postgres（`docker compose up -d` で用意する）
 
 ---
 

@@ -1,25 +1,23 @@
-# マルチユーザー版 — ローカルで動かす
+# サーバ — ローカルで動かす
 
-各ユーザーが自分の工場を持ち、WP・製造・売上・図鑑をサーバ（Postgres）で管理する版。
-旧・単一ユーザー版（`node server.mjs`）はそのまま残してあり、同じ `factory-phaser.html`
-がどちらでも動く（起動時に `/api/state` を叩いて自動判別する）。
+各ユーザーが自分の工場を持ち、WP・製造・売上・図鑑をサーバ（Postgres）で管理する。
+これが唯一の構成で、旧・単一ユーザー版（`server.mjs` / `otel.mjs` / `/metrics`）は撤去した。
 
 ## 起動
 
 ```bash
-npm install && docker compose up -d && node server/index.mjs
+npm install && docker compose up -d && npm run dev
 ```
 
 → http://localhost:4321 を開く。`GOOGLE_CLIENT_ID` が未設定のあいだは **dev ログイン**
 （メールアドレスを入れるだけ）が有効。ログインすると `/setup` に飛び、
 `~/.claude/settings.json` に貼るブロックが出る。
 
-旧版が 4321 を使っている場合は `PORT=4400 PUBLIC_URL=http://localhost:4400 node server/index.mjs`。
+4321 が埋まっている場合は `PORT=4400 PUBLIC_URL=http://localhost:4400 npm run dev`。
 
 | コマンド | 内容 |
 |---|---|
-| `npm run dev` | マルチユーザー版サーバ |
-| `npm run legacy` | 旧・単一ユーザー版（`server.mjs`） |
+| `npm run dev` | サーバ |
 | `npm run db:psql` | DB に入る |
 | `npm run db:reset` | DB を作り直す（データも消える） |
 | `npm test` | レシピ・製造機・サーバの全テスト |
@@ -170,13 +168,12 @@ OTel 基準を延ばすほど「`kill -9` で `Stop` が飛ばずに落ちたセ
 | 3 | **`wp_daily` のマテリアライズ**。いまはビューなので履歴が伸びると重くなる |
 | 4 | **`ingest_seen` の刈り取り**。重複排除キーが無限に増える（2日で消せばよい） |
 | 5 | **マイページ**。`/api/me` が日次データを返すところまでは実装済み、画面が未作成 |
-| 6 | **旧セーブのインポート**（`~/.claude/claude-factory-save.json` → 初回ログイン時） |
-| 7 | **ガチャ**（`inventory` テーブルはあるが投入経路が未実装。旧実装も景品配布は未接続） |
-| 8 | `factory-phaser.html` の ESM 分割と UI 部品化（設計メモの段階1。まだ1ファイルのまま） |
+| 6 | `factory-phaser.html` の ESM 分割と UI 部品化（設計メモの段階1。まだ1ファイルのまま） |
+| 7 | **`inventory` テーブルの撤去**。ガチャ・景品の概念が無くなったので投入経路ごと不要（🏪ショップの売却タブが残参照） |
 
 ## 既知の挙動（仕様として維持しているもの）
 
 - **止めている機械にはWPが入らない。** 稼働させていない間に稼いだWPは繰り越されない。
-  旧実装と同じだが、常時稼働のサーバでは「止め忘れると損する」度合いが上がる。
+  常時稼働のサーバでは「止め忘れると損する」度合いが上がる。
   変えるなら「工場全体のプールに溜めて、稼働中の機械が引く」形が候補。
-- `?unlockall` はマルチユーザー版では無効（💰はサーバが管理するため）。
+- `?unlockall` は無効（💰と在庫はサーバが管理するため）。

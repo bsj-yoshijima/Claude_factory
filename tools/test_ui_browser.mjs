@@ -1,5 +1,5 @@
 // 実ブラウザ(headless Chrome + CDP)でUIを操作して確認する。依存ゼロ。
-//   使い方: node server.mjs を起動しておいて → node tools/test_ui_browser.mjs
+//   使い方: npm run dev を起動しておいて → node tools/test_ui_browser.mjs
 // main.js と factory-phaser.html はどちらもクラシックスクリプトなので、
 // グローバル名が衝突すると HTML 側が丸ごと実行されずボタンが全部死ぬ。
 // その手の「構文は通るが実行時に壊れる」不具合はこのテストでしか捕まらない。
@@ -18,7 +18,7 @@ ws.onmessage=e=>{const m=JSON.parse(e.data); if(m.id&&pend.has(m.id)){pend.get(m
   if(m.method==='Runtime.exceptionThrown'){const d=m.params.exceptionDetails; errs.push((d.exception&&d.exception.description)||d.text);}};
 await new Promise(r=>ws.onopen=r);
 await send('Runtime.enable'); await send('Page.enable');
-// 単一ユーザー版(server.mjs)に当てたいときは CF_URL=http://localhost:4322/ で上書きする
+// 別ポートで動かしているときは CF_URL=http://localhost:4400/ で上書きする
 await send('Page.navigate',{url:process.env.CF_URL||'http://localhost:4321/'});
 const ev=async x=>{const r=await send('Runtime.evaluate',{expression:x,returnByValue:true}); return r.result?.value ?? r.exceptionDetails?.text;};
 // 固定待ちにすると、プロファイルが冷えているときに間に合わずテスト全体が崩れる。

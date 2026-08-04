@@ -323,7 +323,6 @@
     <div class="mh">記録</div>
     <div class="mi" id="collectionBtn">📖 図鑑</div>
     <div class="mi" id="lbBtn">🏆 リーダーボード</div>
-    <a class="mi" id="metricsMi" href="/metrics">📊 メトリクス</a>
   </div>
   <div id="topwrap">
     <div id="board"></div>
@@ -590,26 +589,22 @@ const SERIES={
 let G={ pity:0, inv:{}, money:0, machines:[{variant:'s2',lvl:1}], decos:{},
         bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[],
         stock:{machine:{},prop:{},deco:{}}, lastT:null };
-let saveT=null;
 /* =========================================================================
-   NET — データ層。マルチユーザー版サーバ(server/index.mjs)と
-   旧・単一ユーザー版(server.mjs)の両方で同じ画面が動くようにする。
-
-   multi=true のとき:
+   NET — データ層。工場のデータはすべてサーバ(server/index.mjs)が持つ。
      ・💰 / 図鑑 / 在庫 / 製造 はサーバが唯一の真実。G はその写し
-     ・製造判定(tickCraft)はサーバ側。クライアントは結果を受け取るだけ
+     ・製造判定はサーバ側(server/craft.mjs)。クライアントは結果を受け取るだけ
      ・購入・強化・素材セットは API を叩き、返ってきた factory で G を上書きする
-   multi=false のとき: 従来どおり /api/save に G を丸ごと保存する
+   G をブラウザに保存することはない（ログインした本人の工場がサーバにある）。
    ========================================================================= */
 const NET={
-  multi:false, last:null, collectionLoaded:false,
+  last:null, collectionLoaded:false,
   rev:-1,          // いま手元にある工場の版番号。サーバはこれが一致すれば factory を省略する
   async probe(){
     try{
       const r=await fetch('/api/state',{cache:'no-store'});
       if(r.status===401){ location.href='/login'; return false; }
       if(!r.ok) return false;
-      NET.last=await r.json(); NET.multi=true; return true;
+      NET.last=await r.json(); return true;
     }catch(_){ return false; }
   },
   async call(method,path,body){
@@ -651,48 +646,29 @@ function pushLayout(){
     if(r&&r.factory) applyFactory(r.factory);
   },400);
 }
-function saveGame(){
-  if(NET.multi){ pushLayout(); return; }              // サーバ権威。配置だけ同期する
-  if(saveT)clearTimeout(saveT); saveT=setTimeout(()=>{ const b=JSON.stringify(G);
-  try{fetch('/api/save',{method:'POST',body:b});}catch(_){} try{localStorage.setItem('cf-save',b);}catch(_){}} ,400); }
+/* 💰・在庫・図鑑はサーバが持っているので、保存すべきものは配置だけ */
+function saveGame(){ pushLayout(); }
+/* 繋がらなければ工場が無いのと同じ。黙って空の工場を見せるより、理由を出して止める */
 async function loadGame(){
-  if(await NET.probe()){                              // マルチユーザー版サーバに繋がった
-    applyFactory(NET.last.factory);
-    const d=await NET.call('GET','/api/collection');
-    if(d){ const c=craftState();
-      c.collection=Object.fromEntries(
-        Object.entries(d.collection||{}).map(([k,v])=>[k,v.owned]));
-      c.collectionMeta=d.collection||{}; G.inv=d.inv||{}; NET.collectionLoaded=true; }
-    const sk=await NET.call('GET','/api/skins'); if(sk) G.skins=sk.skins||{};
-    return;
+  if(!await NET.probe()){                             // 401 は probe が /login へ飛ばしている
+    openDialog({ title:'⚠️ サーバに繋がりません',
+      body:`<div class="rowline" style="font-size:12px;color:#9fb0c0">
+        工場のデータはサーバにあります。サーバが起動しているか確かめて、読み込み直してください。</div>`,
+      actions:[{label:'🔄 再読み込み',kind:'primary',on:()=>location.reload()}] });
+    return false;
   }
-  let s=null; try{ s=await (await fetch('/api/save',{cache:'no-store'})).json(); }catch(_){}
-  if(!s||typeof s!=='object'){ try{ s=JSON.parse(localStorage.getItem('cf-save')); }catch(_){} }
-  if(s&&typeof s==='object') G=Object.assign(G,s);     // 旧セーブの景品(inv)・pityは引き継ぎ、経済フィールドを補完
-  if(!G.inv)G.inv={}; if(!Array.isArray(G.machines)||!G.machines.length)G.machines=[{variant:'s2',lvl:1}]; if(!G.decos)G.decos={};
-  /* 旧セーブ移行: 製造機の種別は machines[].type / layout[].sub と名前が割れていた。
-     どちらも variant に寄せる（kind の下位で MACH/PROP/DECO 表を引くキー、の意）。 */
-  for(const m of G.machines){ if(m.variant==null&&m.type!=null){ m.variant=m.type; delete m.type; }
-    m.variant=machVariant(m.variant); }
-  if(!Array.isArray(G.bgOwned))G.bgOwned=['auto']; if(!Array.isArray(G.floorOwned))G.floorOwned=['wood']; if(!G.bg)G.bg='auto'; if(!G.floor)G.floor='wood';
-  if(!G.skins||typeof G.skins!=='object')G.skins={}; if(!Array.isArray(G.seriesOwned))G.seriesOwned=[]; if(!Array.isArray(G.emojiDecos))G.emojiDecos=[]; if(!Array.isArray(G.layout))G.layout=[];
-  // 旧セーブの layout[].sub → variant。この下の在庫復元が variant を読むので必ず先に済ませる
-  for(const e of G.layout) if(e.variant==null&&e.sub!=null){ e.variant=e.sub; delete e.sub; }
-  ['money'].forEach(k=>{ if(typeof G[k]!=='number')G[k]=0; });
-  // 在庫(owned)。無ければ現在の配置から復元(既存の設置物は所持扱い)
-  if(!G.stock||typeof G.stock!=='object'){ G.stock={machine:{},prop:{},deco:{}};
-    for(const e of G.layout){ if(G.stock[e.kind]) G.stock[e.kind][e.variant]=(G.stock[e.kind][e.variant]||0)+1; } }
-  for(const k of ['machine','prop','deco']) if(!G.stock[k]||typeof G.stock[k]!=='object') G.stock[k]={};
-  delete G.stock.belt; delete G.belts;                       // コンベアは廃止
-  // 旧セーブの移行: コンベア/出荷口の配置を捨て、旧4種の製造機を1マス機に読み替える
-  G.layout=(G.layout||[]).filter(e=>e.kind!=='belt'&&e.kind!=='outlet');
-  for(const e of G.layout) if(e.kind==='machine') e.variant=machVariant(e.variant);
-  const ms={}; for(const t in G.stock.machine) ms[machVariant(t)]=(ms[machVariant(t)]||0)+G.stock.machine[t];
-  G.stock.machine=ms; }
+  applyFactory(NET.last.factory);
+  const d=await NET.call('GET','/api/collection');
+  if(d){ const c=craftState();
+    c.collection=Object.fromEntries(
+      Object.entries(d.collection||{}).map(([k,v])=>[k,v.owned]));
+    c.collectionMeta=d.collection||{}; G.inv=d.inv||{}; NET.collectionLoaded=true; }
+  const sk=await NET.call('GET','/api/skins'); if(sk) G.skins=sk.skins||{};
+  return true;
+}
 // 在庫と配置数
 function ownedN(kind,variant){ return (G.stock[kind]&&G.stock[kind][variant])||0; }
 function availN(kind,variant){ return Math.max(0, ownedN(kind,variant) - placedCount(kind,variant)); }
-function addStock(kind,variant,n){ n=n||1; if(!G.stock[kind])G.stock[kind]={}; G.stock[kind][variant]=(G.stock[kind][variant]||0)+n; }
 // 設置済みは必ず所持(在庫)に含める(在庫 >= 設置数 を保証)
 function reconcileStock(){ const need={machine:{},prop:{},deco:{}};
   for(const e of (G.layout||[])) if(need[e.kind]) need[e.kind][e.variant]=(need[e.kind][e.variant]||0)+1;
@@ -704,8 +680,7 @@ const placedCount=(kind,variant)=> (G.layout||[]).filter(e=>e.kind===kind&&(vari
 // エージェント頭アクセ(スキン)の永続化: main.js からクリック巡回時に呼ばれる
 window.__skinChanged=(proj,skinId)=>{ if(!proj)return;
   if(skinId==='none') delete G.skins[proj]; else G.skins[proj]=skinId;
-  if(NET.multi){ NET.call('PUT','/api/skin',{project:proj,skinId}); return; }
-  saveGame(); };
+  NET.call('PUT','/api/skin',{project:proj,skinId}); };
 const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
 /* =========================================================================
    DOM差分適用（morph） — 再描画で「いまの状態」を壊さないための土台
@@ -931,9 +906,8 @@ function openRecipes(){ return openDialog({ title:'🧾 製造レシピ', body:r
 document.getElementById('recipeBtn').addEventListener('click',()=>openRecipes());
 
 /* =========================================================================
-   製造プロトタイプ — 抽出機に原材料をセット → 実WPを溜めて製品化
-   WP は /api/otel（OTel実測）の累計を参照する。セッション開始時点の累計を
-   startWp として記録し、差分を「現セッションWP」として扱う。
+   製造 — 製造機に原材料をセット → 実WPを溜めて製品化
+   WP の累計と各機械の進捗はサーバが持ち、/api/state で受け取る。
    ========================================================================= */
 /* 1製品あたりの必要WP = マス数 × WP_PER_SLOT（2マス4000 / 3マス6000 / 4マス8000 / 5マス10000）。
    server/game-data.mjs にも同じ値があり、tools/test_server.mjs が一致を検証する。片方だけ直さないこと。 */
@@ -1205,49 +1179,16 @@ function rollProduct(key){
 }
 /* == CRAFT-DATA-END == */
 
-// 旧セーブ移行: 原材料は「機械ID→素材1つ」だった。いまは機械のマスに入るので1マス目へ移す。
-let _matsMigrated=false;
-function migrateCraftMats(){
-  if(_matsMigrated) return; const F=window.__factory; if(!F) return; _matsMigrated=true;
-  const c=craftState(); const keys=Object.keys(c.mats||{}); if(!keys.length) return;
-  let moved=0;
-  for(const id of keys){ if(F.setSlot(id, 0, c.mats[id])) moved++; }
-  c.mats={}; if(moved){ snapLayout(); saveGame(); toast(`原材料 ${moved} 件を製造機のマスへ移しました`); }
-}
-/* 製造の記録は「今日の集計」にしか使わないので7日ぶん・2000件までに抑える。
-   売上も同じ期間だけ残す（セーブがじわじわ膨らむのを防ぐ） */
-function trimCraftLog(c){
-  const keepFrom=Date.now()-7*24*3600*1000;
-  if(c.log.length>2000 || c.log.some(m=>!(m.at>=keepFrom)))
-    c.log=c.log.filter(m=>m.at>=keepFrom).slice(-2000);
-  const keepDay=jstDay(keepFrom);
-  for(const d in c.sales) if(d<keepDay) delete c.sales[d];
-}
+/* G.craft — サーバから取ってきた状態を置く手元の入れ物。
+   ブラウザには保存しない（読み込みのたびに /api/state と /api/collection から作り直す）。 */
 function craftState(){
   if(!G.craft||typeof G.craft!=='object') G.craft={};
   const c=G.craft;
-  if(!c.mats||typeof c.mats!=='object') c.mats={};
   if(c.activeId===undefined) c.activeId=null;
-  // made = 🎁完成品の「まだ見ていない分」だけ。一覧を開いたら空にする（＝毎回が新着）
-  if(!Array.isArray(c.made)) c.made=[];
-  /* collection = 図鑑（product_id → 所持数）。旧セーブは c.dex という名前だったので拾う。
-     旧名のまま残すと図鑑がまるごと空に見えるので、移行してから旧キーを消す。 */
-  if(!c.collection||typeof c.collection!=='object'){
-    c.collection = (c.dex&&typeof c.dex==='object') ? c.dex : {}; }
-  if(c.dex!==undefined) delete c.dex;
-  /* log = 製造の記録（📊今日の製造で使う）。made は開くと消えるので別に持つ。
-     旧セーブには log が無いので、そのときだけ made から起こす。 */
-  if(!Array.isArray(c.log)) c.log=c.made.map(m=>({pid:m.pid, at:m.at, key:m.key||'', mid:m.mid}));
-  // sales = 日付(JST)ごとの売上。💰の加算と同じタイミングで積む
-  if(!c.sales||typeof c.sales!=='object') c.sales={};
-  trimCraftLog(c);
+  // collection = 図鑑（product_id → 所持数）。/api/collection の写し
+  if(!c.collection||typeof c.collection!=='object') c.collection={};
   // 製造は機械ごとに独立。mach[id] = {running, wp}
   if(!c.mach||typeof c.mach!=='object') c.mach={};
-  // 旧セーブ移行: 単一セッション → いま選んでいた機械を稼働中にする
-  if(c.session&&typeof c.session==='object'){
-    const id=c.activeId; if(id){ if(!c.mach[id]) c.mach[id]={running:true,wp:0}; else c.mach[id].running=true; }
-    c.session=null;
-  } else if(c.session) c.session=null;
   return c;
 }
 /* 機械1台ぶんの製造状態。WPは「稼働中に稼いだ分の累積」。
@@ -1292,88 +1233,42 @@ window.__craft = {
 };
 
 /* --- 状態の取得 ---
-   マルチユーザー版は /api/state の1本にまとめてある。実測するとブラウザのポーリングが
+   /api/state の1本にまとめてある。実測するとブラウザのポーリングが
    テレメトリ受信の30倍のリクエストを生むので、エンドポイントを統合し、
    タブが見えていないときは止める。 */
 let wpState={ total:0, today:0, ok:false, scorecard:[] };
 let pendingCount=0;
 async function pollWp(){
-  if(NET.multi){
-    if(document.visibilityState==='hidden') return;   // 裏に回っている間は叩かない
-    // 手元の版番号を渡す。工場の形が変わっていなければサーバは factory を返さない
-    const d=await NET.call('GET','/api/state?rev='+NET.rev);
-    if(!d){ wpState.ok=false; return; }
-    NET.last=d;
-    wpState={ total:d.wp.total, today:d.wp.today, ok:true, scorecard:wpState.scorecard };
-    pendingCount=d.pending;
-    if(d.factory){ applyFactory(d.factory); }      // 版が変わったときだけ来る
-    else {
-      // 差分だけ反映する（毎回変わるのは 💰 と各機械の進捗だけ）
-      NET.rev=d.rev; G.money=d.money;
-      const c=craftState();
-      for(const m of (d.machines||[])) c.mach[m.id]={running:!!m.running, wp:m.wp};
-    }
-    if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
-    updateDoneBtn(); updateBadge(); renderCraft(); renderBoard();
-    return;
+  if(document.visibilityState==='hidden') return;   // 裏に回っている間は叩かない
+  // 手元の版番号を渡す。工場の形が変わっていなければサーバは factory を返さない
+  const d=await NET.call('GET','/api/state?rev='+NET.rev);
+  if(!d){ wpState.ok=false; return; }
+  NET.last=d;
+  wpState={ total:d.wp.total, today:d.wp.today, ok:true, scorecard:wpState.scorecard };
+  pendingCount=d.pending;
+  if(d.factory){ applyFactory(d.factory); }      // 版が変わったときだけ来る
+  else {
+    // 差分だけ反映する（毎回変わるのは 💰 と各機械の進捗だけ）
+    NET.rev=d.rev; G.money=d.money;
+    const c=craftState();
+    for(const m of (d.machines||[])) c.mach[m.id]={running:!!m.running, wp:m.wp};
   }
-  try{
-    const r=await fetch('/api/otel',{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status);
-    const d=await r.json();
-    wpState={ total:d.wpTotal||0, today:d.wpToday||0, ok:true, scorecard:d.scorecard||[] };
-  }catch(_){ wpState.ok=false; }
-  tickCraft(); renderCraft();
+  if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
+  updateDoneBtn(); updateBadge(); renderCraft(); renderBoard();
 }
 /* main.js の poll() はここからエージェント一覧を受け取る（二重ポーリングを避ける） */
-window.__agentFeed=()=> (NET.multi&&NET.last) ? {workers:NET.last.agents} : null;
-/* --- 製造判定 ---
+window.__agentFeed=()=> NET.last ? {workers:NET.last.agents} : null;
+/* 製造判定はサーバ側（server/craft.mjs）。
    ・稼いだWPは按分せず、稼働中の全機械にそれぞれ同額を加算する
    ・必要WPに達した「その時点」のマスの組み合わせで作られる製品が決まる
-   ・原材料を変えてもWPはリセットしない（溜まった分はそのまま次に使う） */
-function tickCraft(){
-  if(NET.multi) return;            // 製造判定はサーバ側（server/craft.mjs）
-  const c=craftState(); if(!wpState.ok) return;
-  // 初回は基準だけ取る（起動前に稼いだWPを遡って入れない）
-  if(typeof c.wpMark!=='number'){ c.wpMark=wpState.total; saveGame(); return; }
-  const delta=Math.max(0, wpState.total - c.wpMark);
-  c.wpMark=wpState.total;
-  if(delta<=0) return;
-  let last=null, total=0, gain=0;
-  for(const m of machines()){
-    const st=machState(m.id); if(!st.running) continue;
-    st.wp += delta;
-    const need=needWp(m); let n=0;
-    while(st.wp>=need && n<20){
-      st.wp-=need;                                  // 超過分は次の製品に繰り越す
-      const key=keyOfSlots(m.slots);                // ここで初めて組み合わせを見る
-      const p=key ? rollProduct(key) : PROD[UNKNOWN_PRODUCT];  // 空なら「レシピに無い」扱い
-      if(!p) break;
-      const rec={ pid:p.id, at:Date.now(), key:key||'', mid:m.id };
-      c.made.push({...rec, viewed:false});   // 🎁完成品（開くと消える新着分）
-      c.log.push(rec);                       // 📊今日の製造（記録として残る分）
-      gain+=PROD_PRICE[p.r]||0;              // 売上は完成した瞬間に立てる（下でまとめて加算）
-      last=p; total++; n++;
-    }
-  }
-  // 製造個数と同じタイミングで 💰 と売上を積む（🎁を開くまで待たない）
-  if(gain){ G.money+=gain; const d=jstDay(Date.now()); c.sales[d]=(c.sales[d]||0)+gain; }
-  saveGame();
-  if(total){
-    updateDoneBtn(); updateBadge(); renderBoard();   // 💰と今日の売上がその場で動く
-    if(window.__scene&&window.__scene.celebrate) window.__scene.celebrate(last.e);
-    toast(`${last.e} ${last.n} が完成！(+💰${(PROD_PRICE[last.r]||0).toLocaleString()})${total>1?` ×${total}個`:''} 🎁完成品で確認`);
-    if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
-  }
-}
+   ・原材料を変えてもWPはリセットしない（溜まった分はそのまま次に使う）
+   クライアントは /api/state で進捗を、/api/claim で結果を受け取るだけ。 */
 
 /* --- 今日の労働量ボード（画面上中央・このゲームの主役の数字） ---
    「今日どれだけ働いたか」を示す数字なので、製造の設定とは切り離して大きく出す。 */
-const jstDay = t => new Date(t + 9*3600*1000).toISOString().slice(0,10);
-// 今日の製造は記録(c.log)から数える。🎁完成品を開いても消えない
-function logToday(){ const d=jstDay(Date.now()); return craftState().log.filter(m=>jstDay(m.at)===d); }
-const madeToday = ()=> NET.multi ? ((NET.last&&NET.last.today.made)||0) : logToday().length;
-const salesToday = ()=> NET.multi ? ((NET.last&&NET.last.today.sales)||0)
-                                  : (craftState().sales[jstDay(Date.now())]||0);
+// 今日の集計はサーバが数えている（🎁完成品を開いても減らない）
+const madeToday = ()=> (NET.last&&NET.last.today.made)||0;
+const salesToday = ()=> (NET.last&&NET.last.today.sales)||0;
 function renderBoard(){
   const el=document.getElementById('board'); if(!el) return;
   // pollWp から数秒おきに呼ばれる。innerHTML を貼り替えると、そのたびに
@@ -1388,8 +1283,7 @@ function renderBoard(){
       <div class="l">今日の売上</div></div>`);
   const b=document.getElementById('todayBtn'); if(b) b.onclick=openToday;
 }
-/* マルチユーザー版は製造判定がサーバ側なので c.log は空のまま。
-   記録は /api/made（products_made）から取り、ローカル版と同じ形に揃えて同じ描画に流す。 */
+/* 製造の記録は /api/made（products_made）から取る。描画しやすい形に揃えてから流す。 */
 let _madeToday=null;                  // null=まだ取れていない / 配列=今日の記録
 const normMadeRow = r => ({ pid:r.product_id, at:new Date(r.made_at).getTime(), key:r.recipe_key||'' });
 async function fetchMadeToday(dlg){
@@ -1398,16 +1292,16 @@ async function fetchMadeToday(dlg){
   _madeToday=(d.made||[]).map(normMadeRow);
   if(dlg) dlg.refresh();
 }
-const madeTodayRows = ()=> NET.multi ? (_madeToday||[]) : logToday();
+const madeTodayRows = ()=> _madeToday||[];
 /* 📊 今日の製造 — 今日つくったものをレア度順に並べる（図鑑に近い見た目）。
    原材料の組み合わせも出すので、当たった組み合わせを見返す用途にも使える。 */
 function openToday(){
-  if(NET.multi) _madeToday=null;                    // 開くたび取り直す（前回開いた内容を出さない）
+  _madeToday=null;                                  // 開くたび取り直す（前回開いた内容を出さない）
   const dlg=openDialog({ title:'📊 今日の製造',
     subtitle:()=>`${madeToday()}個 / 売上 💰${Math.floor(salesToday()).toLocaleString()}`,
     live:2000,
     body:()=>{
-      if(NET.multi && !_madeToday) return '<div class="cost" style="padding:12px">読み込み中…</div>';
+      if(!_madeToday) return '<div class="cost" style="padding:12px">読み込み中…</div>';
       const rows={};
       for(const m of madeTodayRows()){ const p=PROD[m.pid]; if(!p) continue;
         const r=rows[m.pid]||(rows[m.pid]={p, n:0, keys:{}});
@@ -1428,10 +1322,9 @@ function openToday(){
           今日つくったものの合計価値は 💰${gain.toLocaleString()}（完成した時点で 💰 に入っている）。</div>`;
     },
     actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
-  if(NET.multi){                       // 開いている間だけ記録を取りに行く（閉じたら止める）
-    const pull=()=>{ if(_dlg!==dlg){ clearInterval(t); return; } fetchMadeToday(dlg); };
-    const t=setInterval(pull, 5000); pull();
-  }
+  // 開いている間だけ記録を取りに行く（閉じたら止める）
+  const pull=()=>{ if(_dlg!==dlg){ clearInterval(t); return; } fetchMadeToday(dlg); };
+  const t=setInterval(pull, 5000); pull();
   return dlg;
 }
 
@@ -1457,9 +1350,8 @@ function toggleMachine(id){
   const st=machState(id), ms=machines(), m=ms.find(x=>x.id===id);
   st.running=!st.running;
   craftState().activeId=id;
-  if(NET.multi){ NET.call('PUT','/api/machine/run',{id,running:st.running})
-    .then(r=>{ if(r&&r.factory){ applyFactory(r.factory); renderCraft(); } }); }
-  else saveGame();
+  NET.call('PUT','/api/machine/run',{id,running:st.running})
+    .then(r=>{ if(r&&r.factory){ applyFactory(r.factory); renderCraft(); } });
   renderCraft();
   if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
   toast(st.running ? `${m?(m.no||''):''}号機の製造を開始（${m?needWp(m):0}WPで1個）` : '製造を停止（溜めたWPは保持）');
@@ -1535,13 +1427,11 @@ function setMat(machineId, slotIdx, matId){
   if(!F||!F.setSlot(machineId, slotIdx, matId||null)) return;   // 素材の実体は機械のマス(レイアウトに保存)
   c.activeId = machineId;
   // 原材料を変えても製造は止めず、溜まったWPも保持する。
-  // 何ができるかは「必要WPに達した時点」の組み合わせで決まる（tickCraft）。
+  // 何ができるかは「必要WPに達した時点」の組み合わせで決まる（サーバの craft.mjs）。
   snapLayout();
-  if(NET.multi){
-    const m=machines().find(x=>x.id===machineId);
-    NET.call('PUT','/api/machine/slots',{id:machineId,slots:(m&&m.slots)||[]})
-      .then(r=>{ if(r&&r.factory){ applyFactory(r.factory); renderCraft(); } });
-  } else saveGame();
+  const m=machines().find(x=>x.id===machineId);
+  NET.call('PUT','/api/machine/slots',{id:machineId,slots:(m&&m.slots)||[]})
+    .then(r=>{ if(r&&r.factory){ applyFactory(r.factory); renderCraft(); } });
   renderCraft();
   toast(matId ? `${MAT[matId].e} ${MAT[matId].n} をセット` : '原材料を外しました');
 }
@@ -1551,14 +1441,13 @@ window.__machineClick = (machineId)=>{ if(window.__openMachine) window.__openMac
 
 /* --- 完成品（新着だけを見せる箱。1回開いたら中身は空になる） --- */
 function updateDoneBtn(){
-  const c=craftState(), b=document.getElementById('doneBtn'); if(!b) return;
-  const n = NET.multi ? pendingCount : c.made.length;
-  b.classList.toggle('show', n>0);
-  document.getElementById('doneN').textContent = n || '';
+  const b=document.getElementById('doneBtn'); if(!b) return;
+  b.classList.toggle('show', pendingCount>0);
+  document.getElementById('doneN').textContent = pendingCount || '';
 }
-/* マルチユーザー版: 回収(図鑑登録)はサーバの /api/claim が行う。
+/* 回収(図鑑登録)はサーバの /api/claim が行う。
    売上は完成した瞬間にサーバの tick() が積んでいるので、ここでは合計額を見せるだけ。 */
-async function openDoneServer(){
+async function openDone(){
   const r=await NET.call('POST','/api/claim'); if(!r) return;
   pendingCount=0; updateDoneBtn();
   const st=await NET.call('GET','/api/state'); if(st){ NET.last=st; applyFactory(st.factory); }
@@ -1580,47 +1469,6 @@ async function openDoneServer(){
         :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
         ${r.registered?`${r.registered}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。</div>
-      <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
-    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
-}
-function openDone(){
-  if(NET.multi) return openDoneServer();
-  const c=craftState();
-  const batch=c.made.slice();                                // 今回見せる分（あとで空にする）
-  const had={}; for(const k in c.collection) had[k]=c.collection[k];      // 「初めて」の判定は登録前の図鑑で行う
-  const cards=[...batch].reverse().slice(0,200).map(m=>{
-    const p=PROD[m.pid]; if(!p) return '';
-    // 未登録の製品は該当する全部に NEW を付ける（3個できていれば3個とも）
-    const isNew = !had[m.pid];
-    const ks=(m.key||'').split(',').map(x=>MAT[x]?MAT[x].e:'').join('');
-    return `<div class="pcard">${isNew?'<span class="new">NEW</span>':''}
-      <div class="e">${p.e}</div><div class="nm">${p.n}</div>
-      <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
-      <div class="qn">${ks}</div></div>`;
-  }).join('');
-  // 一覧を表示したタイミングで図鑑に登録する。
-  // 💰は完成した瞬間（tickCraft）に入れているので、ここでは合計額を出すだけ
-  let reg=0, gain=0, byRar={};
-  for(const m of batch){
-    const p=PROD[m.pid]; if(!p) continue;
-    c.collection[m.pid]=(c.collection[m.pid]||0)+1; reg++;
-    const price=PROD_PRICE[p.r]||0; gain+=price;
-    byRar[p.r]=(byRar[p.r]||0)+1;
-  }
-  // 見せたら箱は空にする。次に製品ができるまで🎁ボタンは出ない（常に「新着だけ」を見せる）
-  c.made=[];
-  saveGame(); updateDoneBtn(); updateBadge(); renderBoard();
-  const bd=Object.keys(byRar).sort().map(r=>
-    `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
-  openDialog({ title:'🎁 完成品', subtitle:`${batch.length}個`,
-    body:`${gain?`<div class="invbar" style="font-size:12px">
-          <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
-          <b style="color:#ffd27a;font-size:19px">💰 ${gain.toLocaleString()}</b>
-          ${bd}</div>`
-        :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
-      <div class="rowline" style="font-size:11px;color:#9fb0c0">
-        ${reg?`${reg}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。図鑑を埋めていこう。
-        今日つくったものは 📊今日の製造 でいつでも見返せる。</div>
       <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
     actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
 }
@@ -1671,31 +1519,14 @@ let _lbPeriod='week';
 async function openLb(){
   let rows=null;            // null=読み込み中
   let total=0, loading=false;
-  /* 単一ユーザー版(server.mjs)は期間もページングも持たないので、
-     全件を1度取ってからクライアント側で同じ規則で並べ替え・切り出しをする */
-  let localAll=null;
-  const sortLocal=(list)=>[...list].sort((a,b)=>{
-    const av=a[_lbKey], bv=b[_lbKey];
-    if(av==null&&bv==null) return b.lines-a.lines;
-    if(av==null) return 1; if(bv==null) return -1;
-    return bv-av || b.lines-a.lines;
-  });
   async function load(more){
     loading=true;
     const offset=more?(rows||[]).length:0;
-    if(NET.multi){
-      const d=await NET.call('GET',
-        `/api/leaderboard?period=${_lbPeriod}&metric=${_lbKey}&limit=${LB_PAGE}&offset=${offset}`);
-      const page=(d&&d.scorecard)||[];
-      rows=more?[...(rows||[]),...page]:page;
-      total=(d&&d.total)||rows.length;
-    } else {
-      if(!localAll){ try{ localAll=(await (await fetch('/api/otel',{cache:'no-store'})).json()).scorecard||[]; }
-                     catch(_){ localAll=[]; } }
-      const sorted=sortLocal(localAll);
-      total=sorted.length;
-      rows=sorted.slice(0, offset+LB_PAGE);
-    }
+    const d=await NET.call('GET',
+      `/api/leaderboard?period=${_lbPeriod}&metric=${_lbKey}&limit=${LB_PAGE}&offset=${offset}`);
+    const page=(d&&d.scorecard)||[];
+    rows=more?[...(rows||[]),...page]:page;
+    total=(d&&d.total)||rows.length;
     loading=false;
   }
   const dlg=openDialog({ title:'🏆 リーダーボード',
@@ -1708,15 +1539,8 @@ async function openLb(){
     const note=`<div class="rowline" style="font-size:11px;color:#9fb0c0;line-height:1.7">
         <b style="color:#9fdcc6">${ax.label}順</b>${ax.desc}</div>`;
     if(!rows) return btns+note+'<div class="cost">読み込み中…</div>';
-    /* 工場名の出し方。
-       マルチユーザー版: サーバ(DB)の factories.name が factoryName で来る。
-       単一ユーザー版  : DBが無いので、活動量が最大の識別子を本人とみなして
-                         自分の工場名(G.factoryName)を当て、他は「◯◯の工場」。 */
-    const meId = NET.multi ? null
-      : ([...(localAll||[])].sort((a,b)=>(b.lines||0)-(a.lines||0))[0]||{}).id;
-    const fname = (u)=> u.factoryName
-      || (!NET.multi && u.id===meId && G.factoryName)
-      || `${String(u.name||u.id||'').split('@')[0]}の工場`;
+    // 工場名はサーバ(DB)の factories.name が factoryName で来る。空は古い行の保険
+    const fname = (u)=> u.factoryName || `${String(u.name||u.id||'').split('@')[0]}の工場`;
     const more = rows.length<total
       ? `<div class="rowline" style="justify-content:center">
            <button class="dbtn ghost" id="lbMore">もっとみる（${rows.length} / ${total}）</button></div>` : '';
@@ -1888,33 +1712,11 @@ function myBody(){
     </div>
     ${myChartSvg(b,sel)}`;
 }
-/* 単一ユーザー版(server.mjs)向け。WPは /api/otel、製造と売上はローカルの記録から作る */
-async function myLocalData(days){
-  const c=craftState();
-  let wpDaily={}, who='';
-  try{
-    const j=await (await fetch('/api/otel',{cache:'no-store'})).json();
-    wpDaily=j.wpDaily||{};
-    /* 単一ユーザー版はログインが無いので名前が引けない。テレメトリに出てくる識別子のうち
-       もっとも活動量が多いものを本人とみなす（複数人で使うならマルチユーザー版を使う） */
-    const top=(j.scorecard||[]).slice().sort((a,b)=>(b.lines||0)-(a.lines||0))[0];
-    who=String((top&&(top.name||top.email||top.id))||'').split('@')[0];
-  }catch(_){}
-  const made={};
-  for(const m of (c.log||[])){ const d=jstDay(m.at); made[d]=(made[d]||0)+1; }
-  const series=[];
-  for(let i=days-1;i>=0;i--){ const day=jstDay(Date.now()-i*86400000);
-    series.push({day, wp:Math.round(wpDaily[day]||0), made:made[day]||0, sales:Math.round(c.sales[day]||0)}); }
-  return { name:G.factoryName||'', userName:who||'あなた', defaultName:`${who||'あなた'}の工場`,
-           days, series };
-}
 async function saveFactoryName(name,dlg){
   name=String(name||'').replace(/\s+/g,' ').trim().slice(0,24);
-  if(NET.multi){
-    const r=await NET.call('PUT','/api/factory/name',{name});
-    if(!r) return;                       // 失敗時は編集状態のまま（NET.call が toast を出す）
-    name=r.name;
-  } else { G.factoryName=name; saveGame(); }
+  const r=await NET.call('PUT','/api/factory/name',{name});
+  if(!r) return;                         // 失敗時は編集状態のまま（NET.call が toast を出す）
+  name=r.name;
   G.factoryName=name; _myData.name=name; _myEdit=false; dlg.refresh();
   toast('工場名を変更しました');
 }
@@ -1939,7 +1741,7 @@ async function openMyPage(){
         // 差分適用で入力欄は生き残るので、初回だけ選択する（再描画のたびに全選択し直さない）
         if(document.activeElement!==inp){ inp.focus(); inp.select(); } }
     } });
-  _myData = NET.multi ? await NET.call('GET',`/api/mypage?days=${MY_DAYS}`) : await myLocalData(MY_DAYS);
+  _myData = await NET.call('GET',`/api/mypage?days=${MY_DAYS}`);
   // 取得に失敗したときは 0 を並べて黙らない。名前だけはポーリングの me から作れる
   if(!_myData){
     const me=(NET.last&&NET.last.me)||{};
@@ -2033,52 +1835,40 @@ document.getElementById('hud').addEventListener('click',()=>{ if(!window.__facto
 document.getElementById('hud').title='クリックでエージェント一覧';
 
 /* ===== ショップ（景品の売却＋購入/強化） ===== */
-/* マルチユーザー版では 💰 の増減は必ずサーバが決める（クライアントの申告を信じない） */
+/* 💰 の増減は必ずサーバが決める（クライアントの申告を信じない） */
 async function apiBuy(kind,id,okMsg){
   const r=await NET.call('POST','/api/shop/buy',{kind,id});
   if(!r) return false; applyFactory(r.factory); updateBadge(); if(okMsg) toast(okMsg); return true;
 }
 function sellPrize(id,qty){ const p=PRIZES.find(x=>x.id===id); const have=G.inv[id]||0; qty=Math.min(qty,have); if(qty<=0)return;
-  if(NET.multi){ NET.call('POST','/api/shop/sell',{itemId:id,qty}).then(r=>{ if(!r)return;
+  NET.call('POST','/api/shop/sell',{itemId:id,qty}).then(r=>{ if(!r)return;
     applyFactory(r.factory); G.inv[id]=Math.max(0,have-qty); updateBadge();
-    toast(`${p.e} ${p.n}×${qty} を売却 (+💰${r.gain})`); }); return; }
-  G.inv[id]=have-qty; const gain=SELL[p.r]*qty; G.money+=gain; saveGame(); updateBadge(); toast(`${p.e} ${p.n}×${qty} を売却 (+💰${gain})`); }
+    toast(`${p.e} ${p.n}×${qty} を売却 (+💰${r.gain})`); }); }
 // 購入=在庫(owned)に追加。設置は編集パレットから床クリックで行う
-function buyMachine(type){ if(!MACH[type])return; const pr=MACH[type].price; if(G.money<pr)return;
-  if(NET.multi) return void apiBuy('machine',type,`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`);
-  G.money-=pr; addStock('machine',type); saveGame(); updateBadge(); toast(`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
-function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; const c=lvCost(e.lvl); if(G.money<c)return;
-  if(NET.multi){ NET.call('POST','/api/machine/level',{id}).then(r=>{ if(!r)return;
+function buyMachine(type){ if(!MACH[type])return; if(G.money<MACH[type].price)return;
+  apiBuy('machine',type,`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
+function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; if(G.money<lvCost(e.lvl))return;
+  NET.call('POST','/api/machine/level',{id}).then(r=>{ if(!r)return;
     applyFactory(r.factory);
     const lv=(r.factory.machines.find(x=>x.id===id)||{}).lvl;
     if(window.__scene&&lv)window.__scene.setMachineLevel(id,lv);
-    updateBadge(); toast(`Lv${lv} に強化！`); }); return; }
-  G.money-=c; e.lvl++;
-  const M=MACH[machVariant(e.variant)];
-  if(window.__scene)window.__scene.setMachineLevel(id,e.lvl); snapLayout(); saveGame(); updateBadge(); toast(`${M.e} ${M.n} を Lv${e.lvl} に強化！`); }
+    updateBadge(); toast(`Lv${lv} に強化！`); }); }
 // 素材スロットの要約（ショップ一覧用）。何が作れるかは伏せ、素材と稼働状態だけ出す
 function slotSummary(e){ const mats=[...new Set((e.slots||[]).filter(Boolean))].sort();
   if(!mats.length) return '素材未設定';
   const icons=mats.map(m=>(MAT[m]||{}).e||'?').join('');
   return `${icons}${machState(e.id).running?' ・ ⚙️製造中':''}`; }
-function buyDeco(t){ const pr=DECO[t].price; if(G.money<pr)return;
-  if(NET.multi) return void apiBuy('deco',t,`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`);
-  G.money-=pr; addStock('deco',t); saveGame(); updateBadge(); toast(`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
-function buyProp(t){ const pr=PROP[t].price; if(G.money<pr)return;
-  if(NET.multi) return void apiBuy('prop',t,`${PROP[t].n} を購入（🔧編集で設置）`);
-  G.money-=pr; addStock('prop',t); saveGame(); updateBadge(); toast(`${PROP[t].n} を購入（🔧編集で設置）`); }
+function buyDeco(t){ if(G.money<DECO[t].price)return;
+  apiBuy('deco',t,`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
+function buyProp(t){ if(G.money<PROP[t].price)return;
+  apiBuy('prop',t,`${PROP[t].n} を購入（🔧編集で設置）`); }
 function selectBg(k){
-  if(NET.multi){ apiBuy('bg',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setSkyTheme) window.__scene.setSkyTheme(k); }); return; }
-  if(!G.bgOwned.includes(k)){ const pr=BG[k].price; if(G.money<pr)return; G.money-=pr; G.bgOwned.push(k); toast(`背景「${BG[k].n}」を購入！`); } G.bg=k; if(window.__scene&&window.__scene.setSkyTheme)window.__scene.setSkyTheme(k); saveGame(); updateBadge(); }
+  apiBuy('bg',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setSkyTheme) window.__scene.setSkyTheme(k); }); }
 function selectFloor(k){
-  if(NET.multi){ apiBuy('floor',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setFloor) window.__scene.setFloor(k); }); return; }
-  if(!G.floorOwned.includes(k)){ const pr=FLOOR[k].price; if(G.money<pr)return; G.money-=pr; G.floorOwned.push(k); toast(`床材「${FLOOR[k].n}」を購入！`); } G.floor=k; if(window.__scene&&window.__scene.setFloor)window.__scene.setFloor(k); saveGame(); updateBadge(); }
+  apiBuy('floor',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setFloor) window.__scene.setFloor(k); }); }
 function buySeries(k){ const S=SERIES[k];
-  if(NET.multi){ apiBuy('series',k,`${S.n} シリーズを適用`).then(okk=>{ if(okk&&window.__scene){
-    window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } }); return; }
-  if(!G.seriesOwned.includes(k)){ if(G.money<S.price)return; G.money-=S.price; G.seriesOwned.push(k);
-    if(window.__scene) for(const e of S.decos) window.__scene.placeEmojiDeco(e); snapLayout(); toast(`${S.n} シリーズを購入！内装と装飾を反映`); }
-  G.bg=S.sky; G.floor=S.floor; if(window.__scene){ window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } saveGame(); updateBadge(); }
+  apiBuy('series',k,`${S.n} シリーズを適用`).then(okk=>{ if(okk&&window.__scene){
+    window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } }); }
 
 let _shopTab='sell';
 const SHOP_TABS=[['sell','💵 売却'],['mach','🏭 製造機'],['equip','🧰 設備'],['decor','🎨 内装'],['series','🌏 シリーズ']];
@@ -2167,13 +1957,11 @@ function applyOwned(){ const s=window.__scene; if(!s)return;
   if(G.layout&&G.layout.length){ const dropped=s.buildLayout(G.layout);   // 保存済みレイアウト(位置)を復元
     snapLayout();
     if(dropped) setTimeout(()=>toast(`コンベアは廃止されました（${dropped} 個を撤去）。製造機をクリックして素材を設定してください`),900); }
-  else {                                                            // 初回: 所持品を配置→レイアウト確定
+  else {                        // 初回: サーバの在庫ぶん(最初の1台)を置いてレイアウトを確定させる
     s.syncMachines(G.machines);
-    for(const t in G.decos) for(let i=0;i<(G.decos[t]||0);i++) s.placeDeco(t);
     for(const e of (G.emojiDecos||[])) s.placeEmojiDeco(e);
     snapLayout();
   }
-  migrateCraftMats();                       // 旧セーブの原材料を機械のマスへ
   reconcileStock(); saveGame();
   s.setSkyTheme(G.bg); s.setFloor(G.floor); s.applySkins(G.skins); }
 /* ===== 編集パレット: 大項目→在庫から選ぶ→床クリックで設置 ===== */
@@ -2319,33 +2107,21 @@ function toggleEditMode(){ if(!window.__scene){ toast('準備中…'); return; }
   const on=window.__scene.toggleEdit(); syncEditMode();
   toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 設置済みはドラッグで移動・🗑へドラッグで撤去':'編集モードを終了'); }
 document.getElementById('editMenuBtn').addEventListener('click',toggleEditMode);
-loadGame().then(async ()=>{
+loadGame().then(async (ok)=>{
+  if(!ok) return;                                    // サーバに繋がらない旨は loadGame が出している
   G.lastT=Date.now();
-  // /metrics は検証用。マルチユーザー版のサーバは配信しないので導線を消す
-  if(NET.multi){ const mi=document.getElementById('metricsMi'); if(mi) mi.remove(); }
   await waitScene(); applyOwned(); updateBadge();
-  if(!NET.multi) setInterval(()=>{ G.lastT=Date.now(); saveGame(); }, 15000);
   setInterval(syncEditMode, 1000); syncEditMode();   // Eキー・移動モードでの編集ON/OFFに追従
-  // 製造: 原材料バッジを反映してからWPの取得を開始（3秒ごと = OTelのログ送信間隔に合わせる）
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
   updateDoneBtn(); renderCraft(); pollWp();
-  /* マルチユーザー版は5秒。OTLP の logs バッチがちょうど5秒間隔なので、
+  /* 5秒ごと。OTLP の logs バッチがちょうど5秒間隔なので、
      これより速く叩いても新しい値は存在しない（＝同じ値を取り直すだけ）。
      裏に回っている間は pollWp 側で止まる。 */
-  setInterval(pollWp, NET.multi?5000:3000);
-  if(NET.multi) document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollWp(); });
+  setInterval(pollWp, 5000);
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollWp(); });
   const q=new URLSearchParams(location.search);
-  if(q.get('unlockall') && NET.multi){ toast('マルチユーザー版では ?unlockall は使えません（💰はサーバが管理）'); }
-  else if(q.get('unlockall')){   // 全背景・全アイテムを所持(テスト用)。何度開いても増殖しないよう max で設定
-    G.bgOwned=Array.from(new Set([...G.bgOwned,'auto',...SKY_THEMES]));
-    G.seriesOwned=Array.from(new Set([...G.seriesOwned,...ROOM_THEMES]));
-    G.floorOwned=Array.from(new Set([...G.floorOwned,...Object.keys(FLOOR)]));
-    G.money=Math.max(G.money,999999);
-    for(const t of Object.keys(MACH)) G.stock.machine[t]=Math.max(3,G.stock.machine[t]||0);
-    for(const t of Object.keys(PROP)) G.stock.prop[t]=Math.max(3,G.stock.prop[t]||0);
-    for(const t of Object.keys(DECO)) G.stock.deco[t]=Math.max(3,G.stock.deco[t]||0);
-    saveGame(); updateBadge(); toast('✅ 全背景・全アイテムを解放しました（在庫）');
-  }
+  // ?unlockall は単一ユーザー版のテスト用だった。💰も在庫もサーバが持つので効かない
+  if(q.get('unlockall')) toast('?unlockall は使えません（💰と在庫はサーバが管理）');
   if(q.get('edit')){ paletteEl.classList.add('show'); _editOn=true;
     wrapEl.classList.add('editing'); slideGame(); renderPalette(); }
   if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop'));
