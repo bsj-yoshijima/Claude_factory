@@ -101,19 +101,10 @@ export const Lighting = {
     if(this.sun){ this.sun.setAlpha(dayF); this.sunG.setAlpha(dayF*0.5); }
     if(this.moon){ this.moon.setAlpha(nf); this.moonG.setAlpha(nf*0.5); for(const s of this.stars) s.setAlpha(nf); }
   },
-  /* 背景の床をグリッドに合わせる補正値。{scale,dx,dy} をキャンバス座標で持つ */
-  roomFit(){ if(!this._roomFit){
-      try{ this._roomFit=JSON.parse(this.cache.text.get('roomfit')||'{}'); }catch(_){ this._roomFit={}; } }
-    return this._roomFit; },
   /* テーマ部屋(画像ごと差し替え)。焼き込み済みなので動的な空/採光/床オーバーレイは切る */
   setRoom(key){ const tex=ROOM_TEX[key]; this.themedRoom=!!tex;
     this.setPartsTheme(tex?key:null);   // 部屋テーマに製造機のスキンを追従させる
-    if(this.bgImg){
-      const f=(this.roomFit()[key])||{scale:1,dx:0,dy:0};
-      this.bgImg.setTexture(tex||'bg_room')
-        .setDisplaySize(W*f.scale, H*f.scale).setPosition(f.dx||0, f.dy||0);
-      if(this.bgVoid) this.bgVoid.setFillStyle(f.void ? parseInt(f.void.slice(1),16) : 0x0c1014);
-    }
+    if(this.bgImg){ this.bgImg.setTexture(tex||'bg_room').setDisplaySize(W,H); }
     const vis=!this.themedRoom;
     if(this.skyLayer) this.skyLayer.setVisible(vis);
     if(this.sun){ this.sun.setVisible(vis); this.sunG.setVisible(vis); }
