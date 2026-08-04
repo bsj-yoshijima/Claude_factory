@@ -417,25 +417,28 @@ console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と�
   s.toggleEdit(false); window.__toast=null; window.__layoutChanged=null; window.__openMachine=null;
 }
 
-console.log('\n[14] グローバル名の衝突（main.js と factory-phaser.html）');
-{ // クラシックスクリプト同士なので同名の const/let/class/function は SyntaxError になり
-  // HTML のスクリプトが丸ごと実行されなくなる（= UIが全部死ぬ）。機械的に検出する。
+console.log('\n[14] main.js と factory-phaser.html の境界');
+{ /* 以前は両方クラシックスクリプトで、同名の const/let/class/function があると
+     SyntaxError で HTML 側が丸ごと実行されずUIが全部死んだ（それを機械的に検出していた）。
+     いまは HTML 側が module なのでスコープが分離され、この事故は構造的に起きない。
+     代わりに「その前提が崩れていないか」と「境界が window.__* に限られているか」を守る。 */
   const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
   const html=fs.readFileSync(new URL('../factory-phaser.html', import.meta.url)).toString();
-  const inline=html.match(/<script>([\s\S]*?)<\/script>/)[1];
-  const tops=(code)=>{ const out=new Set(); let depth=0;
-    for(const line of code.split('\n')){ const st=line.trim();
-      if(depth===0){ let m;
-        if((m=st.match(/^(?:const|let|var|class)\s+([A-Za-z_$][\w$]*)/))) out.add(m[1]);
-        if((m=st.match(/^function\s+([A-Za-z_$][\w$]*)/))) out.add(m[1]);
-        const d=st.match(/^(?:const|let|var)\s+(.*)$/);
-        if(d) for(const mm of d[1].matchAll(/(?:^|,)\s*([A-Za-z_$][\w$]*)\s*=/g)) out.add(mm[1]);
-      }
-      depth += (line.split('{').length-1)-(line.split('}').length-1);
-    } return out; };
-  const a=tops(src), b=tops(inline);
-  const dup=[...a].filter(x=>b.has(x));
-  ok(dup.length===0, `グローバル名の衝突なし${dup.length?' → '+dup.join(','):''}`);
+
+  ok(/<script type="module">/.test(html) && !/<script>\s*\n\s*'use strict'/.test(html),
+     'HTML 側のスクリプトは module（クラシックだとグローバル衝突でUIが全死する）');
+
+  // main.js から HTML 側へ触るのは window.__* と window.morphInto だけ、という約束
+  const body=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+  const viaWindow=[...body.matchAll(/window\.(__[A-Za-z]\w*|morphInto)/g)].map(m=>m[1]);
+  ok(viaWindow.length>0, `main.js → HTML は window 経由（${new Set(viaWindow).size} 種）`);
+
+  // HTML 側が公開している window の一覧に、main.js が使う名前が全部あるか
+  const exposed=new Set([...html.matchAll(/window\.(__[A-Za-z]\w*|morphInto)\s*=/g)].map(m=>m[1]));
+  // main.js 自身が定義して公開しているものは除く（__scene / __factory / __game など）
+  const ownedByMain=new Set([...body.matchAll(/window\.(__[A-Za-z]\w*)\s*=/g)].map(m=>m[1]));
+  const missing=[...new Set(viaWindow)].filter(n=>!exposed.has(n)&&!ownedByMain.has(n));
+  ok(missing.length===0, `main.js が使う window の名前は全部 HTML 側が公開している${missing.length?' → 未公開: '+missing.join(','):''}`);
 }
 
 console.log('\n[15] 製造機スプライトの1マス送り（tools/cut_machines.py の成果物）');

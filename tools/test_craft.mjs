@@ -1,22 +1,10 @@
-// ジャンル / 原材料 / 製品 / レシピ（factory-phaser.html の CRAFT-DATA ブロック）を検証する。
+// ジャンル / 原材料 / 製品 / レシピ（game/data/craft.mjs）を検証する。
 // 実行: node tools/test_craft.mjs
-// ブロックだけを切り出して素の JS として評価するので、Phaser もブラウザも要らない。
-import fs from 'node:fs';
-import vm from 'node:vm';
+// 素の ESM を import するだけなので、Phaser もブラウザも要らない。
+import * as CRAFT from '../game/data/craft.mjs';
+import { RAR } from '../game/data/econ.mjs';
 
-const html = fs.readFileSync(new URL('../factory-phaser.html', import.meta.url)).toString();
-const cut = (a,b)=>{ const i=html.indexOf(a), j=html.indexOf(b);
-  if(i<0||j<0) throw new Error(`マーカーが見つからない: ${a} / ${b}`);
-  return html.slice(i, j+b.length); };
-const rarLine = html.split('\n').find(l=>l.trim().startsWith('const RAR='));
-if(!rarLine) throw new Error('const RAR= が見つからない');
-
-const ctx = vm.createContext({ console });
-vm.runInContext(
-  rarLine + '\n' + cut('/* == CRAFT-DATA-START ==','/* == CRAFT-DATA-END == */')
-  + '\n;globalThis.$={GENRES,GENRE,SECRET_G,MATS,MAT,PRODS,PROD,RECIPES,SECRETS,UNKNOWN_PRODUCT,RAR,'
-  + 'genreOf,genresOfMats,normPool,poolFor,rollProduct};', ctx);
-const $ = ctx.$;
+const $ = { ...CRAFT, RAR };
 
 let fail=0;
 const ok=(cond,msg)=>{ console.log((cond?'  ok  ':'FAIL  ')+msg); if(!cond)fail++; };
@@ -121,7 +109,7 @@ console.log('\n[8] 製品 → 組み合わせ が1対1（違う組み合わせ�
   // 逆向き（1組み合わせ → 複数製品）は意図して残している枠。0件になったら重み抽選が死ぬので見張る
   const shared=Object.keys($.RECIPES).filter(k=>$.normPool($.RECIPES[k]).length>1);
   ok(shared.length>0, `複数製品を共有する組み合わせが ${shared.length} 通り（レア度の重み抽選が働く枠）`); }
-{ // 原材料の数は製造機のマス数に収まること（MACH は s2..s5 なので 2〜5。ECON-DATA 側と揃える）
+{ // 原材料の数は製造機のマス数に収まること（MACH は s2..s5 なので 2〜5。game/data/econ.mjs 側と揃える）
   const bad=Object.keys($.RECIPES).filter(k=>{ const n=k.split(',').length; return n<2||n>5; });
   ok(!bad.length, '全レシピの原材料数が 2〜5（製造機のマス数の範囲）'+(bad.length?' → '+bad.join(' / '):'')); }
 { // m が空の通常製品はキー '' を作ってしまうので弾く

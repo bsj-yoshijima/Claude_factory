@@ -46,7 +46,7 @@ npm install && docker compose up -d && npm run dev
 | ファイル | 役割 |
 |---|---|
 | `server/index.mjs` | HTTP。OTLP 受信 / hooks 受信 / API / 静的配信 / ログイン画面 |
-| `server/game-data.mjs` | マスタの読み込み。定義の正は `factory-phaser.html` の2ブロックのまま |
+| `server/game-data.mjs` | マスタの窓口。定義の正は `game/data/*.mjs`（クライアントと同じものを import する） |
 | `server/ingest-otel.mjs` | OTLP → 分バケット。親子判定・重複排除 |
 | `server/ingest-hooks.mjs` | hooks → `agent_sessions`。在/不在の減衰ルール |
 | `server/wp.mjs` | 重みの定義と WP の集計 |
@@ -168,7 +168,7 @@ OTel 基準を延ばすほど「`kill -9` で `Stop` が飛ばずに落ちたセ
 | 3 | **`wp_daily` のマテリアライズ**。いまはビューなので履歴が伸びると重くなる |
 | 4 | **`ingest_seen` の刈り取り**。重複排除キーが無限に増える（2日で消せばよい） |
 | 5 | **マイページ**。`/api/me` が日次データを返すところまでは実装済み、画面が未作成 |
-| 6 | `factory-phaser.html` の ESM 分割と UI 部品化（設計メモの段階1。まだ1ファイルのまま） |
+| 6 | `factory-phaser.html` の UI 部品化（マスタは `game/data/*.mjs` へ切り出し済み。画面のコードはまだ1ファイル） |
 | 7 | **`inventory` テーブルの撤去**。ガチャ・景品の概念が無くなったので投入経路ごと不要（🏪ショップの売却タブが残参照） |
 
 ## 既知の挙動（仕様として維持しているもの）

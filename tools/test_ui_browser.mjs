@@ -152,7 +152,7 @@ ok(await ev(`/\\d+ \\/ \\d+ WP/.test(document.querySelector('.mrow .wpline').tex
 ok((await ev(`document.querySelectorAll('.mrow .wpline b').length`))===nrow, '行ごとにWP表示がある');
 ok(await ev(`/\\d+ \\/ \\d+ WP/.test(document.querySelector('.mrow .wpline b').textContent)`), 'WPは「現在 / 必要」形式');
 // 必要WP = マス数 × WP_PER_SLOT
-ok(await ev(`(function(){const m=machinesSorted()[0]; return needWp(m)===m.size*WP_PER_SLOT;})()`), '必要WPがマス数に比例する');
+ok(await ev(`(function(){const m=machinesSorted()[0]; return needWpForSize(m.size)===m.size*WP_PER_SLOT;})()`), '必要WPがマス数に比例する');
 await ev(`${gobtn}.click()`); await sleep(300);
 ok(await ev(`machState(${JSON.stringify(mid)}).running===false`), '■停止で止まる');
 await sleep(1200);

@@ -58,12 +58,12 @@ npm run dev                           # 再起動
 1. ☰メニューの 🔧**レイアウト編集** で製造機を設置する
 2. 抽出機をクリック → **ジャンルを選んで原材料を1つ選ぶ**（🍳食品 / ⚙️機械 / 🧺生活品 の32種）
 3. ☰メニューの 🏭**製造** で全機械が縦一覧（マス数の昇順）。行ごとに素材セット・進捗・**▶製造開始**。マスをクリックすると**ジャンルごとの見出しの下に全原材料が並ぶ**（タブ切り替えはしない）
-4. 押した時点からの **実WP** がその機械に加算され、**マス数 × 50WP** で1製品が完成
+4. 押した時点からの **実WP** がその機械に加算され、**マス数 × 2,000WP** で1製品が完成
 5. 完成すると右中央に **🎁完成品** ボタン。開くと一覧が出て**📖図鑑に登録**される（初回は `NEW`）。**1回開いたら中身はリセット**され、次の製品ができるまでボタンは消える
 
 | 仕様 | 挙動 |
 |---|---|
-| 必要WP | **マス数 × 50WP**（`WP_PER_SLOT`）。2マス機=100WP / 5マス機=250WP |
+| 必要WP | **マス数 × 2,000WP**（`game/data/rules.mjs` の `WP_PER_SLOT`）。2マス機=4,000WP / 5マス機=10,000WP |
 | WPの配分 | 稼いだWPは**台数で按分せず、稼働中の全機械にそれぞれ同額**を加算する |
 | WPの管理単位 | **機械ごと**に独立（`G.craft.mach[id] = {running, wp}`） |
 | 製品の決まり方 | **必要WPに達したその時点**のマスの組み合わせを見て決まる。レシピにあれば候補から重み付けしてランダム |
@@ -82,7 +82,15 @@ npm run dev                           # 再起動
 
 ### ジャンルと組み合わせの定義（拡張ポイント）
 
-ジャンル・原材料・製品・レシピは `factory-phaser.html` の **`/* == CRAFT-DATA-START == */` 〜 `CRAFT-DATA-END`** の1ブロックが唯一の定義。ここだけ触れば増やせる（`game/main.js` は素材の色をジャンル既定色にフォールバックするので、素材を足しても触らなくてよい）。
+ジャンル・原材料・製品・レシピは **[game/data/craft.mjs](game/data/craft.mjs)** が唯一の定義。ここだけ触れば増やせる（`game/main.js` は素材の色をジャンル既定色にフォールバックするので、素材を足しても触らなくてよい）。
+
+マスタは3つの ESM に分かれていて、**クライアント（`factory-phaser.html`）とサーバ（`server/game-data.mjs`）が同じものを import する**。値がズレようがない。
+
+| ファイル | 内容 |
+|---|---|
+| [game/data/craft.mjs](game/data/craft.mjs) | ジャンル / 原材料 / 製品 / レシピ / 抽選（`rollProduct`）/ `keyOfSlots` |
+| [game/data/econ.mjs](game/data/econ.mjs) | レア度 / 製造機 / 装飾 / 背景 / 床材 / シリーズと価格 |
+| [game/data/rules.mjs](game/data/rules.mjs) | `WP_PER_SLOT` / `PROD_PRICE` / `needWp` |
 
 | 増やすもの | 足す場所 |
 |---|---|
@@ -248,9 +256,9 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 | `tools/cut_machines.py` | 製造機シートから**2マス機の絵だけを正**として3/4/5マス機を合成し、表示サイズへ縮小＋投入口のアンカーを書き出す（`python3 tools/cut_machines.py`） |
 | `tools/mach_axis.mjs` | 製造機スプライトの長軸が全テーマ `+u`（右斜め下）を向いているか検査する（`node tools/mach_axis.mjs`／`--fix` で左右反転して揃える）。逆向きの絵は**影・占有マス・素材アイコンが正しい向きなのに本体だけ直交して見える**。`tools/test_machines.mjs` から呼ばれる |
 | `tools/make_favicon.mjs` | ファビコン（工場＋左下にClaude君）を描いて `assets/favicon.png` / `favicon-192.png` を出す（`node tools/make_favicon.mjs`。依存ゼロ。Claude君は `mascotCanvas()` の手順を移植したものなので、マスコットの形を変えたら再実行する） |
-| `tools/test_ui_browser.mjs` | 実ブラウザ(headless Chrome)でUIを操作して確認（`node tools/test_ui_browser.mjs`。サーバ起動が前提。`CF_URL` で接続先を変えられる）。グローバル名の衝突など「構文は通るが実行時に壊れる」類はこれでしか出ない |
+| `tools/test_ui_browser.mjs` | 実ブラウザ(headless Chrome)でUIを操作して確認（`node tools/test_ui_browser.mjs`。サーバ起動が前提。`CF_URL` で接続先を変えられる）。「構文は通るが実行時に壊れる」類はこれでしか出ない |
 | `tools/test_machines.mjs` | 製造機／設置ロジックの検証（`node tools/test_machines.mjs`。Phaser をスタブして描画なしで走る） |
-| `tools/test_craft.mjs` | ジャンル／原材料／製品／レシピ＋確率の検証（`node tools/test_craft.mjs`。CRAFT-DATA ブロックを切り出して評価。ブラウザ不要） |
+| `tools/test_craft.mjs` | ジャンル／原材料／製品／レシピ＋確率の検証（`node tools/test_craft.mjs`。`game/data/craft.mjs` を import するだけ。ブラウザ不要） |
 
 ### 製造機と素材（コンベアは廃止）
 
@@ -263,7 +271,7 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 - **レシピは素材の"集合"で判定**（順不同・重複は1つとして数える）。既知の組合せに無ければ **「謎の塊」**。
 - 素材が揃っている機械は一定間隔で完成品をポンと出し、`window.__onProduce(product, mats)` が発火する。
 
-素材マスタ・レシピ・製品の**定義の正は `factory-phaser.html` の CRAFT-DATA ブロック**（上の「ジャンルと組み合わせの定義」）。`game/main.js` は描画専用で、素材idを `window.__craft.mat()` に問い合わせて解決する（`matArt()`。個別色 → ジャンル既定色 → 既定色 の順にフォールバックするので、素材を増やしてもここは触らない）。
+素材マスタ・レシピ・製品の**定義の正は [game/data/craft.mjs](game/data/craft.mjs)**（上の「ジャンルと組み合わせの定義」）。`game/main.js` は描画専用で、素材idを `window.__craft.mat()` に問い合わせて解決する（`matArt()`。個別色 → ジャンル既定色 → 既定色 の順にフォールバックするので、素材を増やしてもここは触らない）。
 
 旧セーブのコンベア／出荷口は読み込み時に破棄し、旧4種の製造機（抽出機など）と旧1マス機は最小の2マス機に読み替える。
 
