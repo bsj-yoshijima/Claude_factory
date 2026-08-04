@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 4321
+    },
+    {
+      "name": "legacy",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "PORT=4322 node server.mjs"],
+      "port": 4322
+    }
+  ]
+}
