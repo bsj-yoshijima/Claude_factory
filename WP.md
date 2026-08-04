@@ -1,6 +1,7 @@
 # WP（Work Point）と業務スコアカードの計測仕様
 
-実装は [otel.mjs](otel.mjs)（`export const WP` / `export const SCORE`）、表示は [metrics.html](metrics.html)。
+実装は [server/wp.mjs](server/wp.mjs)（`export const WP` / `export const SCORE`）と
+[server/ingest-otel.mjs](server/ingest-otel.mjs)、表示は 🏠マイページ・🏆リーダーボード。
 
 ---
 
@@ -77,8 +78,8 @@ Agent    0.9%  ← 評価したいもの
 
 ## 2. 重み
 
-`otel.mjs` の `export const WP` が唯一の定義。ここを書き換えて再起動すれば
-過去の生ログをリプレイして再集計される（[6. 重みを変える手順](#6-重みを変える手順)）。
+`server/wp.mjs` の `export const WP` が唯一の定義。起動時に DB の重み表へ同期され、
+`UPDATE` されると全期間のWPがそのまま再集計される（[6. 重みを変える手順](#6-重みを変える手順)）。
 
 | 対象 | 重み | 根拠 |
 |---|---|---|
@@ -255,11 +256,11 @@ Glob 465 / Write 453 / Skill 62
 
 ## 6. 重みを変える手順
 
-受信した生ペイロードは `~/.claude/factory/otel-raw.jsonl` に全部残してある。
+受信したイベントは分バケットで DB に残してあり、WPは重み表との積で都度算出する。
 
-1. `otel.mjs` 冒頭の `export const WP` を書き換える
-2. サーバを再起動する（`node server.mjs`）
-3. 起動時に生ログを自動リプレイして再集計される
+1. `server/wp.mjs` 冒頭の `export const WP` を書き換える
+2. サーバを再起動する（`npm run dev`）— 起動時に重み表へ同期される
+3. 全期間のWPがその場で新しい重みに切り替わる（再取り込み不要）
 
 過去データで即座に結果が見えるので、重みの試行はこのループで回す。
 
@@ -303,7 +304,7 @@ Glob 465 / Write 453 / Skill 62
 | ⑦ | 投入 / 成果の分離 | ✅ [9](#9-業務スコアカード) として分離済（ゲーム用WPとは別系統） |
 | ⑧ | **期間フィルタ（週次/月次）** | ❌ 現状スコアカードは全期間の累計。運用には週次リセットが必要 |
 | ⑨ | **チーム内の分布表示** | ❌ 順位ではなく「中央値との比較」で見せる案（[9](#9-業務スコアカード) の対策2） |
-| ⑩ | ゲーム側とスコアカード側のUI分離 | ❌ いまは `/metrics` に同居。運用時は業務用を別ページにするのが望ましい |
+| ⑩ | ゲーム側とスコアカード側のUI分離 | ⚠️ ゲーム画面の 🏆リーダーボードに同居。運用時は業務用を別ページにするのが望ましい |
 
 ### 日次バケットの設計方針（決定済み・未実装）
 
@@ -325,7 +326,7 @@ Glob 465 / Write 453 / Skill 62
 
 ## 9. 業務スコアカード
 
-設定は `otel.mjs` の `export const SCORE`。API は `/api/otel` の `scorecard`。
+設定は `server/wp.mjs` の `export const SCORE`。API は `/api/leaderboard` の `scorecard`。
 
 ### 目的（社内での使われ方）
 
