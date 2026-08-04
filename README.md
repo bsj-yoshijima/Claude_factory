@@ -82,7 +82,7 @@ npm run dev                           # 再起動
 
 ### ジャンルと組み合わせの定義（拡張ポイント）
 
-ジャンル・原材料・製品・レシピは **[game/data/craft.mjs](game/data/craft.mjs)** が唯一の定義。ここだけ触れば増やせる（`game/main.js` は素材の色をジャンル既定色にフォールバックするので、素材を足しても触らなくてよい）。
+ジャンル・原材料・製品・レシピは **[game/data/craft.mjs](game/data/craft.mjs)** が唯一の定義。ここだけ触れば増やせる（`game/scene/catalog.mjs` は素材の色をジャンル既定色にフォールバックするので、素材を足しても触らなくてよい）。
 
 マスタは3つの ESM に分かれていて、**クライアント（`factory-phaser.html`）とサーバ（`server/game-data.mjs`）が同じものを import する**。値がズレようがない。
 
@@ -221,7 +221,7 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
                                         │  5秒ポーリング
                                         ▼
         factory-phaser.html（器）→ game/app.mjs → game/ui/*   画面
-                                    game/main.js（Phaser のシーン）
+                                    game/scene/*.mjs（Phaser のシーン）
 ```
 
 - 💰 / 在庫 / 図鑑 / 製造の判定は**すべてサーバが唯一の真実**。クライアントの申告は信じない。
@@ -238,7 +238,9 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 | `game/app.mjs` | エントリ。起動の順番と、`main.js`・テストへ渡す窓口 |
 | `game/state.mjs` / `game/net.mjs` / `game/craft.mjs` | 共有状態 / サーバとの出入口 / 製造の状態とボード |
 | `game/ui/*.mjs` | 画面ごと（`dialog` `parts` `collection` `recipes` `craft-dialog` `shop` `leaderboard` `mypage` `agents` `palette` `morph`） |
-| `game/main.js` | Phaser のシーン（クラシックスクリプト）。UI へは `window.__*` 経由 |
+| `game/scene/main.mjs` | Phaser のシーン本体。UI へは `window.__*` 経由 |
+| `game/scene/iso.mjs` / `catalog.mjs` / `mascot.mjs` | 等角の座標系 / 見た目のカタログ / マスコットのドット絵 |
+| `game/scene/machine-art.mjs` / `lighting.mjs` / `edit.mjs` | 製造機の見た目 / 採光と内装 / レイアウト編集（Scene のミックスイン） |
 | `assets/room-*.png` | Stitch 生成のテーマ別背景（`docs/stitch-prompts.md` にプロンプト） |
 | `assets/props/prop_*.png` | 装飾プロップ（汎用12種 + テーマ別6種×5テーマ）。**表示サイズに合わせて縮小済み** |
 | `assets/prop-src/prop_*.png` | 上記の原寸版（切り出したまま・200〜400px）。サイズを変えるときの元データ |
@@ -260,7 +262,7 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 `pixelArt:true`（NEAREST）なので、原寸のまま1コマ（約42px）に縮めると描き込みが間引かれて潰れる。
 そのため **① 描き込みの多い物は使う床のコマ数を増やす ② 素材をその表示サイズまで縮小しておく** の2段で対応している。
 
-- コマ数は `game/main.js` の `PROP_SPAN`（1 / 2 / 4）が唯一の定義。表示高 = `1.35 * CELL * √コマ数`
+- コマ数は `game/scene/catalog.mjs` の `PROP_SPAN`（1 / 2 / 4）が唯一の定義。表示高 = `1.35 * CELL * √コマ数`
 - 例: 回転レーン・ネタケース・人間大砲・真鍮ボイラー等は 4コマ（2×2相当）、給茶台などは 2コマ
 - `PROP_SPAN` を変えたら `python3 tools/assets/fit_props.py` を実行して素材を焼き直す
 
@@ -276,7 +278,7 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 - **レシピは素材の"集合"で判定**（順不同・重複は1つとして数える）。既知の組合せに無ければ **「謎の塊」**。
 - 素材が揃っている機械は一定間隔で完成品をポンと出し、`window.__onProduce(product, mats)` が発火する。
 
-素材マスタ・レシピ・製品の**定義の正は [game/data/craft.mjs](game/data/craft.mjs)**（上の「ジャンルと組み合わせの定義」）。`game/main.js` は描画専用で、素材idを `window.__craft.mat()` に問い合わせて解決する（`matArt()`。個別色 → ジャンル既定色 → 既定色 の順にフォールバックするので、素材を増やしてもここは触らない）。
+素材マスタ・レシピ・製品の**定義の正は [game/data/craft.mjs](game/data/craft.mjs)**（上の「ジャンルと組み合わせの定義」）。`game/scene/*` は描画専用で、素材idを `window.__craft.mat()` に問い合わせて解決する（`matArt()`。個別色 → ジャンル既定色 → 既定色 の順にフォールバックするので、素材を増やしてもここは触らない）。
 
 旧セーブのコンベア／出荷口は読み込み時に破棄し、旧4種の製造機（抽出機など）と旧1マス機は最小の2マス機に読み替える。
 

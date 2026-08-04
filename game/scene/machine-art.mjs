@@ -1,0 +1,243 @@
+/* 製造機の見た目 — 占有マスの形・スプライトの切り出し・手続き描画。
+   Scene のメソッドとして書かれているので this の意味を変えないようミックスインで渡す。 */
+import { MACH_DRAW, MACH_GEO, PART_PAL, PART_SKIN_BY_THEME, RUG_DEPTH, isFlatProp, machSize, matArt, propSpan, recipeFor } from './catalog.mjs';
+import { CELL, GU, GV, cellXY, uvXY } from './iso.mjs';
+
+
+
+export const MachineArt = {
+  cellsOf(e){ if(e.kind!=='machine') return [e.cell];
+    const n=machSize(e.variant), du=(e.dir==='v')?0:1, dv=(e.dir==='v')?1:0, out=[];
+    for(let i=0;i<n;i++) out.push({c:e.cell.c+du*i, r:e.cell.r+dv*i});
+    return out; },
+  /* 製造機の占有マス群の外周(uv)。描画とヒット判定で共用 */
+  _machFootprint(e){ const n=machSize(e.variant), IN=MACH_GEO.inset;
+    const c0=e.cell.c, r0=e.cell.r, du=(e.dir==='v')?0:1, dv=(e.dir==='v')?1:0;
+    const u0=(c0+IN)/GU, u1=(c0+du*(n-1)+1-IN)/GU, v0=(r0+IN)/GV, v1=(r0+dv*(n-1)+1-IN)/GV;
+    return [uvXY(u0,v0), uvXY(u1,v0), uvXY(u1,v1), uvXY(u0,v1)];   // A(最奥) B C(最手前) D
+  }
+  /* 占有マスを1マスずつの外周(uv)に切る。inset は両端だけ効かせ、マス同士の継ぎ目は詰める
+     (union が _machFootprint と一致する = 隙間も重なりも出ない) */,
+  _machCellQuads(e){ const n=machSize(e.variant), IN=MACH_GEO.inset;
+    const c0=e.cell.c, r0=e.cell.r, du=(e.dir==='v')?0:1, dv=(e.dir==='v')?1:0, out=[];
+    for(let i=0;i<n;i++){
+      const h0=(i===0)?IN:0, h1=(i===n-1)?IN:0;
+      const u0=(c0+du*i+(du?h0:IN))/GU, u1=(c0+du*i+1-(du?h1:IN))/GU;
+      const v0=(r0+dv*i+(dv?h0:IN))/GV, v1=(r0+dv*i+1-(dv?h1:IN))/GV;
+      out.push([uvXY(u0,v0), uvXY(u1,v0), uvXY(u1,v1), uvXY(u0,v1)]);   // A(最奥) B C(最手前) D
+    }
+    return out; },
+  /* マス i の外周のうち隣と接していない辺だけを描く(継ぎ目に線を出さない)。辺は A-B, B-C, C-D, D-A の順 */
+  _strokeOuter(g,q,i,n,dir){
+    const ext=(dir==='v') ? [i===0, true, i===n-1, true] : [true, i===n-1, true, i===0];
+    for(let k=0;k<4;k++){ if(!ext[k]) continue; const p=q[k], r=q[(k+1)%4];
+      g.beginPath(); g.moveTo(p.x,p.y); g.lineTo(r.x,r.y); g.strokePath(); } },
+  _makeObjs(e){ const {c,r}=e.cell; const p=cellXY(c,r); const u=(c+0.5)/GU, v=(r+0.5)/GV;
+    const tint=this.tintByLight(u,v); const objs=[]; let main=null; e._lit=null;
+    if(e.kind==='machine'){
+      this._makeMachine(e, objs); main=e.main;
+      for(const q of this.cellsOf(e)) this.machineCells.push({c:q.c,r:q.r});
+    } else if(e.kind==='deco'){
+      const img=this.add.image(p.x,p.y,'dec_'+e.variant).setOrigin(0.5,1).setDepth(p.y); img.setScale(1.0*CELL/img.height).setTint(tint);
+      const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
+      objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
+    } else if(e.kind==='prop'){
+      // ラグは床に寝かせる平物: 影なし・マス中心に置く(足元基準だと奥にズレて浮いて見える)・常に最背面
+      const flat=isFlatProp(e.variant);
+      const img=this.add.image(p.x,p.y,'prop_'+e.variant).setOrigin(0.5,flat?0.5:1).setDepth(flat?RUG_DEPTH:p.y);
+      img.setScale(1.35*Math.sqrt(propSpan(e.variant))*CELL/img.height).setTint(tint);
+      if(!flat){
+        const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.09,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.0,img.displayWidth*0.46).setAlpha(0.5);
+        objs.push(sh);
+      }
+      objs.push(img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
+    } else if(e.kind==='emoji'){
+      const sh=this.add.image(p.x+CELL*0.16,p.y+CELL*0.05,'shadow').setDepth(p.y-0.6).setRotation(0.5).setDisplaySize(CELL*0.72,CELL*0.32).setAlpha(0.42);
+      const t=this.add.text(p.x,p.y-CELL*0.12,e.variant,{fontSize:Math.round(CELL*1.05)+'px'}).setOrigin(0.5,1).setDepth(p.y);
+      objs.push(sh,t); main=t;
+    }
+    if(e.kind!=='machine'){ e.objs=objs; e.main=main; }
+    return e;
+  }
+  /* ---- 製造機の描画。スプライト(mach_<theme>_s<N>)があればそれ、無ければ手続きの筐体。
+       どちらの場合も「1マス=スロット1つ」の位置は占有マスから計算するので、素材アイコンは必ずマスに乗る。 ---- */,
+  machTex(e){ const n=machSize(e.variant);
+    for(const th of [this.partsTheme, 'normal']){ const k=`mach_${th}_s${n}`;
+      if(th && this.textures.exists(k)) return {key:k, theme:th, n}; }
+    return null; },
+  /* 絵のスロット中心(幅/高さ比)。v向きは左右反転して描くので x も反転する */
+  machFit(){ if(this._machFit) return this._machFit;
+    try{ this._machFit=JSON.parse(this.cache.text.get('machfit')||'{}'); }catch(_){ this._machFit={}; }
+    return this._machFit; },
+  hatFit(){ if(this._hatFit) return this._hatFit;
+    try{ this._hatFit=JSON.parse(this.cache.text.get('hatfit')||'{}'); }catch(_){ this._hatFit={}; }
+    return this._hatFit; }
+  /* 左右反転した製造機テクスチャ(v向き用)。帯の切り出し(setCrop)は「反転したときの切り出し位置」が
+     WebGL と Canvas で食い違うので、flipX せず反転済みテクスチャを焼いて素直に切る。 */,
+  _machFlipTex(key){ const fk=key+'__fx';
+    if(!this.textures.exists(fk)){
+      const src=this.textures.get(key).getSourceImage();
+      const cv=document.createElement('canvas'); cv.width=src.width; cv.height=src.height;
+      const cg=cv.getContext('2d'); cg.translate(cv.width,0); cg.scale(-1,1); cg.drawImage(src,0,0);
+      this.textures.addCanvas(fk,cv); }
+    return fk; }
+  /* 絵の下端(接地している縁)の色。土台をこの色で塗ると床との継ぎ目が目立たない。
+     テクスチャ読みは重いのでテーマ+サイズごとに1回だけ測って覚える。 */,
+  _machFootColor(key, sx, ih, fallback){
+    this._footCol = this._footCol || {};
+    if(key in this._footCol) return this._footCol[key];
+    let col=fallback;
+    for(let y=ih-1; y>=Math.max(0,ih-40); y--){
+      if(this.textures.getPixelAlpha(sx,y,key)>200){
+        const c=this.textures.getPixel(sx,y,key);
+        if(c) col=(c.red<<16)|(c.green<<8)|c.blue;
+        break; } }
+    this._footCol[key]=col; return col; }
+  /* 製造機は複数マスを一直線に占有するので、深度を1つしか持たせるとマスごとの前後関係が壊れる
+     (手前のマスに立ったキャラが機械の裏へ回る)。絵を「1マスぶんの縦帯」に切り、帯 i をマス i の深度で描く。 */,
+  _makeMachine(e, objs){
+    const sk=this.partsSkin();
+    const [A,B,C,D]=this._machFootprint(e);
+    const xs=[A.x,B.x,C.x,D.x], ys=[A.y,B.y,C.y,D.y];
+    const bx0=Math.min(...xs), bx1=Math.max(...xs), by0=Math.min(...ys), by1=Math.max(...ys);
+    const u=(e.cell.c+0.5)/GU, v=(e.cell.r+0.5)/GV, tint=this.tintByLight(u,v);
+    const tex=this.machTex(e);
+    const cells=this.cellsOf(e), n=cells.length, quads=this._machCellQuads(e);
+    const dep=cells.map(q=>cellXY(q.c,q.r).y);        // 帯ごとの深度 = そのマス中心の y(キャラと同じ基準)
+    const dBack=dep[0], dFront=dep[n-1];              // u/v どちらの向きでも添字が大きいほど手前
+    const g=this.add.graphics().setDepth(dFront+0.1); objs.push(g); e._gfx=g;   // 掴み手(main)。絵は帯ごとの graphics が持つ
+    const cellG=[];                                   // 手続き描画のときのマスごとの graphics
+    let HG, spotPts=null;   // 天面の高さ(px) / 投入口の実位置(スプライトのときアンカーから算出)
+    e._lit=[];              // 採光tintの対象。帯の数だけある
+    if(tex){
+      // 絵は「1マスの送り = ゲームの1マス × MACH_DRAW」で焼いてある(tools/cut_machines.py)。
+      // ここで setScale して縮めてはいけない。pixelArt:true は NEAREST なので、
+      // 半端な倍率をかけるとドットが不均等に間引かれて線が太い所と消える所ができる。
+      // 縮小は焼き込み側(LANCZOS)に任せ、ここは等倍で描く。
+      // 一方 土台と素材アイコンは絵に合わせて縮める必要があるので、倍率は幾何計算だけに使う。
+      const S=MACH_DRAW;
+      const flip=(e.dir==='v');   // 素材はu方向。v方向は左右反転した絵で角度が合う
+      const key=flip? this._machFlipTex(tex.key) : tex.key;
+      const src=this.textures.get(key).getSourceImage(), iw=src.width, ih=src.height;
+      const dw=iw, dh=ih;         // 絵は等倍(焼き込み済み)
+      const fitA=((this.machFit()[tex.theme])||{})[String(tex.n)];
+      const ax=fitA ? (flip?1-fitA.ax:fitA.ax) : null;
+      const du=(cellXY(1,0).x-cellXY(0,0).x)*S, dv=(cellXY(1,0).y-cellXY(0,0).y)*S;   // 縮めた後の1マス送り
+      // 投入口の列の中点を、占有マスの中心の列の中点に合わせる。
+      // 投入口0番をマス0に固定すると、縮めたぶんが手前側にだけ寄って土台が見えてしまう。
+      let imx=(bx0+bx1)/2;
+      if(fitA){
+        const p0=cellXY(cells[0].c,cells[0].r), pN=cellXY(cells[n-1].c,cells[n-1].r);
+        imx += (p0.x+pN.x)/2 - (((imx-dw/2)+ax*dw) + (flip?-1:1)*du*(n-1)/2);
+      }
+      const L=imx-dw/2;
+      const sx0=fitA ? L+ax*dw : 0;                       // 投入口0番の画面x
+      // 縦位置は「絵の下端」ではなく「絵の接地線」を足元の四角形の手前の辺に合わせる。
+      // 絵の一番下はシュートや脚が垂れていることが多く、そこを床に合わせると
+      // 本体が数px持ち上がって浮いて見える(土台が絵の下から食み出す)。
+      let imy=by1;
+      if(fitA && fitA.gy!=null){
+        const dd=D, cc=C;                                 // 足元の四角形の手前(下)の辺 D→C
+        const fy=(cc.x===dd.x)? cc.y : dd.y+(sx0-dd.x)*(cc.y-dd.y)/(cc.x-dd.x);
+        imy = fy + dh*(1-fitA.gy);                        // 接地線が fy に来るよう下端を決める
+      }
+      if(fitA){ const sy=(imy-dh)+fitA.ay*dh;
+        spotPts=cells.map((q,i)=>({x:sx0+(flip?-1:1)*du*i, y:sy+dv*i}));
+        HG = Math.max(2, imy-sy);      // 天面の高さ = 接地点から投入口までの高さ
+      } else HG = Math.max(2, dh-(by1-by0));
+      // 帯の切れ目は「隣の投入口との中点」。マス中心ではなく絵側の送りで切る(縮めてあるので別物)。
+      // 両端は絵の端まで伸ばす(端の飾りを落とさない)。境界は元絵の整数pxに丸める
+      // (隣り合う帯が同じ値になる = 継ぎ目に隙間も重なりも出ない)。
+      const cx=cells.map(q=>cellXY(q.c,q.r).x), asc=(cx[n-1]>=cx[0]), cut=[];
+      for(let i=1;i<n;i++){
+        const bnd = fitA ? sx0+(flip?-1:1)*du*(i-0.5) : (cx[i-1]+cx[i])/2;
+        cut.push(Phaser.Math.Clamp(Math.round(bnd-L),0,iw));   // 等倍なので画面px=元絵px
+      }
+      const sh=this.add.image((bx0+bx1)/2+3, imy-2, 'shadow').setDepth(dBack-0.6)
+        .setDisplaySize(dw*0.9,(by1-by0)*0.7).setAlpha(0.42); objs.push(sh);   // 影は機械の一番奥より後ろ
+      // 土台も絵と同じだけ縮める。原点は接地点(足元の中央)。
+      const fx=(bx0+bx1)/2, fy=imy;
+      const shrink=(p)=>({x:fx+(p.x-fx)*S, y:fy+(p.y-fy)*S});
+      // 土台をテーマ色で塗ると、絵の下に暗い帯が出て「床との間に隙間がある」ように見える。
+      // 絵の下端の色を拾って塗れば、機械の裾がそのまま床まで続いているように見える。
+      const foot=this._machFootColor(key, Math.round((ax||0.5)*iw), ih, sk.edge);
+      cells.forEach((q,i)=>{
+        // 絵の本体の奥行はゲームの1マスより浅いことがあり、占有マスの手前側に床が残る。
+        // そこに後ろのキャラが覗くので、マスごとの土台で塞いでから帯を重ねる。
+        const qd=quads[i].map(shrink);
+        const bg=this.add.graphics().setDepth(dep[i]-0.3); objs.push(bg);
+        bg.fillStyle(foot,1); bg.fillPoints(qd,true);
+        bg.lineStyle(2,foot,1); this._strokeOuter(bg,qd,i,n,e.dir);
+        const x0 = asc ? (i===0?0:cut[i-1]) : (i===n-1?0:cut[i]);
+        const x1 = asc ? (i===n-1?iw:cut[i]) : (i===0?iw:cut[i-1]);
+        const im=this.add.image(imx, imy, key).setOrigin(0.5,1).setDepth(dep[i]).setTint(tint);
+        im.setCrop(x0, 0, Math.max(0,x1-x0), ih);   // 位置は変えず、自分の帯だけを見せる
+        objs.push(im); e._lit.push(im); this.lit.push({sp:im,u,v});
+      });
+    } else {
+      HG = MACH_GEO.height*CELL;
+      const up=(q)=>({x:q.x, y:q.y-HG});
+      // 手続き描画もマスごとに分ける。継ぎ目に線や内壁が出ないよう、外周の面/辺/角だけ描く
+      cells.forEach((q,i)=>{
+        const [a,b,c,d]=quads[i], vv=(e.dir==='v'), first=(i===0), last=(i===n-1);
+        const cg=this.add.graphics().setDepth(dep[i]); objs.push(cg); cellG.push(cg);
+        cg.fillStyle(0x000000,0.34); cg.fillPoints([a,b,c,d].map(p=>({x:p.x+3,y:p.y+3})),true);   // 接地影
+        cg.fillStyle(sk.side,1);                                                                  // 手前2面(側面)
+        if(vv||last) cg.fillPoints([b,c,up(c),up(b)],true);
+        if(!vv||last) cg.fillPoints([d,c,up(c),up(d)],true);
+        cg.fillStyle(sk.top,1); cg.fillPoints([a,b,c,d].map(up),true);                            // 天面
+        cg.lineStyle(2,sk.rim,0.95); this._strokeOuter(cg,[a,b,c,d].map(up),i,n,e.dir);           // 天面の縁
+        cg.lineStyle(2,sk.edge,0.9);
+        for(const p of [ (vv?first:last)&&b, last&&c, (vv?last:first)&&d ])
+          if(p) cg.lineBetween(p.x,p.y,p.x,p.y-HG);                                               // 縦のエッジ
+      });
+    }
+    const up=(q)=>({x:q.x, y:q.y-HG});
+    e._hgt=HG;   // 筐体の高さ(px)。ドラッグの当たり判定(_machHit)で使う
+
+    // スロット(1マス1つ)。素材が入っていれば素材色で光らせ、絵文字を天面に載せる
+    e.slots = Array.isArray(e.slots) ? e.slots.slice(0, machSize(e.variant)) : [];
+    while(e.slots.length < machSize(e.variant)) e.slots.push(null);
+    e._slotObjs=[];
+    const SL=MACH_GEO.slot;
+    cells.forEach((q,idx)=>{
+      const mat=e.slots[idx], m=matArt(mat);
+      const ctr = (spotPts && spotPts[idx]) || up(cellXY(q.c,q.r));   // 絵の投入口 > マス中心の真上
+      if(tex){ // スプライトは意匠が自由なので穴は描かない。素材が入っているマスだけ光らせる
+        if(m){ const gl=this.add.graphics().setDepth(dep[idx]+0.1); objs.push(gl);
+               gl.fillStyle(m.c,0.5); gl.fillEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24);
+               gl.lineStyle(1.5,sk.glow,0.85); gl.strokeEllipse(ctr.x,ctr.y,CELL*0.46,CELL*0.24); } }
+      else {   // 手続き描画のときだけ、置き場が分かるよう穴を描く(そのマスの graphics に載せる)
+        const cg=cellG[idx];
+        const s0=uvXY((q.c+0.5-SL/2)/GU,(q.r+0.5-SL/2)/GV), s1=uvXY((q.c+0.5+SL/2)/GU,(q.r+0.5-SL/2)/GV);
+        const s2=uvXY((q.c+0.5+SL/2)/GU,(q.r+0.5+SL/2)/GV), s3=uvXY((q.c+0.5-SL/2)/GU,(q.r+0.5+SL/2)/GV);
+        const poly=[s0,s1,s2,s3].map(up);
+        cg.fillStyle(m?m.c:0x0d1116, m?0.85:0.6); cg.fillPoints(poly,true);
+        cg.lineStyle(1.5, m?sk.glow:sk.edge, m?0.9:0.7); cg.strokePoints(poly,true);
+      }
+      if(m){ const t=this.add.text(ctr.x,ctr.y-CELL*0.08,m.e,{fontSize:Math.round(CELL*0.5)+'px'}).setOrigin(0.5,0.5).setDepth(dep[idx]+0.2);
+             objs.push(t); e._slotObjs.push(t); }
+    });
+
+    // 完成品の表示(筐体の上)。素材未設定なら出さない
+    const prod=recipeFor(e.slots, e.id); e.product=prod;
+    const mid={x:(bx0+bx1)/2, y:by0-HG};
+    if(prod){
+      const badge=this.add.text(mid.x, mid.y-CELL*0.30, prod.e, {fontSize:Math.round(CELL*0.8)+'px'}).setOrigin(0.5,1).setDepth(C.y+2);
+      const nm=this.add.text(mid.x, mid.y-CELL*0.28, prod.n, {fontFamily:'monospace',fontSize:'10px',color:prod.unknown?'#d9b48a':'#eafff6'}).setOrigin(0.5,0).setDepth(C.y+2);
+      nm.setShadow(0,1,'#000',3,true,true);
+      objs.push(badge,nm); e._badge=badge;
+    } else {
+      const hint=this.add.text(mid.x, mid.y-CELL*0.1, '素材未設定', {fontFamily:'monospace',fontSize:'10px',color:'#93a39d'}).setOrigin(0.5,1).setDepth(C.y+2);
+      hint.setShadow(0,1,'#000',3,true,true); objs.push(hint);
+    }
+    if(e.lvl>1){ const lv=this.add.text(bx0+6, by1-HG, `Lv${e.lvl}`, {fontFamily:'monospace',fontSize:'9px',color:'#9fb0c0'}).setOrigin(0,1).setDepth(C.y+2);
+      lv.setShadow(0,1,'#000',3,true,true); objs.push(lv); }
+    e.objs=objs; e.main=g;
+  },
+  partsSkin(){ const t=this.partsTheme||null;
+    return Object.assign({theme:t}, PART_PAL[PART_SKIN_BY_THEME[t]||'default']); },
+  /* パーツのテーマを切り替える(背景テーマに追従 / 単体でも呼べる) */
+  setPartsTheme(theme){ if(this.partsTheme===theme) return; this.partsTheme=theme||null;
+    for(const e of this.placed.slice()) if(e.kind==='machine') this._remake(e); }
+};

@@ -1,4 +1,4 @@
-// game/main.js の配置/製造機ロジックを Phaser スタブ上で検証する(描画はしない)。実行: node test/test_machines.mjs
+// game/scene/* の配置/製造機ロジックを Phaser スタブ上で検証する(描画はしない)。実行: node test/test_machines.mjs
 import fs from 'node:fs';
 import vm from 'node:vm';
 
@@ -81,10 +81,12 @@ const sandbox = { Phaser, document, location, window, console, Math, Date, Set, 
   setTimeout, Proxy };
 sandbox.window = window; sandbox.globalThis = sandbox;
 
-vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString(), sandbox);
-
-const Main = Phaser.__scene;
+/* シーンは ESM になったので vm ではなく普通に import する。
+   モジュール本体が評価時に Phaser / document / window を参照するので、
+   import より先に globalThis へスタブを置いておく。 */
+Object.assign(globalThis, sandbox);
+const { Main } = await import('../game/scene/main.mjs');
+const { cellXY } = await import('../game/scene/iso.mjs');
 const s = new Main();
 // Scene の Phaser 提供メンバをスタブ
 s.load = new Proxy({}, { get:()=>()=>{} });
@@ -225,7 +227,7 @@ console.log('\n[12] 製造機の移動（掴んで置き直す）');
   window.__toast=(t)=>toasts.push(String(t));
   window.__layoutChanged=()=>{ layoutN++; };
   window.__openMachine=(id)=>{ opened=id; };
-  const pt=(c,r)=>sandbox.cellXY(c,r);                                     // マス中心の画面座標
+  const pt=(c,r)=>cellXY(c,r);                                     // マス中心の画面座標
   // クリック=押して離す。編集中の製造機はドラッグと区別するため「離した時点」で設定パネルが開く
   const click=(c,r)=>{ const p=pt(c,r);
     for(const fn of (s.input._h['pointerdown']||[])) fn(p,[]);
@@ -295,7 +297,7 @@ console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と�
   window.__toast=(t)=>toasts.push(String(t));
   window.__layoutChanged=()=>{ layoutN++; };
   window.__openMachine=(id)=>{ opened=id; };
-  const pt=(c,r)=>sandbox.cellXY(c,r);                                     // マス中心の画面座標
+  const pt=(c,r)=>cellXY(c,r);                                     // マス中心の画面座標
   const hs=(ev)=>(s.input._h[ev]||[]);
   // Phaser の pointer は「押した位置」を downX/downY に持つ(dragstart は最初に動かした時点で飛ぶ)
   let dn={x:0,y:0};
@@ -421,11 +423,12 @@ console.log('\n[14] main.js と UI モジュールの境界');
 { /* 以前は main.js と HTML の inline script が両方クラシックスクリプトで、同名の
      const/let/class/function があると SyntaxError で HTML 側が丸ごと実行されず
      UIが全部死んだ（それを機械的に検出していた）。
-     いまは UI 側が ESM（game/app.mjs ほか）なのでスコープが分離され、
-     この事故は構造的に起きない。代わりに次の2つを守る。
+     いまはシーンも UI もすべて ESM なのでスコープが分離され、この事故は
+     構造的に起きない。代わりに次の2つを守る。
        ・HTML は器だけを持ち、動きは module から始まる
-       ・main.js（クラシックのまま）から UI へ触るのは window.__* と morphInto だけ */
-  const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
+       ・シーン(game/scene/*)から UI へ触るのは window.__* と morphInto だけ */
+  const src=['main','machine-art','lighting','edit']
+    .map(n=>fs.readFileSync(new URL(`../game/scene/${n}.mjs`, import.meta.url)).toString()).join('\n');
   const html=fs.readFileSync(new URL('../factory-phaser.html', import.meta.url)).toString();
   // UI 側の実体。app.mjs から芋づるで読まれるものも含めて game/**.mjs を全部見る
   const uiDir=new URL('../game/', import.meta.url);
@@ -468,11 +471,13 @@ console.log('\n[15] 製造機スプライトの1マス送り（tools/assets/cut_
     return { w:b.readUInt32BE(16), h:b.readUInt32BE(20) }; };            // IHDR
   const dir=new URL('../assets/machines/', import.meta.url);
   const fit=JSON.parse(fs.readFileSync(new URL('mach-fit.json', dir)).toString());
-  const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
-  const [,W,H,GU] = src.match(/const W = (\d+), H = (\d+), GU = (\d+), GV = \d+/).map(Number);
-  const iso = Object.fromEntries([...src.matchAll(/(ux|uy):\s*(-?[\d.]+)/g)].map(m=>[m[1],+m[2]]));
+  // 座標系は iso.mjs、製造機の焼き込み倍率は catalog.mjs が持つ
+  const isoSrc=fs.readFileSync(new URL('../game/scene/iso.mjs', import.meta.url)).toString();
+  const catSrc=fs.readFileSync(new URL('../game/scene/catalog.mjs', import.meta.url)).toString();
+  const [,W,H,GU] = isoSrc.match(/const W = (\d+), H = (\d+), GU = (\d+), GV = \d+/).map(Number);
+  const iso = Object.fromEntries([...isoSrc.matchAll(/(ux|uy):\s*(-?[\d.]+)/g)].map(m=>[m[1],+m[2]]));
   // 絵は MACH_DRAW ぶん小さく焼いてある（描画時に縮めると NEAREST でドットが壊れる）
-  const draw = +src.match(/const MACH_DRAW = ([\d.]+)/)[1];
+  const draw = +catSrc.match(/const MACH_DRAW = ([\d.]+)/)[1];
   const stepX = Math.abs(iso.ux*W/GU)*draw;
   const themes=Object.keys(fit);
   ok(themes.length>0, `mach-fit.json にテーマがある (${themes.length}件)`);
@@ -498,7 +503,7 @@ console.log('\n[15] 製造機スプライトの1マス送り（tools/assets/cut_
 console.log('\n[16] 製造機は「マスごとの深度」で描く（帯分割）');
 { // 深度が1つしか無いと、手前のマスに立ったキャラが機械の裏へ回ってしまう(既存バグ)。
   // 絵を1マスぶんの縦帯に切り、帯 i を「マス i の中心y」で描いていることを確かめる。
-  const cxy=sandbox.cellXY;
+  const cxy=cellXY;
   const depthsOf=(e)=>e.objs.map(o=>o.__store.depth).filter(d=>typeof d==='number');
   const bandsOf=(e)=>e.objs.filter(o=>o.__store.crop);
   const near=(a,b)=>Math.abs(a-b)<1e-6;
