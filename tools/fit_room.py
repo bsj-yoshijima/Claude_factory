@@ -2,8 +2,14 @@
 """部屋の背景画像を拡縮＋平行移動して、床をゲームのグリッドに合わせる。
 
     測るだけ: python3 tools/fit_room.py <theme>
-    書き込む: python3 tools/fit_room.py <theme> --apply
+    表を書く: python3 tools/fit_room.py --json     … 全テーマぶん assets/room-fit.json へ
+    画像を焼く: python3 tools/fit_room.py <theme> --apply   (非推奨。下記参照)
     別画像から: python3 tools/fit_room.py <theme> --from <path> --apply
+
+画像を焼き直さないこと(--json を使う理由):
+  背景は setDisplaySize(1024,572) で描かれる。元画像は 1376x768 なので、表示の時点で
+  すでに 0.744 倍にリサンプルされている。PNG を焼き直すとリサンプルが2回になって甘くなる。
+  倍率と位置を game 側に渡せばリサンプルは1回のままで、画質は現状と完全に同じになる。
 
 なぜ画像を動かすのか:
   背景は生成物で、床の菱形が game/main.js のグリッドと数十pxずれる。生成し直しても
@@ -73,9 +79,43 @@ def edge_gap(arr, mask, R, F):
     return float(np.median(dys)), (float(np.median(skirts)) if skirts else 0.0)
 
 
+
+def write_json():
+    """全テーマの補正値を assets/room-fit.json に書く。
+    game/main.js はこれを読んで背景の表示サイズと位置を補正する(画像は焼き直さない)。"""
+    import glob, json
+    W, H, A, R, F, D = grid()
+    target_w = R[0] - D[0]
+    out = {}
+    for path in sorted(glob.glob(os.path.join(ROOT, 'assets', 'room-*.png'))):
+        theme = os.path.basename(path)[5:-4]
+        arr = np.asarray(Image.open(path).convert('RGB').resize((W, H))).astype(int)
+        p = probe(arr)
+        if not p:
+            print(f'{theme:13s} 測定不可'); continue
+        xl, xr, mask = p
+        gap, skirt = edge_gap(arr, mask, R, F)
+        if gap is None:
+            print(f'{theme:13s} 右下辺を測れない'); continue
+        s = target_w / (xr - xl)
+        # 縮めたあとに左端と右下辺が合うよう、キャンバス座標での平行移動を出す
+        dx = D[0] - xl * s
+        dy = -((gap - skirt) * s)
+        # 縮めるとキャンバスの端に隙間が出るので、部屋の余白色を控えて裏打ちに使う
+        v = np.asarray(Image.open(path).convert('RGB'))[3, 3]
+        out[theme] = {'scale': round(s, 5), 'dx': round(dx, 2), 'dy': round(dy, 2),
+                      'void': '#%02x%02x%02x' % tuple(int(c) for c in v)}
+        print(f'{theme:13s} 倍率 {s:.4f}  ずらし ({dx:+7.1f}, {dy:+6.1f})')
+    with open(os.path.join(ROOT, 'assets', 'room-fit.json'), 'w', encoding='utf-8') as fp:
+        json.dump(out, fp, ensure_ascii=False, indent=1)
+    print(f'\nwrote assets/room-fit.json  ({len(out)} テーマ)')
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__); return
+    if sys.argv[1] == '--json':
+        write_json(); return
     theme = sys.argv[1]
     apply_ = '--apply' in sys.argv
     srcp = sys.argv[sys.argv.index('--from') + 1] if '--from' in sys.argv else None

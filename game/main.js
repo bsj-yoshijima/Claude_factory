@@ -232,6 +232,10 @@ const DEMO = [
 class Main extends Phaser.Scene {
   preload(){
     this.load.image('bg_room','assets/factory-room.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
+    // 背景の床をグリッドに合わせる補正表(tools/fit_room.py --json)。
+    // 画像を焼き直すとリサンプルが2回になって甘くなるので、表示時の倍率と位置で直す。
+    // load.json は中身が壊れているとローダーごと死ぬので text で読んで自前で parse する。
+    this.load.text('roomfit','assets/room-fit.json');
     this.load.image('room_arabia','assets/room-arabia.png');   // Stitch製 テーマ部屋(壁/床/窓 焼き込み)
     this.load.image('room_undersea','assets/room-undersea.png');
     this.load.image('room_japan','assets/room-japan.png');
@@ -254,6 +258,8 @@ class Main extends Phaser.Scene {
 
   }
   create(){
+    // 背景をグリッドに合わせて縮めるとキャンバスの端に隙間が出る。部屋の余白色で裏打ちする
+    this.bgVoid=this.add.rectangle(0,0,W,H,0x0c1014).setOrigin(0,0).setDepth(-1001);
     this.bgImg=this.add.image(0,0,'bg_room').setOrigin(0,0).setDisplaySize(W,H).setDepth(-1000);
     this._hourQ = new URLSearchParams(location.search).get('hour');
     this.lit=[];      // 位置ライティングで色付けする設置物 {sp,x,y}
@@ -956,10 +962,19 @@ class Main extends Phaser.Scene {
     if(this.sun){ this.sun.setAlpha(dayF); this.sunG.setAlpha(dayF*0.5); }
     if(this.moon){ this.moon.setAlpha(nf); this.moonG.setAlpha(nf*0.5); for(const s of this.stars) s.setAlpha(nf); }
   }
+  /* 背景の床をグリッドに合わせる補正値。{scale,dx,dy} をキャンバス座標で持つ */
+  roomFit(){ if(!this._roomFit){
+      try{ this._roomFit=JSON.parse(this.cache.text.get('roomfit')||'{}'); }catch(_){ this._roomFit={}; } }
+    return this._roomFit; }
   /* テーマ部屋(画像ごと差し替え)。焼き込み済みなので動的な空/採光/床オーバーレイは切る */
   setRoom(key){ const tex=ROOM_TEX[key]; this.themedRoom=!!tex;
     this.setPartsTheme(tex?key:null);   // 部屋テーマに製造機のスキンを追従させる
-    if(this.bgImg){ this.bgImg.setTexture(tex||'bg_room').setDisplaySize(W,H); }
+    if(this.bgImg){
+      const f=(this.roomFit()[key])||{scale:1,dx:0,dy:0};
+      this.bgImg.setTexture(tex||'bg_room')
+        .setDisplaySize(W*f.scale, H*f.scale).setPosition(f.dx||0, f.dy||0);
+      if(this.bgVoid) this.bgVoid.setFillStyle(f.void ? parseInt(f.void.slice(1),16) : 0x0c1014);
+    }
     const vis=!this.themedRoom;
     if(this.skyLayer) this.skyLayer.setVisible(vis);
     if(this.sun){ this.sun.setVisible(vis); this.sunG.setVisible(vis); }
