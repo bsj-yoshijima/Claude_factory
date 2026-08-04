@@ -56,7 +56,7 @@ const MACH_DRAW = 1.0;
 const MACH_SIZES = [2,3,4,5];
 const KINDS = ['machine','deco','prop','emoji','prize'];   // 設置できる種類（belt/outlet は廃止）
 const MACH_MIN = 2;
-const MACH_ART = ['normal','arabia','diner','halloween','scifi','egypt','western','onsen','japan','pirate','steampunk','dwarf','china','sushi','haunted','tokyo','beehive','carnival','circus','desert','space','ice','mushroom','undersea','fantasy','christmas','jungle','circuit','retrofuture','cabin','dino'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
+const MACH_ART = ['normal','arabia','diner','halloween','scifi','egypt','western','onsen','japan','pirate','steampunk','dwarf','china','sushi','haunted','tokyo','beehive','carnival','circus','desert','space','ice','mushroom','undersea','fantasy','christmas','jungle','circuit','retrofuture','cabin','dino','hell'];   // スプライトを用意したテーマ(assets/mach-<theme>-s<N>.png)
 const machSize = (variant)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(variant||'').replace(/\D/g,''))||MACH_MIN));
 
 /* ===== 素材の見た目 =====
