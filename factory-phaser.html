@@ -6,9 +6,11 @@
 <title>Claude Factory</title>
 <link rel="icon" type="image/png" sizes="96x96" href="assets/favicon.png">
 <link rel="apple-touch-icon" href="assets/favicon-192.png">
+<!-- 色のトークンはログイン画面(server/index.mjs)と共有する。二重に持つと片方だけ変わる -->
+<link rel="stylesheet" href="game/theme.css">
 <style>
-  :root{ --ink:#e6fff4; --gold:#ffd27a; --mint:#9fdcc6; --panel:rgba(16,24,26,.82); --edge:#2c4740;
-         --palw:336px; --slide:.42s cubic-bezier(.22,.75,.24,1); }
+  /* この画面だけの寸法。色は game/theme.css 側 */
+  :root{ --palw:336px; --slide:.42s cubic-bezier(.22,.75,.24,1); }
   html,body{height:100%;margin:0;background:radial-gradient(120% 120% at 50% 30%,#1b232b 0%,#0c1014 70%);
     font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);overflow:hidden}
   #wrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
@@ -69,7 +71,6 @@
   #hud b.idle{color:#9fdcc6}
   #note{position:absolute;top:10px;left:12px;font-size:10px;color:#9fdcc6;background:var(--panel);padding:4px 9px;border-radius:6px;z-index:6}
   /* エージェントの顔アイコン(体色＋被り物)。エージェント一覧ダイアログで使う */
-  .lgH{font-size:9px;letter-spacing:.14em;color:#9fdcc6;text-transform:uppercase;margin-bottom:1px}
   .lgAv{position:relative;width:22px;height:22px;border-radius:6px;flex:none;border:1px solid #0006;overflow:hidden;display:inline-block}
   .lgAv .eye{position:absolute;top:8px;width:3px;height:3px;background:#241713;border-radius:1px}
   .lgAv .eye.l{left:5px} .lgAv .eye.r{right:5px}
@@ -97,15 +98,11 @@
   .dbtn.ghost{background:#3a4a45;color:#cfeee0}
   .dbtn:disabled{background:#33403c;color:#7f8f89;cursor:not-allowed}
   .rowline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0;font-size:12px}
-  .btn{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:8px;padding:9px 16px;cursor:pointer;font-family:inherit;font-size:13px}
+  /* 正方形タイルのグリッド。いまはエージェントのスキン選択だけが使う */
   .grid{display:grid;grid-template-columns:repeat(auto-fill,66px);gap:8px;margin-top:6px}
   .cell{width:66px;height:80px;border-radius:8px;border:2px solid #333;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:28px;position:relative;cursor:pointer}
   .cell small{font-size:8px;margin-top:1px} .cell .qty{position:absolute;bottom:2px;right:5px;font-size:9px;color:#fff}
   .cell.own:hover{box-shadow:0 0 0 2px var(--gold) inset}
-  .cardwrap{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;min-height:100px;align-items:center;margin:6px 0}
-  .card{width:72px;height:94px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:32px;border:2px solid #fff;animation:pop .45s ease both}
-  .card small{font-size:9px;font-weight:700;margin-top:2px}
-  @keyframes pop{0%{transform:scale(.2) rotate(-8deg);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1)}}
   /* トーストは盤面の上に一瞬出るだけ。ドラッグ中に出てもポインタを奪わない */
   #toast{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--ink);padding:8px 16px;border-radius:8px;z-index:7;display:none;font-size:12px;pointer-events:none}
   /* craft */
@@ -119,18 +116,10 @@
   .rc .ic{font-size:26px;width:34px;text-align:center}
   .rc .mid{flex:1;min-width:0}
   .rc .nm{font-size:13px;color:#eafff4;font-weight:700}
-  .rc .cost{font-size:11px;color:#9fb0c0;margin-top:2px}
-  .rc .cost .lack{color:#e0674e}
   .rc button{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:7px;padding:8px 13px;cursor:pointer;font-family:inherit;font-size:12px}
   .rc button:disabled{background:#33403c;color:#7f8f89;cursor:not-allowed}
-  .locked{opacity:.5}
-  /* tech map */
-  .map{display:flex;flex-direction:column;gap:2px}
-  .tier{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:7px 0}
-  .tlab{font-size:10px;color:#9fb0c0;width:74px;flex:none}
-  .node{display:inline-flex;flex-direction:column;align-items:center;background:#131b20;border:1px solid var(--edge);border-radius:8px;padding:6px 9px;min-width:60px}
-  .node.mach{border-color:#c98b52} .node.mat{border-color:#4a6b7a} .node .e{font-size:22px} .node small{font-size:9px;color:#cfeee0;margin-top:1px}
-  .arrow{color:#5f7a72;font-size:16px}
+  /* 説明の小さい灰色テキスト。.rc の行内だけでなくダイアログ直下でも使う */
+  .cost{font-size:11px;color:#9fb0c0;margin-top:2px}
   /* 編集パレット。盤面に重ねると工場が隠れるので、左からスライドインする縦のサイドバーにした。
      盤面とは領域が重ならないので、以前必要だった pointer-events:none の逃がしは不要。 */
   #palette{position:fixed;left:0;top:0;bottom:0;width:var(--palw);box-sizing:border-box;z-index:8;display:flex;flex-direction:column;gap:7px;
@@ -210,8 +199,6 @@
   .pgroup{display:flex;flex-direction:column;gap:3px}
   .pgroup .ghead{font-size:10px;color:var(--mint);letter-spacing:.04em}
   .pgroup .grow{display:flex;flex-wrap:wrap;gap:4px}
-  .wpline .kv{display:flex;justify-content:space-between;color:#9fb0c0;font-size:11px}
-  .wpline .kv b{color:#eafff4;font-variant-numeric:tabular-nums}
   .wpline .bar{height:9px;background:#0d1315;border:1px solid var(--edge);border-radius:5px;overflow:hidden;margin-top:5px}
   .wpline .bar>i{display:block;height:100%;background:linear-gradient(90deg,#78d0a6,var(--gold));width:0}
   /* メニューのドロップダウンと重ならないよう右の中央に置く */

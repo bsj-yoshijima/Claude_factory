@@ -88,8 +88,9 @@ function serveStatic(res, urlPath) {
 
 /* ============================== ログイン画面 ============================== */
 const page = (title, inner) => `<!doctype html><html lang="ja"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>
-:root{--gold:#ffd27a;--mint:#9fdcc6;--ink:#e6fff4;--edge:#2c4740}
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
+<!-- 色のトークンはゲーム画面と共有する（静的配信は認証前に通るのでログイン前でも読める） -->
+<link rel="stylesheet" href="/game/theme.css"><style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;
  background:radial-gradient(120% 120% at 50% 30%,#1b232b 0%,#0c1014 70%);color:var(--ink);
