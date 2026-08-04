@@ -1,4 +1,4 @@
-// game/main.js の配置/製造機ロジックを Phaser スタブ上で検証する(描画はしない)。実行: node tools/test_machines.mjs
+// game/main.js の配置/製造機ロジックを Phaser スタブ上で検証する(描画はしない)。実行: node test/test_machines.mjs
 import fs from 'node:fs';
 import vm from 'node:vm';
 
@@ -28,7 +28,7 @@ const obj = () => { const o = chain(); return o; };
 const pngWH=(p)=>{ const b=fs.readFileSync(p); return { width:b.readUInt32BE(16), height:b.readUInt32BE(20) }; };   // IHDR
 const MACH_PNG={};
 for(const th of ['normal','arabia','diner','halloween','scifi']) for(const n of [2,3,4,5]){
-  try{ MACH_PNG[`mach_${th}_s${n}`]=pngWH(new URL(`../assets/mach-${th}-s${n}.png`, import.meta.url)); }catch(_){}
+  try{ MACH_PNG[`mach_${th}_s${n}`]=pngWH(new URL(`../assets/machines/mach-${th}-s${n}.png`, import.meta.url)); }catch(_){}
 }
 let machTexOn=true;            // false にすると手続き描画のフォールバックを通せる
 const canvasTex={};            // addCanvas で焼いたテクスチャ(v向きの反転絵など)
@@ -96,7 +96,7 @@ s.input = { _h:{}, on(ev,fn){ (this._h[ev]=this._h[ev]||[]).push(fn); }, setDrag
 s.time = { addEvent(){} };
 s.tweens = { add(){} };
 // 投入口アンカーは実物を読ませる(帯の切り出しと素材アイコンの位置がこれに依る)
-const machFitSrc=fs.readFileSync(new URL('../assets/mach-fit.json', import.meta.url)).toString();
+const machFitSrc=fs.readFileSync(new URL('../assets/machines/mach-fit.json', import.meta.url)).toString();
 s.cache = { json:{ get:()=>({}) }, text:{ get:(k)=> k==='machfit'? machFitSrc : '{}' } };
 s.poll = async()=>{};
 s.createNightFx = function(){ this.windows=[]; this.uLen=0.55; this.sh=0.04;
@@ -417,28 +417,44 @@ console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と�
   s.toggleEdit(false); window.__toast=null; window.__layoutChanged=null; window.__openMachine=null;
 }
 
-console.log('\n[14] グローバル名の衝突（main.js と factory-phaser.html）');
-{ // クラシックスクリプト同士なので同名の const/let/class/function は SyntaxError になり
-  // HTML のスクリプトが丸ごと実行されなくなる（= UIが全部死ぬ）。機械的に検出する。
+console.log('\n[14] main.js と UI モジュールの境界');
+{ /* 以前は main.js と HTML の inline script が両方クラシックスクリプトで、同名の
+     const/let/class/function があると SyntaxError で HTML 側が丸ごと実行されず
+     UIが全部死んだ（それを機械的に検出していた）。
+     いまは UI 側が ESM（game/app.mjs ほか）なのでスコープが分離され、
+     この事故は構造的に起きない。代わりに次の2つを守る。
+       ・HTML は器だけを持ち、動きは module から始まる
+       ・main.js（クラシックのまま）から UI へ触るのは window.__* と morphInto だけ */
   const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
   const html=fs.readFileSync(new URL('../factory-phaser.html', import.meta.url)).toString();
-  const inline=html.match(/<script>([\s\S]*?)<\/script>/)[1];
-  const tops=(code)=>{ const out=new Set(); let depth=0;
-    for(const line of code.split('\n')){ const st=line.trim();
-      if(depth===0){ let m;
-        if((m=st.match(/^(?:const|let|var|class)\s+([A-Za-z_$][\w$]*)/))) out.add(m[1]);
-        if((m=st.match(/^function\s+([A-Za-z_$][\w$]*)/))) out.add(m[1]);
-        const d=st.match(/^(?:const|let|var)\s+(.*)$/);
-        if(d) for(const mm of d[1].matchAll(/(?:^|,)\s*([A-Za-z_$][\w$]*)\s*=/g)) out.add(mm[1]);
-      }
-      depth += (line.split('{').length-1)-(line.split('}').length-1);
-    } return out; };
-  const a=tops(src), b=tops(inline);
-  const dup=[...a].filter(x=>b.has(x));
-  ok(dup.length===0, `グローバル名の衝突なし${dup.length?' → '+dup.join(','):''}`);
+  // UI 側の実体。app.mjs から芋づるで読まれるものも含めて game/**.mjs を全部見る
+  const uiDir=new URL('../game/', import.meta.url);
+  const uiFiles=[];
+  (function walk(d){ for(const e of fs.readdirSync(d,{withFileTypes:true})){
+    const u=new URL(e.name+(e.isDirectory()?'/':''), d);
+    if(e.isDirectory()) walk(u); else if(e.name.endsWith('.mjs')) uiFiles.push(fs.readFileSync(u).toString()); } })(uiDir);
+  const ui=uiFiles.join('\n');
+
+  ok(/<script type="module"[^>]*src="game\/app\.mjs"/.test(html) && !/<script>\s*\n\s*'use strict'/.test(html),
+     'HTML は器だけで、動きは module（game/app.mjs）から始まる');
+  ok(uiFiles.length>0, `UI モジュールを ${uiFiles.length} 本読んだ`);
+
+  // main.js から UI へ触るのは window.__* と window.morphInto だけ、という約束
+  const body=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+  const viaWindow=[...body.matchAll(/window\.(__[A-Za-z]\w*|morphInto)/g)].map(m=>m[1]);
+  ok(viaWindow.length>0, `main.js → UI は window 経由（${new Set(viaWindow).size} 種）`);
+
+  // UI 側が公開している window の一覧に、main.js が使う名前が全部あるか
+  const exposed=new Set([...ui.matchAll(/window\.(__[A-Za-z]\w*|morphInto)\s*=/g)].map(m=>m[1]));
+  for(const m of ui.matchAll(/Object\.assign\(window,\s*\{([\s\S]*?)\}\)/g))
+    for(const n of m[1].split(/[,\s]+/)) if(/^(__[A-Za-z]\w*|morphInto)$/.test(n)) exposed.add(n);
+  // main.js 自身が定義して公開しているものは除く（__scene / __factory / __game など）
+  const ownedByMain=new Set([...body.matchAll(/window\.(__[A-Za-z]\w*)\s*=/g)].map(m=>m[1]));
+  const missing=[...new Set(viaWindow)].filter(n=>!exposed.has(n)&&!ownedByMain.has(n));
+  ok(missing.length===0, `main.js が使う window の名前は全部 UI 側が公開している${missing.length?' → 未公開: '+missing.join(','):''}`);
 }
 
-console.log('\n[15] 製造機スプライトの1マス送り（tools/cut_machines.py の成果物）');
+console.log('\n[15] 製造機スプライトの1マス送り（tools/assets/cut_machines.py の成果物）');
 { // シートに描かれた台は そのまま切り取って使う（絵が無いサイズだけ2マス機から合成する）。
   // ゲームが必要とするのは「投入口 i がマス i の真上に来る」ことだけで、それは
   //   その絵の投入口の間隔 == ゲームの1マスの送り
@@ -450,7 +466,7 @@ console.log('\n[15] 製造機スプライトの1マス送り（tools/cut_machine
   // 縦は絵の下端を接地させるので、絵の外形が揃っていなくても位置は破綻しない。
   const pngSize=(p)=>{ const b=fs.readFileSync(p);
     return { w:b.readUInt32BE(16), h:b.readUInt32BE(20) }; };            // IHDR
-  const dir=new URL('../assets/', import.meta.url);
+  const dir=new URL('../assets/machines/', import.meta.url);
   const fit=JSON.parse(fs.readFileSync(new URL('mach-fit.json', dir)).toString());
   const src=fs.readFileSync(new URL('../game/main.js', import.meta.url)).toString();
   const [,W,H,GU] = src.match(/const W = (\d+), H = (\d+), GU = (\d+), GV = \d+/).map(Number);
@@ -538,12 +554,12 @@ console.log('\n[16] 製造機は「マスごとの深度」で描く（帯分割
    絵は生成AI由来で、向きは何度も間違えられている所なので機械的に見張る。 */
 console.log('\n=== 製造機スプライトの長軸 ===');
 {
-  const { report } = await import('./mach_axis.mjs');
+  const { report } = await import('../tools/assets/mach_axis.mjs');
   const rows = report();
   ok(rows.length > 0, `テーマの絵が見つかる (${rows.length}テーマ)`);
   const bad = rows.filter(r => r.axis === 'v');
   ok(bad.length === 0, bad.length
-    ? `全テーマが +u(右斜め下) を向いている → 逆向き: ${bad.map(b => `${b.theme}(slope=${b.slope})`).join(', ')}。node tools/mach_axis.mjs --fix で揃える`
+    ? `全テーマが +u(右斜め下) を向いている → 逆向き: ${bad.map(b => `${b.theme}(slope=${b.slope})`).join(', ')}。node tools/assets/mach_axis.mjs --fix で揃える`
     : `全${rows.length}テーマが +u(右斜め下) を向いている`);
   const undecided = rows.filter(r => r.axis === '?');
   ok(undecided.length === 0, undecided.length

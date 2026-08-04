@@ -1,0 +1,57 @@
+/* 共通のUI部品 — 同じ見た目のものは同じ関数から出す。 */
+import { RAR } from '../data/econ.mjs';
+import { MAT } from '../data/craft.mjs';
+import { PROD_PRICE } from '../data/rules.mjs';
+import { G } from '../state.mjs';
+
+export function updateBadge(){ const m=document.getElementById('shopMoney');
+  if(m) m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
+
+/* =========================================================================
+   共通のUI部品 — 同じ見た目のものは同じ関数から出す
+
+   以前は 図鑑 / 📊今日の製造 / 🎁完成品 / 🏪ショップ が、それぞれ同じ入れ子の
+   HTML を手で書いていた。レア度の枠色や NEW バッジの付け方が場所ごとに
+   微妙に違い、片方だけ直る事故が起きやすかった。
+   ========================================================================= */
+/* 製品カード（図鑑・今日の製造・完成品で共通）。
+     p     : 製品（PROD の要素）
+     n     : 個数。null なら個数行を出さない
+     rows  : カード下部に足す行（レシピ絵文字など）の配列
+     isNew : NEW バッジ
+     miss  : 未発見（❓ で伏せる）
+     key   : morphInto 用の data-key（並びが変わる一覧で使う） */
+export function prodCard(p,{n=null,rows=[],isNew=false,miss=false,key=null}={}){
+  const col=RAR[p.r].c, k=key?` data-key="${key}"`:'';
+  if(miss) return `<div class="pcard miss"${k}><div class="e">❓</div><div class="nm">？？？</div>
+      <div class="rr" style="color:${col}">${RAR[p.r].n}</div></div>`;
+  return `<div class="pcard"${k} style="border-color:${col}">${isNew?'<span class="new">NEW</span>':''}
+      <div class="e">${p.e}</div><div class="nm">${p.n}</div>
+      <div class="rr" style="color:${col}">${RAR[p.r].n}</div>
+      ${n!=null?`<div class="qn">${n}</div>`:''}${rows.join('')}</div>`;
+}
+/* 原材料の組み合わせを絵文字で1行。title には日本語名を出す */
+export function matRow(key,suffix=''){
+  const ids=String(key||'').split(',').filter(Boolean);
+  if(!ids.length) return '';
+  return `<div class="qn" title="${ids.map(x=>MAT[x]?MAT[x].n:x).join(' + ')}">${
+    ids.map(x=>MAT[x]?MAT[x].e:'').join('')}${suffix}</div>`;
+}
+/* レア度ごとの内訳チップ（完成品の売上内訳） */
+export const rarChips=(byRar)=>Object.keys(byRar).sort().map(r=>
+  `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
+/* 1行アイテム（ショップの各タブ・エージェント一覧で共通）。
+     icon / name / sub は文字列（HTML可）、action は右端のボタン */
+export function itemRow({icon='',name='',sub='',action='',key=null,style=''}){
+  const k=key?` data-key="${key}"`:'';
+  return `<div class="rc"${k}${style?` style="${style}"`:''}><div class="ic">${icon}</div>
+      <div class="mid"><div class="nm">${name}</div>${sub?`<div class="cost">${sub}</div>`:''}</div>${action}</div>`;
+}
+/* 横並びのタブ列。openDialog のタブ機構に載せられない「本文内の切り替え」用。
+   属性名(attr)だけ変えて、リーダーボードの軸ボタンとマイページの粒度切替が同じ見た目になる。
+   pill:true は角丸の独立ボタン（見出しに連なるタブではないとき）。
+   以前はここだけ style="border-radius:8px" をインラインで上書きしていた。 */
+export const tabStrip=(items,cur,attr,{pill=false}={})=>
+  `<div class="${pill?'rowline':'sttabs'}">${items.map(t=>
+    `<span class="sttab${t.id===cur?' on':''}${pill?' pill':''}" ${attr}="${t.id}">${t.label}</span>`).join('')}</div>`;
+

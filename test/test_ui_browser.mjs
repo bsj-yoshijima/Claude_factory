@@ -1,5 +1,5 @@
 // 実ブラウザ(headless Chrome + CDP)でUIを操作して確認する。依存ゼロ。
-//   使い方: npm run dev を起動しておいて → node tools/test_ui_browser.mjs
+//   使い方: npm run dev を起動しておいて → node test/test_ui_browser.mjs
 // main.js と factory-phaser.html はどちらもクラシックスクリプトなので、
 // グローバル名が衝突すると HTML 側が丸ごと実行されずボタンが全部死ぬ。
 // その手の「構文は通るが実行時に壊れる」不具合はこのテストでしか捕まらない。
@@ -152,7 +152,7 @@ ok(await ev(`/\\d+ \\/ \\d+ WP/.test(document.querySelector('.mrow .wpline').tex
 ok((await ev(`document.querySelectorAll('.mrow .wpline b').length`))===nrow, '行ごとにWP表示がある');
 ok(await ev(`/\\d+ \\/ \\d+ WP/.test(document.querySelector('.mrow .wpline b').textContent)`), 'WPは「現在 / 必要」形式');
 // 必要WP = マス数 × WP_PER_SLOT
-ok(await ev(`(function(){const m=machinesSorted()[0]; return needWp(m)===m.size*WP_PER_SLOT;})()`), '必要WPがマス数に比例する');
+ok(await ev(`(function(){const m=machinesSorted()[0]; return needWpForSize(m.size)===m.size*WP_PER_SLOT;})()`), '必要WPがマス数に比例する');
 await ev(`${gobtn}.click()`); await sleep(300);
 ok(await ev(`machState(${JSON.stringify(mid)}).running===false`), '■停止で止まる');
 await sleep(1200);
