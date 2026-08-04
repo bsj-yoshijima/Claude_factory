@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """部屋の背景画像を拡縮＋平行移動して、床をゲームのグリッドに合わせる。
 
-    測るだけ: python3 tools/fit_room.py <theme>
-    表を書く: python3 tools/fit_room.py --json     … 全テーマぶん assets/room-fit.json へ
-    画像を焼く: python3 tools/fit_room.py <theme> --apply   (非推奨。下記参照)
-    別画像から: python3 tools/fit_room.py <theme> --from <path> --apply
+    測るだけ: python3 tools/assets/fit_room.py <theme>
+    表を書く: python3 tools/assets/fit_room.py --json     … 全テーマぶん assets/room-fit.json へ
+    画像を焼く: python3 tools/assets/fit_room.py <theme> --apply   (非推奨。下記参照)
+    別画像から: python3 tools/assets/fit_room.py <theme> --from <path> --apply
 
 画像を焼き直さないこと(--json を使う理由):
   背景は setDisplaySize(1024,572) で描かれる。元画像は 1376x768 なので、表示の時点で
@@ -33,7 +33,7 @@ import os, re, sys
 import numpy as np
 from PIL import Image
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SKIRT_PROBE = 40      # 下端から上へ何px ぶん明るさを見るか
 SKIRT_JUMP = 135      # 明るさの合計がこれ以上跳ねたらスカート→床上面の境目
 

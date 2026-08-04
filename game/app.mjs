@@ -220,7 +220,7 @@ loadGame().then(async (ok)=>{
 /* module にしたのでトップレベルの名前はもうグローバルではない。
    外から触る必要がある分だけ、ここで明示的に公開する。
      ・game/main.js（クラシックスクリプト）が使うもの … window.__* と morphInto
-     ・tools/test_ui_browser.mjs が page 上で評価するもの … 下の一覧
+     ・test/test_ui_browser.mjs が page 上で評価するもの … 下の一覧
    ここに無い名前は「この画面の内部」なので、外から参照してはいけない。 */
 Object.assign(window, {
   // マスタ（テストがジャンル数・製品数を突き合わせる）

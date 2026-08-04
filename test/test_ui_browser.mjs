@@ -1,5 +1,5 @@
 // 実ブラウザ(headless Chrome + CDP)でUIを操作して確認する。依存ゼロ。
-//   使い方: npm run dev を起動しておいて → node tools/test_ui_browser.mjs
+//   使い方: npm run dev を起動しておいて → node test/test_ui_browser.mjs
 // main.js と factory-phaser.html はどちらもクラシックスクリプトなので、
 // グローバル名が衝突すると HTML 側が丸ごと実行されずボタンが全部死ぬ。
 // その手の「構文は通るが実行時に壊れる」不具合はこのテストでしか捕まらない。

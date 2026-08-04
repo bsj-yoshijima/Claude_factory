@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stitch生成のアセットシート(JPEG)を1体ずつ切り出して透過PNGにする。
 
-    使い方: python3 tools/cut_props.py assets/prop-sheets assets/prop-src [シート名...]
+    使い方: python3 tools/assets/cut_props.py assets/prop-sheets assets/prop-src [シート名...]
             (シート名を渡すとそれだけ処理する)
     (素のPythonで全ピクセルを走査するので 1体あたり1分前後かかる)
 

@@ -1,15 +1,15 @@
 /* 製造機スプライトの「長軸の向き」を検査する。依存ゼロ（Node標準のzlibだけでPNGを読む）。
  *
- *   検査: node tools/mach_axis.mjs
- *   修正: node tools/mach_axis.mjs --fix            （向きが逆のテーマを左右反転する）
- *         node tools/mach_axis.mjs --fix normal     （テーマを指定して反転する）
+ *   検査: node tools/assets/mach_axis.mjs
+ *   修正: node tools/assets/mach_axis.mjs --fix            （向きが逆のテーマを左右反転する）
+ *         node tools/assets/mach_axis.mjs --fix normal     （テーマを指定して反転する）
  *
  * なぜ必要か:
  *   ゲームは「素材は +u（右斜め下 ↘）に伸びる1種類だけ」を前提にしていて、もう一方の対角は
  *   game/main.js が実行時に左右反転して使う（_machFlipTex）。この前提が破れている絵は、
  *   影・占有マス・素材アイコンが正しい向きに並ぶのに**本体の絵だけが直交した向きに見える**。
- *   tools/cut_machines.py は合成時に向きを揃えるが、それ以前に作られた絵は素通しなので、
- *   ここで検査してテスト(tools/test_machines.mjs)から守る。
+ *   tools/assets/cut_machines.py は合成時に向きを揃えるが、それ以前に作られた絵は素通しなので、
+ *   ここで検査してテスト(test/test_machines.mjs)から守る。
  *
  * 判定のしかた:
  *   列ごとに「不透明な最初のピクセルのy」を取り、左端1/6と右端1/6の平均を比べる。
@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import path from 'node:path';
 
-const ASSETS = path.join(import.meta.dirname, '..', 'assets');
+const ASSETS = path.join(import.meta.dirname, '..', '..', 'assets');
 /** 判定に使うサイズ。マス数が多いほど長軸がはっきり出る */
 const PROBE_SIZE = 5;
 /** これ以下の傾きは「判定できない」として扱う（±1マスの送りは約14px） */

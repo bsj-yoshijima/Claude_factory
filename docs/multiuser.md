@@ -96,7 +96,7 @@ OTLP のペイロードに入る `user.email` はクライアントの自己申�
 
 `agent_sessions` と `machines` の主キーは `(user_id, id)`。
 `id` 単独にすると、他人と同じ session_id / レイアウトID を送るだけで相手の行を
-書き換えられる（実装中に実際に踏んだ。`tools/test_server.mjs` に回帰テストがある）。
+書き換えられる（実装中に実際に踏んだ。`test/test_server.mjs` に回帰テストがある）。
 
 ### 5. ポーリングを削る
 

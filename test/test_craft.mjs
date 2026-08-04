@@ -1,5 +1,5 @@
 // ジャンル / 原材料 / 製品 / レシピ（game/data/craft.mjs）を検証する。
-// 実行: node tools/test_craft.mjs
+// 実行: node test/test_craft.mjs
 // 素の ESM を import するだけなので、Phaser もブラウザも要らない。
 import * as CRAFT from '../game/data/craft.mjs';
 import { RAR } from '../game/data/econ.mjs';

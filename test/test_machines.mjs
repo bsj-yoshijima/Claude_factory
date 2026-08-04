@@ -1,4 +1,4 @@
-// game/main.js の配置/製造機ロジックを Phaser スタブ上で検証する(描画はしない)。実行: node tools/test_machines.mjs
+// game/main.js の配置/製造機ロジックを Phaser スタブ上で検証する(描画はしない)。実行: node test/test_machines.mjs
 import fs from 'node:fs';
 import vm from 'node:vm';
 
@@ -454,7 +454,7 @@ console.log('\n[14] main.js と UI モジュールの境界');
   ok(missing.length===0, `main.js が使う window の名前は全部 UI 側が公開している${missing.length?' → 未公開: '+missing.join(','):''}`);
 }
 
-console.log('\n[15] 製造機スプライトの1マス送り（tools/cut_machines.py の成果物）');
+console.log('\n[15] 製造機スプライトの1マス送り（tools/assets/cut_machines.py の成果物）');
 { // シートに描かれた台は そのまま切り取って使う（絵が無いサイズだけ2マス機から合成する）。
   // ゲームが必要とするのは「投入口 i がマス i の真上に来る」ことだけで、それは
   //   その絵の投入口の間隔 == ゲームの1マスの送り
@@ -554,12 +554,12 @@ console.log('\n[16] 製造機は「マスごとの深度」で描く（帯分割
    絵は生成AI由来で、向きは何度も間違えられている所なので機械的に見張る。 */
 console.log('\n=== 製造機スプライトの長軸 ===');
 {
-  const { report } = await import('./mach_axis.mjs');
+  const { report } = await import('../tools/assets/mach_axis.mjs');
   const rows = report();
   ok(rows.length > 0, `テーマの絵が見つかる (${rows.length}テーマ)`);
   const bad = rows.filter(r => r.axis === 'v');
   ok(bad.length === 0, bad.length
-    ? `全テーマが +u(右斜め下) を向いている → 逆向き: ${bad.map(b => `${b.theme}(slope=${b.slope})`).join(', ')}。node tools/mach_axis.mjs --fix で揃える`
+    ? `全テーマが +u(右斜め下) を向いている → 逆向き: ${bad.map(b => `${b.theme}(slope=${b.slope})`).join(', ')}。node tools/assets/mach_axis.mjs --fix で揃える`
     : `全${rows.length}テーマが +u(右斜め下) を向いている`);
   const undecided = rows.filter(r => r.axis === '?');
   ok(undecided.length === 0, undecided.length

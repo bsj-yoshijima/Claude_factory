@@ -1,5 +1,5 @@
 /* ファビコンを生成する。依存ゼロ（Node標準のzlibだけでPNGを書く）。
-     使い方: node tools/make_favicon.mjs
+     使い方: node tools/assets/make_favicon.mjs
      出力  : assets/favicon.png (96px) / assets/favicon-192.png (Appleのホーム画面用)
 
    絵の中身は「工場 + 左下にClaude君」。
@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const S = 96;                                   // 元のドット絵の一辺
-const OUT = path.join(import.meta.dirname, '..', 'assets');
+const OUT = path.join(import.meta.dirname, '..', '..', 'assets');
 
 /* --- 配色 --- */
 const INK = '#3b4643', EYE = '#241713';         // game/main.js と同じ
