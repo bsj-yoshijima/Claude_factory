@@ -162,10 +162,14 @@
          width:fit-content;max-width:min(340px,100%)}
   #craft:hover{border-color:var(--mint)}
   #craft .pe{font-size:25px;line-height:1;flex:none}
+  /* 幅いっぱいに広がったとき（狭い画面）に文字を左、▸ を右端に寄せるため、
+     余った幅はこの中央ブロックが吸う。min-width:0 が無いと .nm の ellipsis が効かない。 */
+  #craft .mid{flex:1 1 auto;min-width:0}
   #craft .nm{font-size:13px;font-weight:700;color:#eafff4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
   #craft .note{font-size:10px;color:#9fb0c0;margin-top:2px}
   #craft .note.warn{color:#ff9f7a}
-  #craft .go{font-size:10px;color:#9fdcc6;flex:none}
+  /* ▸ は常にボタンの最右。width:fit-content の広い画面では余白が無いので見た目は変わらない */
+  #craft .go{font-size:10px;color:#9fdcc6;flex:none;margin-left:auto}
   /* ===== 🏭製造ダイアログ: 原材料のマスとWPの進捗 ===== */
   .mslots{display:flex;gap:7px;flex-wrap:wrap}
   .mslot{position:relative;width:76px;height:66px;border:2px dashed #33443f;border-radius:9px;background:#0e1417;
