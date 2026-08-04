@@ -1,4 +1,4 @@
-/* 🏆 リーダーボード — 期間 × 軸。単一の合計点は作らない（WP.md §9）。 */
+/* 🏆 リーダーボード — 期間 × 軸。単一の合計点は作らない（docs/wp.md §9）。 */
 import { NET } from '../net.mjs';
 import { openDialog } from './dialog.mjs';
 import { tabStrip } from './parts.mjs';

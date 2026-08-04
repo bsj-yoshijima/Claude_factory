@@ -1,7 +1,8 @@
 # WP（Work Point）と業務スコアカードの計測仕様
 
-実装は [server/wp.mjs](server/wp.mjs)（`export const WP` / `export const SCORE`）と
-[server/ingest-otel.mjs](server/ingest-otel.mjs)、表示は 🏠マイページ・🏆リーダーボード。
+ゲーム用WPの重みは [server/wp.mjs](../server/wp.mjs) の `export const WP`、
+取り込みは [server/ingest-otel.mjs](../server/ingest-otel.mjs)、表示は 🏠マイページ・🏆リーダーボード。
+業務スコアカードは別系統で、[9. 業務スコアカード](#9-業務スコアカード) を参照。
 
 ---
 
@@ -42,7 +43,7 @@ Agent    0.9%  ← 評価したいもの
 ## 1. データソース
 
 一次ソースは Claude Code の OpenTelemetry 出力のみ（`~/.claude/settings.json` の設定は
-[README](README.md#-メトリクスotel-プロトタイプ) 参照）。使うのは **イベント1種 + メトリクス3種**。
+[README](../README.md#-テレメトリotel) 参照）。使うのは **イベント1種 + メトリクス3種**。
 
 | # | データ | 種類 | 用途 |
 |---|---|---|---|
@@ -326,7 +327,17 @@ Glob 465 / Write 453 / Skill 62
 
 ## 9. 業務スコアカード
 
-設定は `server/wp.mjs` の `export const SCORE`。API は `/api/leaderboard` の `scorecard`。
+実装は3箇所に分かれている。API は `/api/leaderboard` の `scorecard`。
+
+| どこ | 何を持つか |
+|---|---|
+| `server/ingest-otel.mjs` | OTLP から拾った生カウントを日次で `scorecard_daily` に積む |
+| `db/schema.sql` の `scorecard_daily` | 列がそのまま軸（`lines_added` / `commits` / `prs` / `output_tokens` / `skill` / `agent` / `custom_agent` / `sub_tool_uses` / `tools_ok` / `active_time_sec` ほか） |
+| `server/api.mjs` の `EFF` | 効率スコアの係数だけ。`{ removed:0.3, prLines:150, scale:1000, minPrs:1, minLines:100 }` |
+
+ゲーム用WPと違い、**重みの表（`wp_weights`）は通さない**。生カウントをそのまま返し、
+効率だけ `EFF` で合成する（`(追加行 + 削除行×0.3 + PR×150) ÷ output_tokens × 1000`）。
+`minPrs` / `minLines` は最低成果のフィルタで、満たさない人は `null`（ランク外）になる。
 
 ### 目的（社内での使われ方）
 
@@ -407,7 +418,7 @@ Glob 465 / Write 453 / Skill 62
 
 ## 10. 実測で判明した OTel 仕様の差異
 
-WPロジックに直接影響したもの。詳細は [README](README.md#実測でわかったドキュメントとの差異)。
+WPロジックに直接影響したもの。詳細は [README](../README.md#実測でわかったドキュメントとの差異)。
 
 | 項目 | 実際 |
 |---|---|

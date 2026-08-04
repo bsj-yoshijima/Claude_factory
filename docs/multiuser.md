@@ -54,6 +54,8 @@ npm install && docker compose up -d && npm run dev
 | `server/craft.mjs` | 製造エンジン（サーバ権威） |
 | `server/api.mjs` | ゲーム API。💰・図鑑（`collection`）・在庫を書き換えるのはここだけ |
 | `server/auth.mjs` | Google SSO / dev ログイン / 取り込みトークン |
+| `server/db.mjs` | 接続プールと起動時のマイグレーション（`schema.sql` を流す） |
+| `server/names.mjs` | 表示名と工場の既定名。ここだけが「◯◯の工場」を組み立てる |
 | `db/schema.sql` | スキーマ。全部冪等なので起動のたびに流している |
 
 ## 設計上の要点
@@ -67,7 +69,7 @@ npm install && docker compose up -d && npm run dev
 `wp_metric_minute` に畳んで持つ。重みは `wp_weights` テーブルにあり、`wp_minute` ビューが
 掛け算と1分上限を適用する。
 
-- **重みを UPDATE するだけで全期間が再集計される**（WP.md §6 の性質をそのまま維持）
+- **重みを UPDATE するだけで全期間が再集計される**（wp.md §6 の性質をそのまま維持）
 - サイズは **数KB/日/人**。3桁減る
 - 旧実装の「ツールイベント20万件でサイレント打ち切り」が構造的に消える
 

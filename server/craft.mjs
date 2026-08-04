@@ -11,7 +11,7 @@ import { jstDay } from './time.mjs';
 import { rollProduct, keyOfSlots, needWp, PROD, PROD_PRICE, UNKNOWN_PRODUCT }
   from './game-data.mjs';
 
-// 病的なケースの保険。到達したら黙って捨てず必ず記録する（WP.md §4 と同じ方針）
+// 病的なケースの保険。到達したら黙って捨てず必ず記録する（docs/wp.md §4 と同じ方針）
 const MAX_PER_MACHINE = 2000;
 
 /**
