@@ -68,7 +68,7 @@ const SKINS = [
 
 ## 完了条件
 
-- `node -c game/main.js` OK ＋ html内スクリプトの `new Function(...)` パースOK。
+- `node --check game/scene/*.mjs` OK ＋ `npm test` が通ること。
 - 頭上絵文字が出ない。スキン未適用時は従来マスコット。スキン適用時はテクスチャがあれば差し替わる
   （無ければマスコットのまま＝アセット待ち）。
 - スキン画面でエージェント選択→スキン適用→再ロードで維持。
