@@ -825,9 +825,8 @@ window.__toast=toast;   // scene(main.js)から通知を出す用
 function updateBadge(){ const m=document.getElementById('shopMoney');
   if(m) m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
 
-let _collectionTab='prod';   // 'prod'=製造した製品(ゲームのゴール) / 'prize'=ガチャ景品
-let _collectionGenre='food';     // 製品タブ配下のジャンル切り替え（GENRES + ✨シークレット）
-// 図鑑のジャンルタブ。GENRES に足せば自動で増える
+let _collectionGenre='food';     // 図鑑のジャンル切り替え（GENRES + ✨シークレット）
+// 図鑑のタブ＝製品のジャンル。GENRES に足せば自動で増える
 const collectionGenres = ()=>[...GENRES, {id:SECRET_G,e:'✨',n:'シークレット'}];
 /* 図鑑の並びは レア度の低い順 → 同レア度なら必要マス数の少ない順。
    PRODS の定義順（ジャンル→マス数→単独/ガチャ枠）をそのまま出すと、マス数グループの
@@ -835,25 +834,22 @@ const collectionGenres = ()=>[...GENRES, {id:SECRET_G,e:'✨',n:'シークレッ
    定義順は m を読みやすく並べるためのもので表示順ではないので、ここで並べ直す。 */
 const prodsOfGenre = (g)=>PRODS.filter(p=>p.g===g)
   .sort((a,b)=> a.r-b.r || new Set(a.m||[]).size-new Set(b.m||[]).size);
+// タブはジャンルそのもの。件数は「発見済み/全部」
 function collectionTabs(){
   const c=craftState();
-  const pOwned=PRODS.filter(p=>c.collection[p.id]).length;
-  const zOwned=PRIZES.filter(p=>G.inv[p.id]).length;
-  return [{id:'prod',label:`🏭 製品 ${pOwned}/${PRODS.length}`},{id:'prize',label:`🎁 景品 ${zOwned}/${PRIZES.length}`}];
+  return collectionGenres().map(g=>{ const list=prodsOfGenre(g.id);
+    const own=list.filter(p=>c.collection[p.id]).length;
+    return {id:g.id,label:`${g.e} ${g.n} ${own}/${list.length}`}; });
+}
+// 全ジャンル通しての達成度は見出しの脇に出す（タブがジャンル別の件数で埋まっているぶん）
+function collectionSubtitle(){
+  const c=craftState();
+  return `${PRODS.filter(p=>c.collection[p.id]).length}/${PRODS.length}`;
 }
 function collectionBody(){
   const c=craftState();
-  let body;
-  if(_collectionTab==='prod'){
-    const gs=collectionGenres();
-    if(!gs.some(g=>g.id===_collectionGenre)) _collectionGenre=gs[0].id;
-    // 製品タブ配下のジャンル切り替え。件数は「発見済み/全部」
-    const gtabs=`<div class="sttabs">${gs.map(g=>{ const list=prodsOfGenre(g.id);
-      const own=list.filter(p=>c.collection[p.id]).length;
-      return `<span class="sttab ${g.id===_collectionGenre?'on':''}" data-collection-genre="${g.id}">${g.e} ${g.n} ${own}/${list.length}</span>`;
-      }).join('')}</div>`;
-    // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
-    body=gtabs+`<div class="pgrid">${prodsOfGenre(_collectionGenre).map(p=>{ const n=c.collection[p.id]||0;
+  // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
+  return `<div class="pgrid">${prodsOfGenre(_collectionGenre).map(p=>{ const n=c.collection[p.id]||0;
       // 発見済みにはレシピ（= m）をそのまま出す。製品ごとに組み合わせは1つだけなので断定して見せられる
       const recipe=p.m.length?p.m.map(x=>MAT[x]?MAT[x].e:'').join(''):'';
       const rtitle=p.m.map(x=>MAT[x]?MAT[x].n:x).join(' + ');
@@ -869,26 +865,15 @@ function collectionBody(){
            発見済みカードの下に出る絵文字が<b style="color:#eafff4">その製品を作れる唯一の組み合わせ</b>。
            同じ組み合わせから複数の製品が出ることはあるので、上位レア度は何度も試して狙う。
            1製品 = マス数 × ${WP_PER_SLOT}WP。レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。`}</div>`;
-  } else {
-    body=`<div class="grid">${PRIZES.map(p=>{ const have=G.inv[p.id]||0,col=RAR[p.r].c;
-      return have? `<div class="cell own" data-id="${p.id}" style="border-color:${col}" title="クリックで部屋に飾る">${p.e}<small style="color:${col}">${RAR[p.r].n}</small><span class="qty">×${have}</span></div>`
-                 : `<div class="cell" style="opacity:.45">❓<small style="color:#9fb0c0">${RAR[p.r].n}</small></div>`; }).join('')}</div>
-      <div class="rowline" style="font-size:11px;color:#9fb0c0">所持アイテムをクリックで部屋に飾る</div>`;
-  }
-  return body;
 }
-function openCollection(tab,genre){
-  if(tab)_collectionTab=tab;
-  if(genre)_collectionGenre=genre;
-  return openDialog({ title:'📖 図鑑', tabs:collectionTabs, tab:_collectionTab,
-    onTab:(id,d)=>{ _collectionTab=id; d.refresh(); },
-    body:collectionBody,
-    onRender:(p,d)=>{
-      p.querySelectorAll('[data-collection-genre]').forEach(el=>el.onclick=()=>{ _collectionGenre=el.dataset.collectionGenre; d.refresh(); });
-      p.querySelectorAll('.cell.own').forEach(el=>el.onclick=()=>{
-        const z=PRIZES.find(x=>x.id===el.dataset.id);
-        if(window.__scene&&window.__scene.placePrize){ window.__scene.placePrize(z.e, RAR[z.r].c); snapLayout(); saveGame(); toast(`${z.e} ${z.n} を部屋に飾った！`); closeOverlay(); }
-      }); } });
+function openCollection(genre){
+  const gs=collectionGenres();
+  if(genre&&gs.some(g=>g.id===genre)) _collectionGenre=genre;
+  if(!gs.some(g=>g.id===_collectionGenre)) _collectionGenre=gs[0].id;   // GENRES から消えたジャンルを覚えていたとき
+  return openDialog({ title:'📖 図鑑', subtitle:collectionSubtitle,
+    tabs:collectionTabs, tab:_collectionGenre,
+    onTab:(id,d)=>{ _collectionGenre=id; d.refresh(); },
+    body:collectionBody });
 }
 // 引数なしで開く（そのまま渡すと click イベントが tab として入ってしまう）
 document.getElementById('collectionBtn').addEventListener('click',()=>openCollection());
@@ -1438,7 +1423,7 @@ function openToday(){
           レア度の高い順。数字は今日つくった個数、その下は使った原材料の組み合わせ。
           今日つくったものの合計価値は 💰${gain.toLocaleString()}（完成した時点で 💰 に入っている）。</div>`;
     },
-    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection('prod')}] });
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
   if(NET.multi){                       // 開いている間だけ記録を取りに行く（閉じたら止める）
     const pull=()=>{ if(_dlg!==dlg){ clearInterval(t); return; } fetchMadeToday(dlg); };
     const t=setInterval(pull, 5000); pull();
@@ -1592,7 +1577,7 @@ async function openDoneServer(){
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
         ${r.registered?`${r.registered}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。</div>
       <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
-    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection('prod')}] });
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
 }
 function openDone(){
   if(NET.multi) return openDoneServer();
@@ -1633,7 +1618,7 @@ function openDone(){
         ${reg?`${reg}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。図鑑を埋めていこう。
         今日つくったものは 📊今日の製造 でいつでも見返せる。</div>
       <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
-    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection('prod')}] });
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
 }
 document.getElementById('doneBtn').addEventListener('click',openDone);
 
