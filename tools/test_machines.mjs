@@ -460,11 +460,11 @@ console.log('\n[15] 製造機スプライトの1マス送り（tools/cut_machine
   const stepX = Math.abs(iso.ux*W/GU)*draw;
   const themes=Object.keys(fit);
   ok(themes.length>0, `mach-fit.json にテーマがある (${themes.length}件)`);
-  let offStep=[], offAnchor=[], missing=[], nDirect=0, nSynth=0;
+  let offStep=[], offAnchor=[], missing=[], nDirect=0, nSynth=0, nModule=0;
   for(const th of themes) for(const n of ['2','3','4','5']){
     const a=fit[th][n];
     if(!a){ missing.push(`${th}/s${n}`); continue; }
-    if(a.src==='direct') nDirect++; else nSynth++;
+    if(a.src==='module') nModule++; else if(a.src==='direct') nDirect++; else nSynth++;
     if(Math.abs(a.step-stepX)>0.05) offStep.push(`${th}/s${n}=${a.step}`);
     const s=pngSize(new URL(`mach-${th}-s${n}.png`, dir));
     // アンカー（投入口0番）は絵の内側にあること。外に出ていたら素材アイコンが宙に浮く
@@ -476,7 +476,7 @@ console.log('\n[15] 製造機スプライトの1マス送り（tools/cut_machine
      `全サイズの1マス送りがゲームと一致 (目標 ${stepX.toFixed(3)}px)${offStep.length?' → ずれ: '+offStep.join(', '):''}`);
   ok(offAnchor.length===0,
      `投入口0番のアンカーが絵の内側にある${offAnchor.length?' → 外: '+offAnchor.join(', '):''}`);
-  console.log(`  （シートそのまま切取 ${nDirect}枚 / 絵が無いサイズを合成 ${nSynth}枚）`);
+  console.log(`  （1マスモジュールを並べて ${nModule}枚 / シートそのまま切取 ${nDirect}枚 / 合成 ${nSynth}枚）`);
 }
 
 console.log('\n[16] 製造機は「マスごとの深度」で描く（帯分割）');

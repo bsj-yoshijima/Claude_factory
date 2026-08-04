@@ -620,18 +620,27 @@ def direct_fit(theme, found, W, H, GU, GV, iso, draw=1.0):
 
 def base_diamond(sp):
     """底面菱形の (幅, 高さ, 下角のy) を測る。
-    左右の角は「最左列/最右列の最下点」、下角は絵全体の最下点。"""
+
+    菱形の縦の広がりは絵全体の高さの3割ほどしかないので、**下から4割の帯**だけを見る。
+    絵全体で最左列/最右列を取ると、隅にある本体と無関係な画素1つで角が大きくずれる
+    (実測: 左端の余計な点で比が 0.56 → 0.89 になった)。輪郭を追う方式は鋲の凸で
+    途中で切れるので使わない。"""
     a = np.asarray(sp.convert('RGBA'))
     h, w = a.shape[0], a.shape[1]
     op = a[:, :, 3] > 128
-    xs = [x for x in range(w) if op[:, x].any()]
-    if not xs:
+    ys = [y for y in range(h) if op[y].any()]
+    if not ys:
         return w, w / 2, h - 1
+    yB = ys[-1]
+    y0 = max(0, int(yB - 0.4 * (yB - ys[0] + 1)))
+    band = op[y0:yB + 1, :]
+    xs = [x for x in range(w) if band[:, x].any()]
+    if len(xs) < 8:
+        return w, w / 2, yB
     xL, xR = xs[0], xs[-1]
-    yL = int(np.nonzero(op[:, xL])[0][-1])
-    yR = int(np.nonzero(op[:, xR])[0][-1])
-    yB = max(y for y in range(h) if op[y].any())
-    return xR - xL + 1, 2 * (yB - (yL + yR) / 2), yB
+    yL = y0 + int(np.nonzero(band[:, xL])[0][-1])
+    yR = y0 + int(np.nonzero(band[:, xR])[0][-1])
+    return xR - xL + 1, float((yB - yL) + (yB - yR)), yB
 
 
 def hopper_center(sp, test):
@@ -675,7 +684,14 @@ def module_fit(theme, sp, W, H, GU, GV, iso, draw=1.0):
     # (旧判定はテーマごとに面一プレートの色などを見ているので、ホッパーには当たらない)
     hc = hopper_center(mod, MODULE_TEST.get(theme, lambda p: p[3] > 128 and max(p[:3]) < 55))
     if hc is None:
-        print('   !! ホッパーの口を検出できないのでスキップ'); return None
+        # 口が暗くないテーマ(真鍮・骨・ヒダなど)は色では拾えない。1マスモジュールでは
+        # 口は必ず天面の中央の真上にあるので、幾何から出す。
+        # 縦位置は検出できたテーマの実測(絵の高さの約11%)に合わせる。
+        a = np.asarray(mod.convert('RGBA')); op = a[:, :, 3] > 128
+        xs = [x for x in range(mod.width) if op[:, x].any()]
+        ys = [y for y in range(mod.height) if op[y].any()]
+        hc = ((xs[0] + xs[-1]) / 2, ys[0] + 0.11 * (ys[-1] - ys[0] + 1))
+        print(f'   ※口を色で拾えないので幾何から算出 ({hc[0]:.1f}, {hc[1]:.1f})')
     print(f'   モジュール {ow}x{oh}  1マス送り ({step_x:.3f}, {step_y:.3f})px  口の中心 ({hc[0]:.1f}, {hc[1]:.1f})')
     out = {}
     for n in SIZES:
