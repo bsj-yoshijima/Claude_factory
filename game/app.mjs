@@ -1,0 +1,1336 @@
+/* Claude Factory — 画面のエントリ。
+   factory-phaser.html は「器」だけを持ち、動きはすべてここから始まる。
+   マスタは data/ の3モジュール、Phaser のシーンは main.js（クラシックスクリプト）。 */
+/* マスタデータは game/data/ の3モジュールが唯一の定義。サーバ(server/game-data.mjs)も
+   同じものを import するので、クライアントとサーバで値がズレようがない。
+   増やすときは game/data/ を触ること（この画面のコードは触らなくてよい）。 */
+import { RAR, MACH, machVariant, lvCost,
+         DECO, PROP, PROP_GROUPS, BG, FLOOR, SERIES } from './data/econ.mjs';
+import { GENRES, GENRE, SECRET_G, genreOf, genresOfMats, MATS, MAT,
+         PRODS, UNKNOWN_PRODUCT, PROD, recipeKeyOf, RECIPES, SECRETS,
+         normPool, pickWeighted, poolFor, rollProduct, keyOfSlots } from './data/craft.mjs';
+import { WP_PER_SLOT, PROD_PRICE, needWpForSize } from './data/rules.mjs';
+
+
+let G={ money:0, machines:[{variant:'s2',lvl:1}], decos:{},
+        bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[],
+        stock:{machine:{},prop:{},deco:{}}, lastT:null };
+/* =========================================================================
+   NET — データ層。工場のデータはすべてサーバ(server/index.mjs)が持つ。
+     ・💰 / 図鑑 / 在庫 / 製造 はサーバが唯一の真実。G はその写し
+     ・製造判定はサーバ側(server/craft.mjs)。クライアントは結果を受け取るだけ
+     ・購入・強化・素材セットは API を叩き、返ってきた factory で G を上書きする
+   G をブラウザに保存することはない（ログインした本人の工場がサーバにある）。
+   ========================================================================= */
+const NET={
+  last:null, collectionLoaded:false,
+  rev:-1,          // いま手元にある工場の版番号。サーバはこれが一致すれば factory を省略する
+  async probe(){
+    try{
+      const r=await fetch('/api/state',{cache:'no-store'});
+      if(r.status===401){ location.href='/login'; return false; }
+      if(!r.ok) return false;
+      NET.last=await r.json(); return true;
+    }catch(_){ return false; }
+  },
+  async call(method,path,body){
+    try{
+      const r=await fetch(path,{method,cache:'no-store',
+        headers:body!==undefined?{'Content-Type':'application/json'}:undefined,
+        body:body!==undefined?JSON.stringify(body):undefined});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok){ toast(j.error||`通信エラー (${r.status})`); return null; }
+      return j;
+    }catch(e){ toast('サーバに繋がりません'); return null; }
+  },
+};
+/* サーバの factory を G に写す。UI 側のコードは G を読むだけなので変更不要 */
+function applyFactory(f){
+  if(!f) return;
+  if(typeof f.rev==='number') NET.rev=f.rev;
+  G.money=f.money; G.bg=f.bg; G.floor=f.floor; G.factoryName=f.name||'';
+  G.bgOwned=f.bgOwned||['auto']; G.floorOwned=f.floorOwned||['wood'];
+  G.seriesOwned=f.seriesOwned||[]; G.stock=f.stock||{machine:{},prop:{},deco:{}};
+  G.emojiDecos=f.emojiDecos||[];
+  G.layout=[
+    ...(f.machines||[]).map(m=>({id:m.id,kind:'machine',variant:m.variant,dir:m.dir,c:m.cx,r:m.cy,lvl:m.lvl,slots:m.slots})),
+    ...(f.props||[]),
+  ];
+  const c=craftState(); c.mach={};
+  for(const m of (f.machines||[])) c.mach[m.id]={running:!!m.running, wp:m.wp};
+}
+/* サーバへ配置を送る（在庫を超える設置はサーバが拒否する） */
+let layoutT=null;
+function pushLayout(){
+  if(layoutT) clearTimeout(layoutT);
+  layoutT=setTimeout(async ()=>{
+    snapLayout();
+    const ms=(G.layout||[]).filter(e=>e.kind==='machine')
+      .map(e=>({id:e.id,variant:e.variant,dir:e.dir,cx:e.c,cy:e.r,lvl:e.lvl}));
+    const props=(G.layout||[]).filter(e=>e.kind!=='machine');
+    const r=await NET.call('PUT','/api/layout',{machines:ms,props});
+    if(r&&r.factory) applyFactory(r.factory);
+  },400);
+}
+/* 💰・在庫・図鑑はサーバが持っているので、保存すべきものは配置だけ */
+function saveGame(){ pushLayout(); }
+/* 繋がらなければ工場が無いのと同じ。黙って空の工場を見せるより、理由を出して止める */
+async function loadGame(){
+  if(!await NET.probe()){                             // 401 は probe が /login へ飛ばしている
+    openDialog({ title:'⚠️ サーバに繋がりません',
+      body:`<div class="rowline" style="font-size:12px;color:#9fb0c0">
+        工場のデータはサーバにあります。サーバが起動しているか確かめて、読み込み直してください。</div>`,
+      actions:[{label:'🔄 再読み込み',kind:'primary',on:()=>location.reload()}] });
+    return false;
+  }
+  applyFactory(NET.last.factory);
+  const d=await NET.call('GET','/api/collection');
+  if(d){ const c=craftState();
+    c.collection=Object.fromEntries(
+      Object.entries(d.collection||{}).map(([k,v])=>[k,v.owned]));
+    c.collectionMeta=d.collection||{}; NET.collectionLoaded=true; }
+  const sk=await NET.call('GET','/api/skins'); if(sk) G.skins=sk.skins||{};
+  return true;
+}
+// 在庫と配置数
+function ownedN(kind,variant){ return (G.stock[kind]&&G.stock[kind][variant])||0; }
+function availN(kind,variant){ return Math.max(0, ownedN(kind,variant) - placedCount(kind,variant)); }
+// 設置済みは必ず所持(在庫)に含める(在庫 >= 設置数 を保証)
+function reconcileStock(){ const need={machine:{},prop:{},deco:{}};
+  for(const e of (G.layout||[])) if(need[e.kind]) need[e.kind][e.variant]=(need[e.kind][e.variant]||0)+1;
+  for(const k of ['machine','prop','deco']){ for(const s in need[k]) if((G.stock[k][s]||0)<need[k][s]) G.stock[k][s]=need[k][s]; } }
+// 配置レイアウト(位置)の唯一の真実 = G.layout。シーンから同期。
+function snapLayout(){ if(window.__scene) G.layout=window.__scene.getLayout(); }
+window.__layoutChanged=()=>{ snapLayout(); saveGame(); };
+const placedCount=(kind,variant)=> (G.layout||[]).filter(e=>e.kind===kind&&(variant==null||e.variant===variant)).length;
+// エージェント頭アクセ(スキン)の永続化: main.js からクリック巡回時に呼ばれる
+window.__skinChanged=(proj,skinId)=>{ if(!proj)return;
+  if(skinId==='none') delete G.skins[proj]; else G.skins[proj]=skinId;
+  NET.call('PUT','/api/skin',{project:proj,skinId}); };
+const overlay=document.getElementById('overlay'), panel=document.getElementById('panel');
+/* =========================================================================
+   DOM差分適用（morph） — 再描画で「いまの状態」を壊さないための土台
+   innerHTML の貼り替えは DOM ノードを丸ごと捨てるので、
+     ・選択中のテキスト（ハイライト）が解除される
+     ・入れ子のスクロール位置 / フォーカス / ホバー / 入力途中の値が失われる
+     ・<img> が読み直しになってちらつく
+   live更新（1〜2秒ごと）ではこれが延々と起きる。そこで
+   「新しく描いたツリーへ、既存ツリーを最小の変更で寄せる」方式にする。
+   ノードが生き残るので、上のどれも副作用として保たれる。
+     data-key   : 並び替わるリストに付けると、ノードを持ち回して同一性を保てる
+     data-morph="skip" : 既にある要素の中身には触れない（外部が触る領域の保護用）
+   ========================================================================= */
+function _morphAttrs(from,to){
+  for(const a of Array.from(from.attributes)) if(!to.hasAttribute(a.name)) from.removeAttribute(a.name);
+  for(const a of Array.from(to.attributes)) if(from.getAttribute(a.name)!==a.value) from.setAttribute(a.name,a.value);
+}
+// 差し替えずに寄せられる組み合わせか。data-key が違うものは別物として扱う
+function _morphSame(a,b){
+  if(a.nodeType!==b.nodeType) return false;
+  if(a.nodeType!==1) return true;
+  return a.tagName===b.tagName && (a.getAttribute('data-key')||null)===(b.getAttribute('data-key')||null);
+}
+function _morphNode(from,to){
+  if(from.nodeType!==1){ if(from.nodeValue!==to.nodeValue) from.nodeValue=to.nodeValue; return; }
+  if(to.getAttribute('data-morph')==='skip') return;
+  _morphAttrs(from,to);
+  _morphChildren(from,to);
+}
+function _morphChildren(from,to){
+  // data-key を持つ既存の子を先に拾っておく（並びが変わってもノードを使い回す）
+  const keyed=new Map();
+  for(const c of Array.from(from.childNodes))
+    if(c.nodeType===1){ const k=c.getAttribute('data-key'); if(k) keyed.set(k,c); }
+  let cur=from.firstChild;
+  for(const t of Array.from(to.childNodes)){
+    const k=(t.nodeType===1)?t.getAttribute('data-key'):null;
+    let hit=null;
+    if(k){ if(keyed.has(k)){ hit=keyed.get(k); keyed.delete(k); } }
+    // キー無しは位置で対応づける。キー付きの既存ノードは「その場所の持ち主」ではないので使わない
+    else if(cur && _morphSame(cur,t) && !(cur.nodeType===1&&cur.getAttribute('data-key'))) hit=cur;
+    if(hit){
+      if(hit===cur) cur=cur.nextSibling; else from.insertBefore(hit,cur);
+      _morphNode(hit,t);
+    } else from.insertBefore(t.cloneNode(true),cur);       // cur が null なら末尾に足される
+  }
+  while(cur){ const n=cur.nextSibling; from.removeChild(cur); cur=n; }   // cur 以降は残りもの
+}
+/* html を root の中身に反映する。root の子ノードは可能な限り再利用される */
+function morphInto(root,html){
+  const tmp=document.createElement('div'); tmp.innerHTML=html;
+  _morphChildren(root,tmp);
+}
+window.morphInto=morphInto;        // scene(main.js)のHUD更新からも使う
+/* =========================================================================
+   共通ダイアログ — 見出し / タブ / 本文 / フッターの操作ボタン / 閉じる
+   すべてのダイアログ(ショップ・図鑑・エージェント・原材料・製造機…)はこれに載せる。
+     openDialog({
+       title  : 見出し（絵文字込みの文字列）
+       subtitle: 見出し右の小さい補足。文字列 or (dlg)=>文字列
+       tabs   : [{id,label}] or (dlg)=>[…]  省略可。タブ付きダイアログ
+       tab    : 初期タブid
+       onTab  : (id,dlg)=>void  タブを押したとき（省略時は dlg.tab を差し替えて再描画）
+       body   : 本文HTML or (dlg)=>HTML   ※refresh のたびに呼ばれる
+       actions: [{label,on,kind:'primary'|'ghost',disabled}] or (dlg)=>[…]  フッターのボタン
+       live   : ミリ秒。開いている間この間隔で再描画する（エージェント一覧など）
+       onRender:(panel,dlg)=>void  本文描画後のイベント結線
+     })
+   戻り値 dlg = { tab, refresh(), setTab(id), close() }
+
+   body は毎回まるごと組み直してよい（宣言的に書ける）。実際の DOM への反映は
+   morphInto による差分適用なので、変わっていない部分のノードはそのまま残る。
+   ＝ 文字の選択・入れ子のスクロール位置・フォーカス・画像は live更新でも壊れない。
+   並びが変わりうるリストの各要素には data-key を付けること（付いていないと
+   位置で対応づけるため、並び替えのときに中身だけが入れ替わる）。
+   onRender は毎回呼ばれるので、結線は el.onclick= のような冪等な形で書く
+   （addEventListener はノードが残るぶん二重登録になる）。
+   ========================================================================= */
+let _dlg=null, _dlgTimer=null;
+function closeOverlay(){ overlay.classList.remove('show');
+  if(_dlgTimer){ clearInterval(_dlgTimer); _dlgTimer=null; } _dlg=null;
+  if(document.getElementById('palette').classList.contains('show')&&window.renderPalette) renderPalette(); }
+function openDialog(o){
+  const val=(v,d)=>(typeof v==='function')?v(d):v;
+  const dlg={ tab:o.tab||null, refresh, setTab, close:closeOverlay };
+  let mounted=false, shownTab=null;                          // 初回だけは前のダイアログの残骸を捨てて建て直す
+  function setTab(id){ dlg.tab=id; if(o.onTab) o.onTab(id,dlg); else refresh(); }
+  function refresh(){
+    if(_dlg!==dlg) return;                                   // 別のダイアログに差し替わっていたら描かない
+    const tabs=val(o.tabs,dlg)||[];
+    const acts=val(o.actions,dlg)||[];
+    const subtitle=o.subtitle!=null?val(o.subtitle,dlg):'';
+    const html='<span class="close" title="閉じる">✕</span>'
+      +`<div class="dlgHead"><h2>${o.title||''}${subtitle?`<span class="dlgSub">${subtitle}</span>`:''}</h2>`
+      +(tabs.length?`<div class="sttabs">${tabs.map(t=>`<span class="sttab ${t.id===dlg.tab?'on':''}" data-dlgtab="${t.id}">${t.label}</span>`).join('')}</div>`:'')
+      +'</div>'
+      +`<div class="pbody">${val(o.body,dlg)||''}</div>`
+      +(acts.length?`<div class="dlgFoot">${acts.map((a,i)=>
+          `<button class="dbtn ${a.kind==='ghost'?'ghost':''}" data-dlgact="${i}"${a.disabled?' disabled':''}>${a.label}</button>`).join('')}</div>`:'');
+    // 2回目以降は差分適用。選択中のテキストもスクロール位置も生き残る（morphInto の項を参照）
+    const tabChanged = mounted && shownTab!==dlg.tab;
+    if(mounted) morphInto(panel,html); else { panel.innerHTML=html; mounted=true; }
+    shownTab=dlg.tab;
+    // 本文が別物になるタブ切替のときだけ先頭へ。live更新ではスクロール位置を保つ
+    if(tabChanged){ const b=panel.querySelector('.pbody'); if(b) b.scrollTop=0; }
+    panel.querySelector('.close').onclick=closeOverlay;
+    panel.querySelectorAll('[data-dlgtab]').forEach(el=>el.onclick=()=>setTab(el.dataset.dlgtab));
+    panel.querySelectorAll('[data-dlgact]').forEach(el=>el.onclick=()=>{ const a=acts[+el.dataset.dlgact]; if(a&&a.on) a.on(dlg); });
+    if(o.onRender) o.onRender(panel,dlg);
+  }
+  if(_dlgTimer){ clearInterval(_dlgTimer); _dlgTimer=null; }
+  _dlg=dlg; refresh(); overlay.classList.add('show');
+  if(o.live) _dlgTimer=setInterval(()=>{ if(overlay.classList.contains('show')) refresh(); else closeOverlay(); }, o.live);
+  return dlg;
+}
+overlay.addEventListener('click',e=>{ if(e.target===overlay) closeOverlay(); });
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',1600); }
+window.__toast=toast;   // scene(main.js)から通知を出す用
+// 💰はショップを開いたときだけ見えればよいので、常設バッジは持たない。
+// 購入/売却の各所から呼ばれるため、関数名は残してショップ内の残高表示だけ更新する。
+function updateBadge(){ const m=document.getElementById('shopMoney');
+  if(m) m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
+
+/* =========================================================================
+   共通のUI部品 — 同じ見た目のものは同じ関数から出す
+
+   以前は 図鑑 / 📊今日の製造 / 🎁完成品 / 🏪ショップ が、それぞれ同じ入れ子の
+   HTML を手で書いていた。レア度の枠色や NEW バッジの付け方が場所ごとに
+   微妙に違い、片方だけ直る事故が起きやすかった。
+   ========================================================================= */
+/* 製品カード（図鑑・今日の製造・完成品で共通）。
+     p     : 製品（PROD の要素）
+     n     : 個数。null なら個数行を出さない
+     rows  : カード下部に足す行（レシピ絵文字など）の配列
+     isNew : NEW バッジ
+     miss  : 未発見（❓ で伏せる）
+     key   : morphInto 用の data-key（並びが変わる一覧で使う） */
+function prodCard(p,{n=null,rows=[],isNew=false,miss=false,key=null}={}){
+  const col=RAR[p.r].c, k=key?` data-key="${key}"`:'';
+  if(miss) return `<div class="pcard miss"${k}><div class="e">❓</div><div class="nm">？？？</div>
+      <div class="rr" style="color:${col}">${RAR[p.r].n}</div></div>`;
+  return `<div class="pcard"${k} style="border-color:${col}">${isNew?'<span class="new">NEW</span>':''}
+      <div class="e">${p.e}</div><div class="nm">${p.n}</div>
+      <div class="rr" style="color:${col}">${RAR[p.r].n}</div>
+      ${n!=null?`<div class="qn">${n}</div>`:''}${rows.join('')}</div>`;
+}
+/* 原材料の組み合わせを絵文字で1行。title には日本語名を出す */
+function matRow(key,suffix=''){
+  const ids=String(key||'').split(',').filter(Boolean);
+  if(!ids.length) return '';
+  return `<div class="qn" title="${ids.map(x=>MAT[x]?MAT[x].n:x).join(' + ')}">${
+    ids.map(x=>MAT[x]?MAT[x].e:'').join('')}${suffix}</div>`;
+}
+/* レア度ごとの内訳チップ（完成品の売上内訳） */
+const rarChips=(byRar)=>Object.keys(byRar).sort().map(r=>
+  `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
+/* 1行アイテム（ショップの各タブ・エージェント一覧で共通）。
+     icon / name / sub は文字列（HTML可）、action は右端のボタン */
+function itemRow({icon='',name='',sub='',action='',key=null,style=''}){
+  const k=key?` data-key="${key}"`:'';
+  return `<div class="rc"${k}${style?` style="${style}"`:''}><div class="ic">${icon}</div>
+      <div class="mid"><div class="nm">${name}</div>${sub?`<div class="cost">${sub}</div>`:''}</div>${action}</div>`;
+}
+/* 横並びのタブ列。openDialog のタブ機構に載せられない「本文内の切り替え」用。
+   属性名(attr)だけ変えて、リーダーボードの軸ボタンとマイページの粒度切替が同じ見た目になる。
+   pill:true は角丸の独立ボタン（見出しに連なるタブではないとき）。
+   以前はここだけ style="border-radius:8px" をインラインで上書きしていた。 */
+const tabStrip=(items,cur,attr,{pill=false}={})=>
+  `<div class="${pill?'rowline':'sttabs'}">${items.map(t=>
+    `<span class="sttab${t.id===cur?' on':''}${pill?' pill':''}" ${attr}="${t.id}">${t.label}</span>`).join('')}</div>`;
+
+let _collectionGenre='food';     // 図鑑のジャンル切り替え（GENRES + ✨シークレット）
+// 図鑑のタブ＝製品のジャンル。GENRES に足せば自動で増える
+const collectionGenres = ()=>[...GENRES, {id:SECRET_G,e:'✨',n:'シークレット'}];
+/* 図鑑の並びは レア度の低い順 → 同レア度なら必要マス数の少ない順。
+   PRODS の定義順（ジャンル→マス数→単独/レシピガチャ枠）をそのまま出すと、マス数グループの
+   末尾に置いたレシピガチャ枠の「1段上」のせいで、次のグループの先頭で必ずレア度が下がる。
+   定義順は m を読みやすく並べるためのもので表示順ではないので、ここで並べ直す。 */
+const prodsOfGenre = (g)=>PRODS.filter(p=>p.g===g)
+  .sort((a,b)=> a.r-b.r || new Set(a.m||[]).size-new Set(b.m||[]).size);
+// タブはジャンルそのもの。件数は「発見済み/全部」
+function collectionTabs(){
+  const c=craftState();
+  return collectionGenres().map(g=>{ const list=prodsOfGenre(g.id);
+    const own=list.filter(p=>c.collection[p.id]).length;
+    return {id:g.id,label:`${g.e} ${g.n} ${own}/${list.length}`}; });
+}
+// 全ジャンル通しての達成度は見出しの脇に出す（タブがジャンル別の件数で埋まっているぶん）
+function collectionSubtitle(){
+  const c=craftState();
+  return `${PRODS.filter(p=>c.collection[p.id]).length}/${PRODS.length}`;
+}
+function collectionBody(){
+  const c=craftState();
+  // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
+  return `<div class="pgrid">${prodsOfGenre(_collectionGenre).map(p=>{ const n=c.collection[p.id]||0;
+      // 発見済みにはレシピ（= m）をそのまま出す。製品ごとに組み合わせは1つだけなので断定して見せられる
+      return prodCard(p, n ? {n:`×${n}`, rows:[matRow(p.m.join(','))]} : {miss:true});
+    }).join('')}</div>
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">${_collectionGenre===SECRET_G
+        ? `シークレットは<b style="color:#ffd27a">ジャンルを跨いだ原材料</b>の特定の組み合わせでのみ、ごく低確率で出る。
+           跨いだ組み合わせのほとんどは 🪨 謎のカタマリ。`
+        : `同じ ${GENRE[_collectionGenre]?GENRE[_collectionGenre].e+GENRE[_collectionGenre].n:''} ジャンルの原材料の組み合わせを変えて未発見の製品を探そう。
+           発見済みカードの下に出る絵文字が<b style="color:#eafff4">その製品を作れる唯一の組み合わせ</b>。
+           同じ組み合わせから複数の製品が出ることはあるので、上位レア度は何度も試して狙う。
+           1製品 = マス数 × ${WP_PER_SLOT}WP。レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。`}</div>`;
+}
+function openCollection(genre){
+  const gs=collectionGenres();
+  if(genre&&gs.some(g=>g.id===genre)) _collectionGenre=genre;
+  if(!gs.some(g=>g.id===_collectionGenre)) _collectionGenre=gs[0].id;   // GENRES から消えたジャンルを覚えていたとき
+  return openDialog({ title:'📖 図鑑', subtitle:collectionSubtitle,
+    tabs:collectionTabs, tab:_collectionGenre,
+    onTab:(id,d)=>{ _collectionGenre=id; d.refresh(); },
+    body:collectionBody });
+}
+// 引数なしで開く（そのまま渡すと click イベントが tab として入ってしまう）
+document.getElementById('collectionBtn').addEventListener('click',()=>openCollection());
+
+/* =========================================================================
+   🧾 製造レシピ — 「何を入れれば作れるか」の一覧
+   図鑑が実績（作った物と個数）なら、こちらは献立表。原材料の組み合わせは
+   最初から全部見せて、製品のほうを伏せる。未製造は絵文字を黒く潰した
+   シルエットだけを出し、名前もレア度も出さない（レア度が見えると作る前から
+   狙い目が分かってしまい、「作って確かめる」動機が消える）。
+   個数は出さない ＝ そこは図鑑の担当。
+   🪨謎のカタマリはレシピではなく「レシピに無い組み合わせのハズレ」なので載せない。
+   ========================================================================= */
+// シークレットは PRODS 側の m が空で、組み合わせは SECRETS のキーにある。製品id → 原材料 に引き直す
+function secretMatsOf(pid){
+  const k=Object.keys(SECRETS).find(k=>SECRETS[k].pid===pid);
+  return k?k.split(','):[];
+}
+function recipeRow(p,mats){
+  const chips=mats.map(x=>MAT[x]?`<span title="${MAT[x].n}">${MAT[x].e}</span>`:'').join('<i>＋</i>');
+  const out=(craftState().collection[p.id]||0)
+    ? `<span class="rp"><span class="e">${p.e}</span><span class="nm">${p.n}</span>
+         <span class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</span></span>`
+    : `<span class="rp"><span class="e sil" title="まだ作っていない製品">${p.e}</span>
+         <span class="nm dim">？？？</span></span>`;
+  return `<div class="rrow" data-key="${p.id}"><span class="rms">${chips}</span><i class="ra">→</i>${out}</div>`;
+}
+/* 節の中の並び順は「必要マス数の少ない順 → 同じマス数ならレア度の低い順」。
+   持っている製造機で作れるものが上に来るので、2マス機しか無いうちから表が読める。
+   必要マス数 = 重複を除いた原材料の数（RECIPES のキーと同じ数え方）。 */
+const recipeSlots = (mats)=>new Set(mats).size;
+const recipeSorted = (rows)=>rows.slice().sort((a,b)=>
+  recipeSlots(a.mats)-recipeSlots(b.mats) || a.p.r-b.p.r);
+const recipeRowsOf = (g,matsOf)=>PRODS.filter(p=>p.g===g && p.id!==UNKNOWN_PRODUCT)
+  .map(p=>({p,mats:matsOf(p)}));
+function recipeBody(){
+  const c=craftState();
+  const sec=(head,rows)=>`<div class="rsec">${head}</div><div class="rlist">`
+    +recipeSorted(rows).map(x=>recipeRow(x.p,x.mats)).join('')+'</div>';
+  let body=GENRES.map(g=>sec(`${g.e} ${g.n}`, recipeRowsOf(g.id,p=>p.m))).join('');
+  /* シークレットは1つでも作るまで節ごと出さない。出したあとも中身は「作った物」だけで、
+     未発見のシークレットは行ごと存在しない（残り何個かを悟らせないため）。 */
+  const found=recipeRowsOf(SECRET_G,p=>secretMatsOf(p.id)).filter(x=>c.collection[x.p.id]);
+  if(found.length) body+=sec('✨ シークレット',found);
+  return body+`<div class="rowline" style="font-size:11px;color:#9fb0c0">
+    左が原材料の組み合わせ、右がそれで作れる製品。1度も作っていない製品は
+    <b style="color:#eafff4">シルエット</b>だけ見える。作れば名前とレア度が出る。
+    作った数は 📖 図鑑 で見られる。</div>`;
+}
+function openRecipes(){ return openDialog({ title:'🧾 製造レシピ', body:recipeBody }); }
+document.getElementById('recipeBtn').addEventListener('click',()=>openRecipes());
+
+/* =========================================================================
+   製造 — 製造機に原材料をセット → 実WPを溜めて製品化
+   WP の累計と各機械の進捗はサーバが持ち、/api/state で受け取る。
+   ========================================================================= */
+// 原材料をセットできるマス数 = 製造機のマス数(2〜5)。台ごとに1レシピ。
+
+
+
+/* G.craft — サーバから取ってきた状態を置く手元の入れ物。
+   ブラウザには保存しない（読み込みのたびに /api/state と /api/collection から作り直す）。 */
+function craftState(){
+  if(!G.craft||typeof G.craft!=='object') G.craft={};
+  const c=G.craft;
+  if(c.activeId===undefined) c.activeId=null;
+  // collection = 図鑑（product_id → 所持数）。/api/collection の写し
+  if(!c.collection||typeof c.collection!=='object') c.collection={};
+  // 製造は機械ごとに独立。mach[id] = {running, wp}
+  if(!c.mach||typeof c.mach!=='object') c.mach={};
+  return c;
+}
+/* 機械1台ぶんの製造状態。WPは「稼働中に稼いだ分の累積」。
+   稼いだWPは台数で按分せず、稼働中の全機械に同額を加算する。 */
+function machState(id){
+  const c=craftState();
+  if(!c.mach[id]||typeof c.mach[id]!=='object') c.mach[id]={running:false, wp:0};
+  const st=c.mach[id];
+  if(typeof st.wp!=='number'||!isFinite(st.wp)||st.wp<0) st.wp=0;
+  st.running=!!st.running;
+  return st;
+}
+// 一覧はマス数の昇順。番号は設置順で固定しておく（並べ替えても号機名が変わらないように）
+function machinesSorted(){
+  const ms=machines(), no={}; ms.forEach((m,i)=>no[m.id]=i+1);
+  return ms.slice().sort((a,b)=>(a.size-b.size)||(no[a.id]-no[b.id])).map(m=>({...m, no:no[m.id]}));
+}
+function runningCount(){ return machines().filter(m=>machState(m.id).running).length; }
+/* 製造は「1台の製造機」単位。その機械の各マス(2〜5)が原材料スロット。
+   activeId = いま製造に使っている機械。未指定なら最初の1台。 */
+function machines(){ const s=window.__scene; return (s&&s.machineList)?s.machineList():[]; }
+function activeMachine(){ const c=craftState(), ms=machines(); if(!ms.length) return null;
+  return ms.find(m=>m.id===c.activeId) || ms[0]; }
+function comboMats(){ const m=activeMachine(); return m ? m.slots.filter(Boolean) : []; }
+function comboKey(){ return keyOfSlots(comboMats()); }
+/* main.js が「この機械で何が作れるか」を描くために引く。レシピの正はこちら側。 */
+window.__craft = {
+  mat:(id)=>MAT[id]||null,
+  // 何が作れるかは伏せる（探す楽しみを残す）。代わりに稼働状態と進捗だけ返す。
+  preview:(slots, id)=>{
+    const set=(slots||[]).filter(Boolean);
+    if(!set.length) return null;                       // 素材未設定 → main.js 側が「素材未設定」を出す
+    const ms=machines(), m=id?ms.find(x=>x.id===id):null;
+    if(!m) return {e:'📦', n:'素材セット済み', unknown:false};
+    const st=machState(m.id), need=needWpForSize(m.size);
+    return st.running
+      ? {e:'⚙️', n:`製造中 ${Math.floor(st.wp)}/${need}WP`, unknown:false}
+      : {e:'📦', n:'待機中', unknown:true};
+  },
+};
+
+/* --- 状態の取得 ---
+   /api/state の1本にまとめてある。実測するとブラウザのポーリングが
+   テレメトリ受信の30倍のリクエストを生むので、エンドポイントを統合し、
+   タブが見えていないときは止める。 */
+let wpState={ total:0, today:0, ok:false, scorecard:[] };
+let pendingCount=0;
+async function pollWp(){
+  if(document.visibilityState==='hidden') return;   // 裏に回っている間は叩かない
+  // 手元の版番号を渡す。工場の形が変わっていなければサーバは factory を返さない
+  const d=await NET.call('GET','/api/state?rev='+NET.rev);
+  if(!d){ wpState.ok=false; return; }
+  NET.last=d;
+  wpState={ total:d.wp.total, today:d.wp.today, ok:true, scorecard:wpState.scorecard };
+  pendingCount=d.pending;
+  if(d.factory){ applyFactory(d.factory); }      // 版が変わったときだけ来る
+  else {
+    // 差分だけ反映する（毎回変わるのは 💰 と各機械の進捗だけ）
+    NET.rev=d.rev; G.money=d.money;
+    const c=craftState();
+    for(const m of (d.machines||[])) c.mach[m.id]={running:!!m.running, wp:m.wp};
+  }
+  if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
+  updateDoneBtn(); updateBadge(); renderCraft(); renderBoard();
+}
+/* main.js の poll() はここからエージェント一覧を受け取る（二重ポーリングを避ける） */
+window.__agentFeed=()=> NET.last ? {workers:NET.last.agents} : null;
+/* 製造判定はサーバ側（server/craft.mjs）。
+   ・稼いだWPは按分せず、稼働中の全機械にそれぞれ同額を加算する
+   ・必要WPに達した「その時点」のマスの組み合わせで作られる製品が決まる
+   ・原材料を変えてもWPはリセットしない（溜まった分はそのまま次に使う）
+   クライアントは /api/state で進捗を、/api/claim で結果を受け取るだけ。 */
+
+/* --- 今日の労働量ボード（画面上中央・このゲームの主役の数字） ---
+   「今日どれだけ働いたか」を示す数字なので、製造の設定とは切り離して大きく出す。 */
+// 今日の集計はサーバが数えている（🎁完成品を開いても減らない）
+const madeToday = ()=> (NET.last&&NET.last.today.made)||0;
+const salesToday = ()=> (NET.last&&NET.last.today.sales)||0;
+function renderBoard(){
+  const el=document.getElementById('board'); if(!el) return;
+  // pollWp から数秒おきに呼ばれる。innerHTML を貼り替えると、そのたびに
+  // ここの文字の選択（ハイライト）が解除されてしまうので差分適用にする
+  morphInto(el,`
+    <div class="m"><div class="v">${wpState.ok?Math.floor(wpState.today).toLocaleString():'—'}<small>WP</small></div>
+      <div class="l">今日の労働量</div></div>
+    <div class="m prod hit" id="todayBtn" title="クリックで今日つくったものを見る">
+      <div class="v">${madeToday()}<small>個</small></div>
+      <div class="l">今日の製造</div></div>
+    <div class="m sales"><div class="v">${Math.floor(salesToday()).toLocaleString()}<small>💰</small></div>
+      <div class="l">今日の売上</div></div>`);
+  const b=document.getElementById('todayBtn'); if(b) b.onclick=openToday;
+}
+/* 製造の記録は /api/made（products_made）から取る。描画しやすい形に揃えてから流す。 */
+let _madeToday=null;                  // null=まだ取れていない / 配列=今日の記録
+const normMadeRow = r => ({ pid:r.product_id, at:new Date(r.made_at).getTime(), key:r.recipe_key||'' });
+async function fetchMadeToday(dlg){
+  const d=await NET.call('GET','/api/made');
+  if(!d){ if(!_madeToday) _madeToday=[]; return; }   // 取れなかったら前回の内容を残す
+  _madeToday=(d.made||[]).map(normMadeRow);
+  if(dlg) dlg.refresh();
+}
+const madeTodayRows = ()=> _madeToday||[];
+/* 📊 今日の製造 — 今日つくったものをレア度順に並べる（図鑑に近い見た目）。
+   原材料の組み合わせも出すので、当たった組み合わせを見返す用途にも使える。 */
+function openToday(){
+  _madeToday=null;                                  // 開くたび取り直す（前回開いた内容を出さない）
+  const dlg=openDialog({ title:'📊 今日の製造',
+    subtitle:()=>`${madeToday()}個 / 売上 💰${Math.floor(salesToday()).toLocaleString()}`,
+    live:2000,
+    body:()=>{
+      if(!_madeToday) return '<div class="cost" style="padding:12px">読み込み中…</div>';
+      const rows={};
+      for(const m of madeTodayRows()){ const p=PROD[m.pid]; if(!p) continue;
+        const r=rows[m.pid]||(rows[m.pid]={p, n:0, keys:{}});
+        r.n++; if(m.key) r.keys[m.key]=(r.keys[m.key]||0)+1; }
+      const list=Object.values(rows).sort((a,b)=>(b.p.r-a.p.r)||(b.n-a.n));
+      if(!list.length) return '<div class="cost" style="padding:12px">今日はまだ何も作っていません。🏭製造で原材料をセットして ▶製造開始。</div>';
+      const gain=list.reduce((s,r)=>s+(PROD_PRICE[r.p.r]||0)*r.n,0);
+      return `<div class="pgrid">${list.map(r=>{
+          // 製品ごとの組み合わせは1つなので普通は1行。過去の履歴に旧レシピが残る場合だけ複数出る（多い順に3つまで）
+          const ks=Object.keys(r.keys).sort((a,b)=>r.keys[b]-r.keys[a]).slice(0,3)
+            .map(k=>matRow(k, r.keys[k]>1?` ×${r.keys[k]}`:''));
+          return prodCard(r.p,{ key:`pd:${r.p.id}`, n:`<b style="color:#eafff4">×${r.n}</b>`, rows:ks });
+        }).join('')}</div>
+        <div class="rowline" style="font-size:11px;color:#9fb0c0">
+          レア度の高い順。数字は今日つくった個数、その下は使った原材料の組み合わせ。
+          今日つくったものの合計価値は 💰${gain.toLocaleString()}（完成した時点で 💰 に入っている）。</div>`;
+    },
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
+  // 開いている間だけ記録を取りに行く（閉じたら止める）
+  const pull=()=>{ if(_dlg!==dlg){ clearInterval(t); return; } fetchMadeToday(dlg); };
+  const t=setInterval(pull, 5000); pull();
+  return dlg;
+}
+
+/* --- 製造のコンパクト表示（画面上中央）。詳しい操作は🏭製造ダイアログに寄せ、
+       ここは「いま何を作っているか + WP」だけを出す導線にする --- */
+/* 上中央のこれは🏭製造ダイアログを開くためのトリガー。
+   進捗は各機械の行で見るので、ここでは稼働台数だけ出す。 */
+function renderCraft(){
+  const el=document.getElementById('craft'); if(!el) return;
+  const ms=machines(), run=ms.filter(m=>machState(m.id).running).length;
+  // メインは「製造機設定」。稼働状況は下に小さく添える（何のボタンか一目で分かるように）
+  const st = !ms.length ? '製造機なし' : run ? `⚙️ 製造中 ${run}/${ms.length}台` : `📦 待機中 ${ms.length}台`;
+  morphInto(el,`<span class="pe">🏭</span>
+    <div class="mid"><div class="nm">製造機設定</div>
+      <div class="note">${st}</div>${
+      wpState.ok?'':'<div class="note warn">WP未取得（サーバ未接続）</div>'}</div>
+    <span class="go">▸</span>`);
+  el.title='クリックで🏭製造（原材料のセット・製造開始）';
+  renderBoard();
+}
+/* 機械1台の製造開始/停止。WPはリセットしない（停止中は増えないだけ） */
+function toggleMachine(id){
+  const st=machState(id), ms=machines(), m=ms.find(x=>x.id===id);
+  st.running=!st.running;
+  craftState().activeId=id;
+  NET.call('PUT','/api/machine/run',{id,running:st.running})
+    .then(r=>{ if(r&&r.factory){ applyFactory(r.factory); renderCraft(); } });
+  renderCraft();
+  if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
+  toast(st.running ? `${m?(m.no||''):''}号機の製造を開始（${m?needWpForSize(m.size):0}WPで1個）` : '製造を停止（溜めたWPは保持）');
+}
+
+/* =========================================================================
+   🏭 製造ダイアログ — 全機械を縦に並べた一覧
+     ・タブで切り替えない（一覧性を優先）。並びはマス数の昇順
+     ・各行でマスのセット / 進捗 / 製造開始・停止が完結する
+     ・作れる物は出さない（組み合わせを探すのがゲームの目的）
+   開いている間は1秒ごとに再描画してWPに追従する。
+   ========================================================================= */
+let _craftPick=null;                       // {mid, idx} = いま原材料を選んでいるマス
+const matsOfGenre=(g)=>MATS.filter(m=>m.g===g);
+const machTitle=(m)=>`${(MACH['s'+m.size]||{}).e||'🏭'} ${m.no}号機`;
+/* 機械1台ぶんの行。🏭製造の一覧と、機械単体のダイアログで同じものを使う（見た目を揃える）。
+   マス → クリックで原材料ピッカー / ▶製造開始・停止 / WPの進捗。 */
+function machRow(m){
+  const st=machState(m.id), need=needWpForSize(m.size), pct=Math.min(100, st.wp/need*100);
+  const nSet=m.slots.filter(Boolean).length;
+  const slots=m.slots.map((mid,i)=>{ const mt=MAT[mid];
+    const on=_craftPick&&_craftPick.mid===m.id&&_craftPick.idx===i;
+    return `<div class="mslot ${mt?'set':''} ${on?'pick':''}" data-cslot="${i}" data-cmid="${m.id}"
+      title="${i+1}マス目${mt?`: ${mt.n}`:''} — クリックで原材料を選ぶ">
+      <span class="e">${mt?mt.e:'＋'}</span>
+      ${mt?`<span class="x" data-cclear="${i}" data-cmid="${m.id}" title="外す">✕</span>`:''}</div>`; }).join('');
+  // ピッカーはジャンルごとの見出し + その下に原材料（タブで切り替えない。跨いだセットもできる）
+  const picker = (_craftPick&&_craftPick.mid===m.id) ? `<div class="mpick">
+    ${GENRES.map(g=>`<div class="pgroup"><div class="ghead">${g.e} ${g.n}</div><div class="grow">
+      ${matsOfGenre(g.id).map(x=>`<span class="mchip ${m.slots[_craftPick.idx]===x.id?'on':''}"
+        data-cmat="${x.id}" data-cmid="${m.id}" title="${x.n}">${x.e}<small>${x.n}</small></span>`).join('')}
+      </div></div>`).join('')}</div>` : '';
+  return `<div class="mrow ${st.running?'run':''}" data-key="mach:${m.id}" title="${machTitle(m)}（${m.size}マス / 必要 ${need}WP）">
+    <div class="mslots">${slots}
+      <button class="dbtn ${st.running?'ghost':''}" data-crun="${m.id}"${(!st.running&&!nSet)?' disabled':''}
+        title="${(!st.running&&!nSet)?'原材料を1つ以上セットしてください':''}">${st.running?'■ 停止':'▶ 製造開始'}</button>
+    </div>${picker}
+    <div class="wpline"><div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <b${wpState.ok?'':' style="color:#ff9f7a"'}>${Math.floor(st.wp)} / ${need} WP</b></div>
+  </div>`;
+}
+/* machRow のクリックを結線する。dlg.refresh() で描き直す前提。 */
+function bindMachRow(p,d){
+  p.querySelectorAll('[data-crun]').forEach(el=>el.onclick=()=>{ toggleMachine(el.dataset.crun); d.refresh(); });
+  p.querySelectorAll('[data-cslot]').forEach(el=>el.onclick=(ev)=>{
+    if(ev.target.dataset && ev.target.dataset.cclear!=null) return;   // ✕(外す)は別扱い
+    const mid=el.dataset.cmid, i=+el.dataset.cslot;
+    _craftPick=(_craftPick&&_craftPick.mid===mid&&_craftPick.idx===i)?null:{mid,idx:i};
+    d.refresh(); });
+  p.querySelectorAll('[data-cclear]').forEach(el=>el.onclick=(ev)=>{
+    ev.stopPropagation(); setMat(el.dataset.cmid, +el.dataset.cclear, null); _craftPick=null; d.refresh(); });
+  p.querySelectorAll('[data-cmat]').forEach(el=>el.onclick=()=>{
+    if(!_craftPick) return; setMat(el.dataset.cmid, _craftPick.idx, el.dataset.cmat); _craftPick=null; d.refresh(); });
+}
+function openCraft(){
+  _craftPick=null;
+  return openDialog({ title:'🏭 製造',
+    subtitle:()=>{ const ms=machines(); return ms.length?`${ms.length}台 / 稼働 ${runningCount()}台`:'製造機がありません'; },
+    live:1000,
+    body:()=>{
+      const ms=machinesSorted();
+      if(!ms.length) return '<div class="cost" style="padding:12px">製造機がありません。🏪ショップで購入 → 🔧レイアウト編集で床に設置してください。</div>';
+      return ms.map(machRow).join('');
+    },
+    onRender:bindMachRow });
+}
+// 導線は上部の製造ボード(#craft)だけ。☰メニューからは外した（同じ物への入口が2つある必要はない）
+document.getElementById('craft').addEventListener('click',()=>openCraft());
+
+/* --- 原材料の選択（ピッカーは machRow の中にある。ここはセットの実体だけ） --- */
+function setMat(machineId, slotIdx, matId){
+  const c=craftState(), F=window.__factory;
+  if(!F||!F.setSlot(machineId, slotIdx, matId||null)) return;   // 素材の実体は機械のマス(レイアウトに保存)
+  c.activeId = machineId;
+  // 原材料を変えても製造は止めず、溜まったWPも保持する。
+  // 何ができるかは「必要WPに達した時点」の組み合わせで決まる（サーバの craft.mjs）。
+  snapLayout();
+  const m=machines().find(x=>x.id===machineId);
+  NET.call('PUT','/api/machine/slots',{id:machineId,slots:(m&&m.slots)||[]})
+    .then(r=>{ if(r&&r.factory){ applyFactory(r.factory); renderCraft(); } });
+  renderCraft();
+  toast(matId ? `${MAT[matId].e} ${MAT[matId].n} をセット` : '原材料を外しました');
+}
+// main.js から呼ばれる: 機械の上に出す原材料バッジ / 機械クリック
+window.__matBadge = ()=>'';   // 原材料は機械のマス(スロット)に直接描かれるのでバッジは使わない
+window.__machineClick = (machineId)=>{ if(window.__openMachine) window.__openMachine(machineId); };
+
+/* --- 完成品（新着だけを見せる箱。1回開いたら中身は空になる） --- */
+function updateDoneBtn(){
+  const b=document.getElementById('doneBtn'); if(!b) return;
+  b.classList.toggle('show', pendingCount>0);
+  document.getElementById('doneN').textContent = pendingCount || '';
+}
+/* 回収(図鑑登録)はサーバの /api/claim が行う。
+   売上は完成した瞬間にサーバの tick() が積んでいるので、ここでは合計額を見せるだけ。 */
+async function openDone(){
+  const r=await NET.call('POST','/api/claim'); if(!r) return;
+  pendingCount=0; updateDoneBtn();
+  const st=await NET.call('GET','/api/state'); if(st){ NET.last=st; applyFactory(st.factory); }
+  const d=await NET.call('GET','/api/collection');
+  if(d){ const c=craftState(); c.collection=Object.fromEntries(
+    Object.entries(d.collection||{}).map(([k,v])=>[k,v.owned]));
+    c.collectionMeta=d.collection||{}; }
+  updateBadge(); renderBoard();
+  const byRar={}; for(const it of r.items) byRar[it.r]=(byRar[it.r]||0)+1;
+  const cards=[...r.items].reverse().slice(0,200).map(p=>prodCard(p,{isNew:p.isNew})).join('');
+  const bd=rarChips(byRar);
+  openDialog({ title:'🎁 完成品', subtitle:`${r.items.length}個`,
+    body:`${r.gain?`<div class="invbar" style="font-size:12px">
+          <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
+          <b style="color:#ffd27a;font-size:19px">💰 ${r.gain.toLocaleString()}</b>${bd}</div>`
+        :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
+      <div class="rowline" style="font-size:11px;color:#9fb0c0">
+        ${r.registered?`${r.registered}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。</div>
+      <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
+    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
+}
+document.getElementById('doneBtn').addEventListener('click',openDone);
+
+/* =========================================================================
+   リーダーボード — 期間タブ（今日/今週/今月/今年）× 軸ボタン（9種）
+   ・1画面に出すのは「選んだ軸の値」だけ。全軸を並べると読めないし、
+     暗黙の総合順位に見えてしまう（WP.md §9: 単一の合計点は作らない）
+   ・最初は上位20件。「もっとみる」で20件ずつ追加で取得する
+   ========================================================================= */
+const LB_PERIODS=[['today','今日'],['week','今週'],['month','今月'],['year','今年']];
+const LB_PAGE=20;
+const LB_MEDAL=['🥇','🥈','🥉'];   // 1〜3位は順位の数字の代わりにメダル
+/* 軸の定義。key=APIの項目 / desc=表の上に出す説明 / fmt=セルの表示 */
+const LB_AXES=[
+  {key:'efficiency',  label:'効率',       col:'効率',
+   desc:'少ないトークンでどれだけ成果を出したか。(追加行 + 削除行×0.3 + PR×150) ÷ output_tokens × 1000。PR1件かつ100行以上が対象で、満たさない人は「—」でランク外。難易度は補正しないので絶対量と併せて見ること。',
+   fmt:u=>u.efficiency==null?'<span style="color:#9fb0c0">—</span>':`<b style="color:var(--gold)">${u.efficiency}</b>`},
+  {key:'prs',         label:'PR数',       col:'PR',
+   desc:'期間内に作成したプルリクエストの数。作業がレビュー可能な単位まで届いた回数。',
+   fmt:u=>u.prs.toLocaleString()},
+  {key:'commits',     label:'コミット数', col:'コミット',
+   desc:'期間内のコミット数。小さく刻んで進めているほど増える。',
+   fmt:u=>u.commits.toLocaleString()},
+  {key:'lines',       label:'変更行数',   col:'変更行',
+   desc:'追加行 + 削除行。消した行も労働として数える（行数稼ぎの逆インセンティブを消すため）。',
+   fmt:u=>`${u.lines.toLocaleString()}<span style="color:#9fb0c0;font-size:10px"> (+${u.linesAdded.toLocaleString()} / -${u.linesRemoved.toLocaleString()})</span>`},
+  {key:'skill',       label:'Skill利用',  col:'Skill',
+   desc:'Skill を呼び出した回数。手順を毎回書き下すのではなく、再利用できる形に畳めているか。',
+   fmt:u=>u.skill.toLocaleString()},
+  {key:'agent',       label:'Agent起動',  col:'Agent',
+   desc:'サブエージェントを起動した回数。調査や並行作業を任せられているか。',
+   fmt:u=>u.agent.toLocaleString()},
+  {key:'customAgent', label:'自作Agent',  col:'自作Agent',
+   desc:'自分で定義したエージェントの起動回数。自分の仕事に合わせて道具を作れているか。',
+   fmt:u=>u.customAgent.toLocaleString()},
+  {key:'delegationPct',label:'委譲率',    col:'委譲率',
+   desc:'全ツール実行のうち、サブエージェント側で実行された割合。高いほど本体の文脈を使わずに任せている。',
+   fmt:u=>`${u.delegationPct}%`},
+  {key:'activeDays',  label:'稼働日数',   col:'稼働日',
+   desc:'期間内に Claude Code を使った日数。量ではなく続いているかを見る軸。',
+   fmt:u=>`${u.activeDays.toLocaleString()}日`},
+];
+const lbAxis=(k)=>LB_AXES.find(a=>a.key===k)||LB_AXES[0];
+let _lbKey='efficiency';
+let _lbPeriod='week';
+async function openLb(){
+  let rows=null;            // null=読み込み中
+  let total=0, loading=false;
+  async function load(more){
+    loading=true;
+    const offset=more?(rows||[]).length:0;
+    const d=await NET.call('GET',
+      `/api/leaderboard?period=${_lbPeriod}&metric=${_lbKey}&limit=${LB_PAGE}&offset=${offset}`);
+    const page=(d&&d.scorecard)||[];
+    rows=more?[...(rows||[]),...page]:page;
+    total=(d&&d.total)||rows.length;
+    loading=false;
+  }
+  const dlg=openDialog({ title:'🏆 リーダーボード',
+    tabs:LB_PERIODS.map(([k,l])=>({id:k,label:l})), tab:_lbPeriod,
+    onTab:async(id,d)=>{ _lbPeriod=id; rows=null; d.refresh(); await load(false); d.refresh(); },
+    body:()=>{
+    const ax=lbAxis(_lbKey);
+    const btns=tabStrip(LB_AXES.map(a=>({id:a.key,label:`${a.label}順`})), _lbKey, 'data-lbk', {pill:true});
+    const note=`<div class="rowline" style="font-size:11px;color:#9fb0c0;line-height:1.7">
+        <b style="color:#9fdcc6">${ax.label}順</b>${ax.desc}</div>`;
+    if(!rows) return btns+note+'<div class="cost">読み込み中…</div>';
+    // 工場名はサーバ(DB)の factories.name が factoryName で来る。空は古い行の保険
+    const fname = (u)=> u.factoryName || `${String(u.name||u.id||'').split('@')[0]}の工場`;
+    const more = rows.length<total
+      ? `<div class="rowline" style="justify-content:center">
+           <button class="dbtn ghost" id="lbMore">もっとみる（${rows.length} / ${total}）</button></div>` : '';
+    return btns+note+`
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="color:#9fb0c0">
+          <th style="text-align:left;width:34px">#</th><th style="text-align:left">工場</th>
+          <th style="text-align:right">${ax.col}</th>
+        </tr></thead><tbody>${rows.length?rows.map((u,i)=>`
+          <tr style="border-top:1px solid #22322e">
+            <td style="text-align:left;color:#9fb0c0" title="${i+1}位">${LB_MEDAL[i]
+              ? `<span style="font-size:15px;line-height:1">${LB_MEDAL[i]}</span>` : i+1}</td>
+            <td style="text-align:left;color:#eafff4" title="${u.name||u.id||''}">🏭 ${fname(u)}</td>
+            <td style="text-align:right">${ax.fmt(u)}</td></tr>`).join('')
+          :'<tr><td colspan="3" style="color:#9fb0c0;padding:10px">データがありません（OTelの設定を確認）</td></tr>'}</tbody></table>
+      ${more}`;
+  },
+  onRender:(p,d)=>{
+    p.querySelectorAll('[data-lbk]').forEach(el=>el.onclick=async()=>{
+      if(el.dataset.lbk===_lbKey) return;
+      _lbKey=el.dataset.lbk; rows=null; d.refresh();      // 軸を変えたら1ページ目から取り直す
+      await load(false); d.refresh();
+    });
+    const m=p.querySelector('#lbMore');
+    if(m) m.onclick=async()=>{
+      if(loading) return;
+      m.disabled=true; m.textContent='読み込み中…';
+      await load(true); d.refresh();
+    };
+  } });
+  await load(false);
+  dlg.refresh();   // 読み込み中に閉じられていれば refresh は何もしない
+}
+document.getElementById('lbBtn').addEventListener('click',openLb);
+
+/* =========================================================================
+   マイページ — 工場名 / 選んだ日・週のWP・製造個数・売上 / WPの推移グラフ
+   粒度は日次(00:00-23:59)と週次(日曜00:00-土曜23:59)の2つ。折れ線はWPだけ引き、
+   グラフをクリックするとその日・週の3指標に切り替わる（3本重ねると単位が違って読めない）。
+   ========================================================================= */
+const MY_DAYS=90;                      // 週次12週分を作るのに必要な日数。日次は末尾14日だけ使う
+const MY_DAILY_N=14, MY_WEEK_N=12;
+const MY_COLOR='#9fdcc6';              // 折れ線はWPの1本だけ
+let _myRange='day', _mySel=null, _myData=null, _myEdit=false;
+// 既定名はサーバが決める（ユーザー名 → 無ければメールの @ より前 → 「◯◯の工場」）
+const myDefaultName=()=> (_myData&&_myData.defaultName)
+  || `${(_myData&&_myData.userName)||'あなた'}の工場`;
+const myName=()=> (_myData&&_myData.name) || myDefaultName();
+// 属性値に入れる用のエスケープ（工場名はユーザー入力なので " < > & を潰す）
+const myAttr=(s)=>String(s==null?'':s)
+  .replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* 目盛りの上限は 1/2/5×10^n に丸める（軸の数字が読みやすい値になる） */
+function niceMax(v){
+  if(!(v>0)) return 1;
+  const e=Math.pow(10,Math.floor(Math.log10(v))), f=v/e;
+  return (f<=1?1:f<=2?2:f<=5?5:10)*e;
+}
+/* 日付ユーティリティ。'YYYY-MM-DD' は UTC 正午ではなく 00:00 として素直に足し引きする */
+const myDayMs=(d)=>Date.parse(d+'T00:00:00Z');
+const myDayStr=(ms)=>new Date(ms).toISOString().slice(0,10);
+const myMd=(d)=>d.slice(5).replace('-','/');                      // 07/19（年は出さない）
+
+/* 表示中の粒度でバケツを作る。日次=1日、週次=日曜00:00〜土曜23:59 */
+function myBuckets(){
+  const series=(_myData&&_myData.series)||[];
+  if(_myRange!=='week'){
+    return series.slice(-MY_DAILY_N).map(d=>({
+      key:d.day, wp:d.wp, made:d.made, sales:d.sales,
+      title:myMd(d.day), x:myMd(d.day) }));
+  }
+  const by=new Map();
+  for(const d of series){
+    const t=myDayMs(d.day);
+    const start=myDayStr(t-new Date(t).getUTCDay()*86400000);      // 直前の日曜
+    let b=by.get(start);
+    if(!b) by.set(start,b={key:start,n:0,wp:0,made:0,sales:0});
+    b.n++; b.wp+=d.wp; b.made+=d.made; b.sales+=d.sales;
+  }
+  const list=[...by.values()].sort((a,b)=>a.key<b.key?-1:1);
+  // 先頭は取得範囲の途中から始まる欠けた週。合計が過小に出るので落とす
+  if(list.length>1&&list[0].n<7) list.shift();
+  return list.slice(-MY_WEEK_N).map(b=>({ ...b,
+    title:`${myMd(b.key)} - ${myMd(myDayStr(myDayMs(b.key)+6*86400000))}`,
+    x:myMd(b.key) }));
+}
+const mySelIdx=(b)=> b.length ? Math.min(Math.max(_mySel==null?b.length-1:_mySel,0),b.length-1) : -1;
+
+/* WPの折れ線＋塗り。点の縦列（どの高さでも可）をクリックするとその日/週の数値に切り替わる */
+function myChartSvg(buckets,sel){
+  const W=620,H=210,PL=26,PR=76,PT=16,PB=26;   // PL は左端の日付ラベル、PR は右端の「n WP」が切れない幅
+  const n=buckets.length;
+  if(!n) return '<div class="cost">まだ記録がありません</div>';
+  const max=niceMax(Math.max(...buckets.map(d=>d.wp),0));
+  const X=i=> n<2 ? PL : PL+i*(W-PL-PR)/(n-1);
+  const Y=v=> PT+(1-v/max)*(H-PT-PB);
+  const pts=buckets.map((d,i)=>[X(i),Y(d.wp)]);
+  const line=pts.map((p,i)=>`${i?'L':'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const area=`${line} L${pts[pts.length-1][0].toFixed(1)},${Y(0)} L${pts[0][0].toFixed(1)},${Y(0)} Z`;
+  // 目盛りは 0 / 中間 / 上限。丸めた結果ラベルが重複したら線だけ引く（0が並ぶのを防ぐ）
+  const seen=new Set();
+  const grid=[max,max/2,0].map(v=>{      // 上限を先に見て、丸めがぶつかったら中間を落とす
+    const t=Math.round(v).toLocaleString(), dup=seen.has(t); seen.add(t);
+    return `<line x1="${PL}" x2="${W-PR}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#22322e" stroke-width="1"/>`
+      +(dup?'':`<text x="${W-PR+8}" y="${(Y(v)+4).toFixed(1)}" fill="#9fb0c0" font-size="11">${t}<tspan
+              fill="#7d8f9c" font-size="9"> WP</tspan></text>`);
+  }).join('');
+  // x軸ラベルは端と中間だけ（全点出すと潰れる）。選択中の点は必ず出す
+  const every=Math.max(1,Math.ceil(n/5));
+  const xlab=buckets.map((d,i)=> (i%every===0||i===n-1||i===sel)
+    ? `<text x="${X(i).toFixed(1)}" y="${H-7}" fill="${i===sel?'#eafff4':'#9fb0c0'}" font-size="10"
+             text-anchor="middle">${d.x}</text>` : '').join('');
+  const cursor=(sel>=0&&sel<n)
+    ? `<line x1="${pts[sel][0].toFixed(1)}" x2="${pts[sel][0].toFixed(1)}" y1="${PT}" y2="${H-PB}"
+             stroke="#eafff4" stroke-width="1.5" opacity=".8"/>
+       <circle cx="${pts[sel][0].toFixed(1)}" cy="${pts[sel][1].toFixed(1)}" r="10"
+               fill="${MY_COLOR}" opacity=".22"/>` : '';
+  const dots=buckets.map((d,i)=>{
+    const on=i===sel;
+    return `<circle cx="${pts[i][0].toFixed(1)}" cy="${pts[i][1].toFixed(1)}" r="${on?5.5:3.6}"
+              fill="${on?MY_COLOR:'#10171b'}" stroke="${MY_COLOR}" stroke-width="2"/>`;}).join('');
+  // 当たり判定は点ではなく縦帯にする。隣の点との中点で区切った列のどの高さを押しても
+  // その日/週が選ばれる（半径数pxの点を狙わせると指でもマウスでも押しにくい）
+  const hits=buckets.map((d,i)=>{
+    const x0=i===0   ? 0 : (pts[i-1][0]+pts[i][0])/2;
+    const x1=i===n-1 ? W : (pts[i][0]+pts[i+1][0])/2;
+    return `<rect class="myhit" x="${x0.toFixed(1)}" y="0" width="${(x1-x0).toFixed(1)}" height="${H}"
+             fill="transparent" data-myi="${i}" role="button" tabindex="0"
+             aria-label="${d.title}"><title>${d.title}</title></rect>`;}).join('');
+  return `<div class="mychart"><svg viewBox="0 0 ${W} ${H}" role="img"
+      aria-label="${_myRange==='week'?`直近${n}週`:`直近${n}日`}のWPの推移">
+    <defs><linearGradient id="myg_wp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${MY_COLOR}" stop-opacity=".38"/>
+      <stop offset="100%" stop-color="${MY_COLOR}" stop-opacity=".03"/></linearGradient></defs>
+    ${grid}
+    <path d="${area}" fill="url(#myg_wp)"/>
+    <path d="${line}" fill="none" stroke="${MY_COLOR}" stroke-width="2.4"
+          stroke-linejoin="round" stroke-linecap="round"/>
+    ${cursor}${dots}${xlab}${hits}
+  </svg></div>`;
+}
+function myBody(){
+  if(!_myData) return '<div class="cost">読み込み中…</div>';
+  const b=myBuckets(), sel=mySelIdx(b), t=b[sel]||{wp:0,made:0,sales:0,title:'—'};
+  const head=_myEdit
+    // 編集は「いま表示されている名前」から始める。空欄＋プレイスホルダだと
+    // 消したのか未設定なのか分からないし、一文字だけ直したいときに打ち直しになる
+    ? `<div class="myname"><input id="myNameIn" maxlength="24" placeholder="${myAttr(myDefaultName())}"
+         value="${myAttr(myName())}">
+       <span class="ed" id="myNameSave">保存</span><span class="ed" id="myNameCancel">やめる</span></div>
+       <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:4px">24文字まで。空にすると「${myAttr(myDefaultName())}」に戻ります。</div>`
+    : `<div class="myname"><b>🏭 ${myAttr(myName())}</b><span class="ed" id="myNameEdit">✏️ 編集</span></div>`;
+  return `${head}
+    ${_myData.failed?`<div class="rowline" style="font-size:11px;color:#ff9f7a;margin-top:8px">
+      集計を取得できませんでした。サーバが古い可能性があります（<b>npm run dev</b> で再起動してください）。</div>`:''}
+    ${tabStrip([{id:'day',label:'日次'},{id:'week',label:'週次'}], _myRange, 'data-myrange', {pill:true})}
+    <div class="myperiod">${t.title}</div>
+    <div class="mystats">
+      <div class="mystat"><div class="k">WP</div><div class="v">${Math.round(t.wp).toLocaleString()}<small>WP</small></div></div>
+      <div class="mystat"><div class="k">製造個数</div><div class="v">${t.made.toLocaleString()}<small>個</small></div></div>
+      <div class="mystat"><div class="k">売上</div><div class="v">${Math.round(t.sales).toLocaleString()}<small>💰</small></div></div>
+    </div>
+    <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:14px">
+      ※グラフをクリックで切り替え
+    </div>
+    ${myChartSvg(b,sel)}`;
+}
+async function saveFactoryName(name,dlg){
+  name=String(name||'').replace(/\s+/g,' ').trim().slice(0,24);
+  const r=await NET.call('PUT','/api/factory/name',{name});
+  if(!r) return;                         // 失敗時は編集状態のまま（NET.call が toast を出す）
+  name=r.name;
+  G.factoryName=name; _myData.name=name; _myEdit=false; dlg.refresh();
+  toast('工場名を変更しました');
+}
+async function openMyPage(){
+  _myEdit=false; _myData=null; _mySel=null; _myRange='day';
+  const dlg=openDialog({ title:'🏠 マイページ', body:myBody,
+    onRender:(p,d)=>{
+      p.querySelectorAll('[data-myrange]').forEach(el=>el.onclick=()=>{
+        _myRange=el.dataset.myrange; _mySel=null; d.refresh();   // 粒度を変えたら最新の点に戻す
+      });
+      p.querySelectorAll('[data-myi]').forEach(el=>{
+        const pick=()=>{ _mySel=+el.dataset.myi; d.refresh(); };
+        el.onclick=pick;
+        el.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); } };
+      });
+      const ed=p.querySelector('#myNameEdit'); if(ed) ed.onclick=()=>{ _myEdit=true; d.refresh(); };
+      const cancel=p.querySelector('#myNameCancel'); if(cancel) cancel.onclick=()=>{ _myEdit=false; d.refresh(); };
+      const save=p.querySelector('#myNameSave'), inp=p.querySelector('#myNameIn');
+      if(save&&inp){ save.onclick=()=>saveFactoryName(inp.value,d);
+        inp.onkeydown=e=>{ if(e.key==='Enter') saveFactoryName(inp.value,d);
+                           if(e.key==='Escape'){ _myEdit=false; d.refresh(); } };
+        // 差分適用で入力欄は生き残るので、初回だけ選択する（再描画のたびに全選択し直さない）
+        if(document.activeElement!==inp){ inp.focus(); inp.select(); } }
+    } });
+  _myData = await NET.call('GET',`/api/mypage?days=${MY_DAYS}`);
+  // 取得に失敗したときは 0 を並べて黙らない。名前だけはポーリングの me から作れる
+  if(!_myData){
+    const me=(NET.last&&NET.last.me)||{};
+    const who=String(me.name||'').trim()||String(me.email||'').split('@')[0]||'あなた';
+    _myData={ name:G.factoryName||'', userName:who, defaultName:`${who}の工場`,
+      days:MY_DAYS, series:[], failed:true };
+  }
+  dlg.refresh();   // 読み込み中に閉じられていれば refresh は何もしない
+}
+document.getElementById('myBtn').addEventListener('click',openMyPage);
+
+/* --- ハンバーガーメニュー（主要機能以外を畳む） --- */
+const menuEl=document.getElementById('menu'), menuBtn=document.getElementById('menuBtn');
+const closeMenu=()=>menuEl.classList.remove('show');
+menuBtn.addEventListener('click',e=>{ e.stopPropagation(); menuEl.classList.toggle('show'); });
+for(const mi of menuEl.querySelectorAll('.mi')) mi.addEventListener('click',closeMenu);
+document.addEventListener('click',e=>{ if(!menuEl.contains(e.target)&&e.target!==menuBtn) closeMenu(); });
+
+/* ===== 🧑‍🏭 エージェント一覧（スキン変更つき）=====
+   常時表示はやめ、左下の稼働/休憩HUD か ☰メニューから開く。開いている間は1秒ごとに更新。 */
+let _agentSel=null;                     // スキン選択を開いているプロジェクト(null=閉じている)
+function agentRows(){                   // プロジェクト単位に集約(同名エージェントは稼働数をまとめる)
+  const list=(window.__factory&&window.__factory.getAgents())||[];
+  const by={};
+  for(const a of list){ const p=by[a.proj]||(by[a.proj]={proj:a.proj,color:a.color,skinId:'none',n:0,busy:0});
+    p.n++; if(a.working)p.busy++; if(a.skinId&&a.skinId!=='none')p.skinId=a.skinId; }
+  return Object.values(by);
+}
+const skinName=(id)=>{ const s=((window.__factory&&window.__factory.skinList)||[]).find(x=>x.id===id); return s?s.n:'デフォルト'; };
+/* 被り物の画像(assets/hat-*.png)は未生成のものが多い。
+   onerror で DOM を差し替える手は、差分適用のたびに元の <img> へ戻されて
+   読み直し→また差し替え…とちらつくので使わない。
+   「その画像があるか」を一度だけ判定してキャッシュし、描画は常に決定的にする。 */
+const _hatOk=new Map();                     // id -> true(あり) / false(なし・未判定)
+function hatReady(id){
+  if(!id||id==='none') return false;
+  if(_hatOk.has(id)) return _hatOk.get(id);
+  _hatOk.set(id,false);                     // 判定がつくまでは「なし」＝絵文字で描く
+  const im=new Image();
+  im.onload =()=>{ _hatOk.set(id,true); if(_dlg) _dlg.refresh(); };   // 届いたら次の描画から画像に変わる
+  im.onerror=()=>{ _hatOk.set(id,false); };
+  im.src='assets/hat-'+id+'.png';
+  return false;
+}
+// スキンの見本。画像が無いスキンは絵文字の仮アイコンで出す
+function skinThumb(id,px){ const e=(id==='none')?'🧑‍🏭':((BG_META[id]&&BG_META[id].e)||'🎨');
+  return hatReady(id)
+    ? `<img src="assets/hat-${id}.png" alt="" style="width:${px+16}px;height:${px+16}px;object-fit:contain">`
+    : `<span style="font-size:${px}px">${e}</span>`;
+}
+function openAgents(){
+  const esc=(s)=>String(s||'').replace(/[<>&]/g,'');
+  return openDialog({ title:'🧑‍🏭 エージェント',
+    subtitle:()=>{ const r=agentRows(), n=r.reduce((s,p)=>s+p.n,0), b=r.reduce((s,p)=>s+p.busy,0);
+      return `稼働 ${b} / 休憩 ${n-b}`; },
+    live:1000,                          // 開いている間は最新の稼働状況に追従
+    body:()=>{
+      const rows=agentRows(); if(!rows.length) return '<div class="cost" style="padding:12px">稼働中のエージェントがいません。</div>';
+      const skins=(window.__factory&&window.__factory.skinList)||[];
+      return rows.map(p=>{
+        const key=encodeURIComponent(p.proj), nm=esc(p.proj)||'(無名)', open=_agentSel===p.proj;
+        const hat=hatReady(p.skinId)?`<img src="assets/hat-${p.skinId}.png" alt="">`:'';
+        // 1プロジェクト = 1ノード。data-key で、稼働状況の変化で並びが動いてもノードを持ち回す
+        // （＝ 開いているスキン一覧のスクロール位置が live更新で戻らない）
+        let h=`<div data-key="ag:${key}"><div class="rc">
+          <div class="ic"><span class="lgAv" style="background:${p.color||'#4f7fc4'}"><span class="eye l"></span><span class="eye r"></span>${hat}</span></div>
+          <div class="mid"><div class="nm">${nm}${p.n>1?` <span style="color:#9fb0c0;font-size:10px">×${p.n}</span>`:''}</div>
+            <div class="cost"><span class="agSt ${p.busy?'on':''}">${p.busy?`🟢 稼働 ${p.busy}/${p.n}`:'💤 休憩'}</span>スキン: ${skinName(p.skinId)}</div></div>
+          <button data-agsel="${key}">${open?'閉じる':'🎨 スキン'}</button></div>`;
+        // スキンの一覧は長いので行の直下で折りたたみ表示（他の行が押し出されないよう高さを制限）
+        if(open) h+=`<div class="grid" style="margin:0 0 12px 8px;max-height:196px;overflow-y:auto">${skins.map(s=>{ const on=p.skinId===s.id;
+            return `<div class="cell own" data-key="sk:${s.id}" data-skin="${s.id}" data-proj="${key}" title="${s.n}"
+              style="${on?'border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset':''}">${skinThumb(s.id,26)}<small style="color:#cfeee0">${s.n}</small>${on?'<span class="qty">✓</span>':''}</div>`;
+          }).join('')}</div>`;
+        return h+'</div>';
+      }).join('')
+      +'<div class="rowline" style="font-size:11px;color:#9fb0c0">「🎨 スキン」から被り物を変更できます。画像が未生成のスキンは仮アイコン表示で、アセット到着までは見た目がデフォルトのままです。</div>';
+    },
+    onRender:(p,d)=>{
+      p.querySelectorAll('[data-agsel]').forEach(el=>el.onclick=()=>{
+        const pj=decodeURIComponent(el.dataset.agsel); _agentSel=(_agentSel===pj)?null:pj; d.refresh(); });
+      p.querySelectorAll('[data-skin]').forEach(el=>el.onclick=()=>{
+        const pj=decodeURIComponent(el.dataset.proj);
+        if(!window.__factory) return;
+        window.__factory.applySkin(pj, el.dataset.skin);   // scene側で this.skins更新＋window.__skinChangedで永続化
+        toast(`${pj||'(無名)'} → ${skinName(el.dataset.skin)}`); d.refresh(); });
+    } });
+}
+// 導線は左下の稼働/休憩HUDだけ。☰メニューの「仲間」節は外した（同じ物への入口が2つある必要はない）
+document.getElementById('hud').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openAgents(); });
+document.getElementById('hud').title='クリックでエージェント一覧';
+
+/* ===== ショップ（製造機・設備・内装の購入と強化） ===== */
+/* 💰 の増減は必ずサーバが決める（クライアントの申告を信じない） */
+async function apiBuy(kind,id,okMsg){
+  const r=await NET.call('POST','/api/shop/buy',{kind,id});
+  if(!r) return false; applyFactory(r.factory); updateBadge(); if(okMsg) toast(okMsg); return true;
+}
+// 購入=在庫(owned)に追加。設置は編集パレットから床クリックで行う
+function buyMachine(type){ if(!MACH[type])return; if(G.money<MACH[type].price)return;
+  apiBuy('machine',type,`${MACH[type].e} ${MACH[type].n} を購入（🔧編集で設置）`); }
+function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machine'); if(!e)return; if(G.money<lvCost(e.lvl))return;
+  NET.call('POST','/api/machine/level',{id}).then(r=>{ if(!r)return;
+    applyFactory(r.factory);
+    const lv=(r.factory.machines.find(x=>x.id===id)||{}).lvl;
+    if(window.__scene&&lv)window.__scene.setMachineLevel(id,lv);
+    updateBadge(); toast(`Lv${lv} に強化！`); }); }
+// 素材スロットの要約（ショップ一覧用）。何が作れるかは伏せ、素材と稼働状態だけ出す
+function slotSummary(e){ const mats=[...new Set((e.slots||[]).filter(Boolean))].sort();
+  if(!mats.length) return '素材未設定';
+  const icons=mats.map(m=>(MAT[m]||{}).e||'?').join('');
+  return `${icons}${machState(e.id).running?' ・ ⚙️製造中':''}`; }
+function buyDeco(t){ if(G.money<DECO[t].price)return;
+  apiBuy('deco',t,`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
+function buyProp(t){ if(G.money<PROP[t].price)return;
+  apiBuy('prop',t,`${PROP[t].n} を購入（🔧編集で設置）`); }
+function selectBg(k){
+  apiBuy('bg',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setSkyTheme) window.__scene.setSkyTheme(k); }); }
+function selectFloor(k){
+  apiBuy('floor',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setFloor) window.__scene.setFloor(k); }); }
+function buySeries(k){ const S=SERIES[k];
+  apiBuy('series',k,`${S.n} シリーズを適用`).then(okk=>{ if(okk&&window.__scene){
+    window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } }); }
+
+let _shopTab='mach';
+const SHOP_TABS=[['mach','🏭 製造機'],['equip','🧰 設備'],['decor','🎨 内装'],['series','🌏 シリーズ']];
+/* ショップの各行は itemRow() に寄せてある。見出し・在庫バッジ・購入ボタンは
+   どのタブでも同じ形なので、ここでその3つだけを作る小物を持つ。 */
+const shopHead=(t,style='margin:12px 0 6px')=>`<div class="cost" style="${style}">${t}</div>`;
+const stockBadge=(n)=>`<span style="color:#9fb0c0;font-size:10px">在庫 ${n}</span>`;
+const buyBtn=(attr,id,price,label='購入')=>`<button ${attr}="${id}" ${G.money>=price?'':'disabled'}>${label}</button>`;
+/* 所持済みなら「適用」、使用中なら押せない。内装とシリーズで共通の出し分け */
+const applyBtn=(attr,id,own,cur,price)=>
+  `<button ${attr}="${id}" ${(own||G.money>=price)&&!cur?'':'disabled'}>${own?(cur?'---':'適用'):'購入'}</button>`;
+function shopBody(){
+    let body='';
+    if(_shopTab==='mach'){
+      body = shopHead('設置済みの製造機（Lv↑で生産量が増える。素材は🏭製造タブでセット）','margin:2px 0 6px');
+      const machs=(G.layout||[]).filter(e=>e.kind==='machine');
+      body += machs.map(e=>{ const c=lvCost(e.lvl), M=MACH[machVariant(e.variant)];
+        return itemRow({ icon:M.e, key:`mc:${e.id}`,
+          name:`${M.n} <span style="color:#7fe6ff;font-size:11px">Lv${e.lvl}</span>`,
+          sub:`${slotSummary(e)} ・ 次のLv 💰${c.toLocaleString()}`,
+          action:`<button data-lv="${e.id}" ${G.money>=c?'':'disabled'}>強化</button>` });
+      }).join('') || '<div class="cost" style="padding:6px 2px">未設置。🔧編集で在庫から設置</div>';
+      body += shopHead('製造機を購入（マス数が多いほど素材を多く入れられる＝作れる物が増える）');
+      body += Object.keys(MACH).map(t=>itemRow({ icon:MACH[t].e, key:`mb:${t}`,
+        name:`${MACH[t].n} ${stockBadge(availN('machine',t))}`,
+        sub:`💰${MACH[t].price.toLocaleString()}`,
+        action:buyBtn('data-buymach',t,MACH[t].price) })).join('');
+    } else if(_shopTab==='equip'){
+      body = shopHead('購入すると在庫に入ります。設置は 🔧編集 のパレットから床をクリック。','margin:2px 0 8px');
+      body += shopHead('装飾プロップ（Stitch製）');
+      for(const [th,label] of PROP_GROUPS){
+        const all=Object.keys(PROP).filter(t=>(PROP[t].th||'')===th);
+        if(!all.length) continue;
+        body += shopHead(label,'margin:10px 0 4px;color:#7fe6ff');
+        // 基本家具(全テーマ共通スロット)と名物(そのテーマだけの一点物)を分けて並べる
+        const ks=[...all.filter(t=>PROP[t].fu), ...all.filter(t=>!PROP[t].fu)];
+        body += ks.map(t=>{ const sp=(window.PROP_SPAN||{})[t]||1;   // 占有コマ数(見た目の大きさ)
+          return itemRow({ icon:PROP[t].e, key:`pr:${t}`,
+            name:`${PROP[t].n} ${stockBadge(ownedN('prop',t))}`,
+            sub:`💰${PROP[t].price}${sp>1?` ・ ${sp}コマ`:''}`,
+            action:buyBtn('data-prop',t,PROP[t].price) }); }).join('');
+      }
+      body += shopHead('その他');
+      body += Object.keys(DECO).map(t=>itemRow({ icon:DECO[t].e, key:`dc:${t}`,
+        name:`${DECO[t].n} ${stockBadge(ownedN('deco',t))}`,
+        sub:`💰${DECO[t].price}`,
+        action:buyBtn('data-deco',t,DECO[t].price) })).join('');
+    } else if(_shopTab==='decor'){   // 内装（背景=窓の外の景色 / 床材）
+      const row=(table,attr,ownList,curKey,prefix,curIcon,offIcon)=>Object.keys(table).map(k=>{
+        const own=ownList.includes(k), cur=curKey===k;
+        return itemRow({ icon:cur?curIcon:offIcon, key:`${attr}:${k}`,
+          name:`${prefix}: ${table[k].n}`,
+          sub:own?(cur?'使用中':'所持'):'💰'+table[k].price.toLocaleString(),
+          action:applyBtn(attr,k,own,cur,table[k].price) }); }).join('');
+      body = shopHead('背景（窓の外の景色）','margin:2px 0 6px')
+           + row(BG,'data-bg',G.bgOwned,G.bg,'背景','✅','🌇')
+           + shopHead('床材')
+           + row(FLOOR,'data-fl',G.floorOwned,G.floor,'床材','✅','🔲');
+    } else {   // シリーズ（背景＋床＋絵文字装飾のセット）
+      body = shopHead('背景・床材・装飾をまとめて着せ替え（購入後は無料で再適用）','margin:2px 0 8px');
+      body += Object.keys(SERIES).map(k=>{ const S=SERIES[k],own=G.seriesOwned.includes(k),cur=(G.bg===S.sky&&G.floor===S.floor);
+        return itemRow({ icon:S.n.split(' ')[0], key:`sr:${k}`,
+          name:`${S.n.split(' ')[1]}シリーズ ${cur?'<span style="color:#7fe6ff;font-size:10px">適用中</span>':''}`,
+          sub:`${S.decos.join(' ')} ・ ${own?'所持':'💰'+S.price.toLocaleString()}`,
+          action:applyBtn('data-series',k,own,cur,S.price) }); }).join('');
+    }
+    return body;
+}
+function openShop(tab){ if(tab)_shopTab=tab;
+  return openDialog({ title:'🏪 ショップ',
+    subtitle:()=>`<span id="shopMoney" style="color:#ffd27a;font-size:13px">💰 ${Math.floor(G.money).toLocaleString()}</span>`,
+    tabs:SHOP_TABS.map(t=>({id:t[0],label:t[1]})), tab:_shopTab,
+    onTab:(id,d)=>{ _shopTab=id; d.refresh(); },
+    body:shopBody,
+    onRender:(p,d)=>{
+      const re=()=>d.refresh();
+      p.querySelectorAll('[data-lv]').forEach(b=>b.onclick=()=>{ levelUp(b.dataset.lv); re(); });
+      p.querySelectorAll('[data-buymach]').forEach(b=>b.onclick=()=>{ buyMachine(b.dataset.buymach); re(); });
+      p.querySelectorAll('[data-deco]').forEach(b=>b.onclick=()=>{ buyDeco(b.dataset.deco); re(); });
+      p.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{ buyProp(b.dataset.prop); re(); });
+      p.querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>{ selectBg(b.dataset.bg); re(); });
+      p.querySelectorAll('[data-fl]').forEach(b=>b.onclick=()=>{ selectFloor(b.dataset.fl); re(); });
+      p.querySelectorAll('[data-series]').forEach(b=>b.onclick=()=>{ buySeries(b.dataset.series); re(); });
+    } });
+}
+document.getElementById('shopBtn').addEventListener('click',()=>openShop());
+
+/* ===== 起動: ロード→オフライン生産→シーン待ち→所持品反映→生産tick ===== */
+function waitScene(){ return new Promise(res=>{ (function chk(){ if(window.__scene) res(); else setTimeout(chk,60); })(); }); }
+function applyOwned(){ const s=window.__scene; if(!s)return;
+  if(G.layout&&G.layout.length){ const dropped=s.buildLayout(G.layout);   // 保存済みレイアウト(位置)を復元
+    snapLayout();
+    if(dropped) setTimeout(()=>toast(`コンベアは廃止されました（${dropped} 個を撤去）。製造機をクリックして素材を設定してください`),900); }
+  else {                        // 初回: サーバの在庫ぶん(最初の1台)を置いてレイアウトを確定させる
+    s.syncMachines(G.machines);
+    for(const e of (G.emojiDecos||[])) s.placeEmojiDeco(e);
+    snapLayout();
+  }
+  reconcileStock(); saveGame();
+  s.setSkyTheme(G.bg); s.setFloor(G.floor); s.applySkins(G.skins); }
+/* ===== 編集パレット: 大項目→在庫から選ぶ→床クリックで設置 ===== */
+const ROOM_THEMES=['arabia','undersea','japan','china','diner','fantasy','scifi','cabin','dino','haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen'];
+const SKY_THEMES=['blue','sunset','night','space','aurora'];
+const BG_META={auto:{e:'🕐',n:'標準'},blue:{e:'☀️',n:'快晴'},sunset:{e:'🌆',n:'夕焼け'},night:{e:'🌙',n:'星空'},space:{e:'🌌',n:'宇宙'},aurora:{e:'🌈',n:'オーロラ'},arabia:{e:'🕌',n:'アラビア'},undersea:{e:'🐚',n:'海底'},japan:{e:'⛩️',n:'日本'},china:{e:'🐉',n:'中華'},diner:{e:'🍔',n:'ダイナー'},fantasy:{e:'🧙',n:'ファンタジー'},scifi:{e:'🚀',n:'SF宇宙'},cabin:{e:'🌲',n:'森コテージ'},dino:{e:'🦖',n:'ダイナソー'},haunted:{e:'👻',n:'幽霊屋敷'},pirate:{e:'🏴‍☠️',n:'海賊船'},circuit:{e:'🏁',n:'サーキット'},dwarf:{e:'⛏️',n:'ドワーフ鉱山'},hell:{e:'😈',n:'地獄'},steampunk:{e:'⚙️',n:'スチパン'},retrofuture:{e:'🛸',n:'レトロ未来'},tokyo:{e:'🌃',n:'Tokyo'},halloween:{e:'🎃',n:'ハロウィン'},western:{e:'🤠',n:'西部開拓時代'},sushi:{e:'🍣',n:'回転寿司'},beehive:{e:'🐝',n:'ミツバチの巣'},circus:{e:'🎪',n:'サーカス'},carnival:{e:'🎭',n:'カーニバル'},desert:{e:'🏜️',n:'砂漠'},jungle:{e:'🌴',n:'ジャングル'},egypt:{e:'🔺',n:'古代エジプト'},christmas:{e:'🎄',n:'クリスマス'},space:{e:'🚀',n:'宇宙ステーション'},ice:{e:'🧊',n:'氷の城'},mushroom:{e:'🍄',n:'森のキノコ'},onsen:{e:'♨️',n:'和風温泉'}};
+function ownedBgs(){ const a=['auto']; for(const k of SKY_THEMES) if(G.bgOwned.includes(k)) a.push(k); for(const k of ROOM_THEMES) if(G.seriesOwned.includes(k)) a.push(k); return a; }
+function applyBg(k){ G.bg=k; if(window.__scene){ window.__scene.setSkyTheme(k); window.__scene.setFloor(ROOM_THEMES.includes(k)?'wood':G.floor); } saveGame(); updateBadge(); }
+const paletteEl=document.getElementById('palette');
+let editCat='bg', editSel=null; window.__editSel=null;
+let selMode=false, selN=0;                       // 収納の複数選択モードと選択数
+let propFilter=null;                             // 装飾の絞り込みテーマ(null=すべて / ''=汎用)
+let _paletteView=null;                           // 最後に描いた一覧の種類。切り替わったときだけスクロールを戻す
+window.__selChanged=(n)=>{ selN=n; renderPalette(); };
+function renderPalette(){
+  const cats=[['bg','🌏 背景'],['prop','🧰 装飾'],['machine','🏭 製造機']];
+  let items='', hint='', acts='', fil='';
+  // key は差分適用でノードを持ち回すための識別子（在庫が増減しても他の項目が作り直されない）
+  const cell=(key,dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" data-key="${key}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
+  if(editCat==='bg'){ hint='背景を選ぶと即適用（部屋ごと切替）';
+    items=ownedBgs().map(k=>`<div class="pitem ${G.bg===k?'cur':''}" data-key="bg:${k}" data-bg="${k}">${BG_META[k].e}<small>${BG_META[k].n}</small></div>`).join('');
+  } else if(editCat==='prop'){
+    const s=window.__scene, placedN=s?s.stowables().length:0;
+    if(selMode){ hint=`床の装飾をクリックで選択（もう一度クリックで解除）・ ${selN}個 選択中`;
+      items=`<div class="phint" style="padding:8px">選択モード中です。戻したい装飾を床でクリックしてください。</div>`;
+    } else {
+      hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')
+        +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去 ・ ラグは床の平物なので家具の下に敷けます';
+      // テーマ(=背景)で絞り込む。propFilter が null なら全部。DECO は汎用('')扱い
+      const inFilter=(th)=> propFilter===null || (th||'')===propFilter;
+      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`prop:${t}`,`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.variant===t));
+      const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`deco:${t}`,`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.variant===t));
+      items=(P.concat(D).join(''))||`<div class="phint" style="padding:8px">${propFilter===null?'在庫なし。🏪ショップ→設備 で購入してください。':'このテーマの在庫がありません。「すべて」に戻すか、🏪ショップで購入してください。'}</div>`;
+      // 絞り込み行: 在庫のあるテーマだけ出す。適用中の背景と同じテーマには印を付ける
+      const nOf=(th)=> Object.keys(PROP).filter(t=>(PROP[t].th||'')===th&&availN('prop',t)>0).length
+                     + (th===''?Object.keys(DECO).filter(t=>availN('deco',t)>0).length:0);
+      const chips=PROP_GROUPS.filter(([th])=>nOf(th)>0).map(([th,label])=>{
+        const cur=(th&&th===G.bg)?' ●':'';                      // いま適用中の背景と同じテーマ
+        return `<span class="c ${propFilter===th?'on':''}" data-pfil="${th}">${label}${cur} <span style="color:#9fb0c0">${nOf(th)}</span></span>`; });
+      const allN=Object.keys(PROP).filter(t=>availN('prop',t)>0).length
+               + Object.keys(DECO).filter(t=>availN('deco',t)>0).length;
+      fil=`<span class="c ${propFilter===null?'on':''}" data-pfil="*">すべて <span style="color:#9fb0c0">${allN}</span></span>`+chips.join('');
+    }
+    // 収納(設置済みを在庫に戻す)。位置は失われるが、在庫に戻るので置き直せる
+    acts = selMode
+      ? `<span class="c ${selN?'on':''}" data-stow="sel">📦 選択した${selN}個を収納</span><span class="c" data-selmode="0">✖ 選択をやめる</span>`
+      : `<span class="c" data-stow="all">📦 すべて収納 (${placedN})</span><span class="c" data-selmode="1">☑️ 選んで収納</span>`;
+  } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です')
+      +'<br>設置済みはドラッグで移動 / 🗑ゴミ箱へドラッグで撤去 ・ クリックで設定パネル（↻回転・✥移動／素材は🏭製造タブ）';
+    const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`machine:${t}`,`data-place="machine:${t}"`,MACH[t].e,MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.variant===t));
+    items=M.join('')||'<div class="phint" style="padding:8px">在庫なし。🏪ショップ→製造機 で購入してください。</div>';
+  }
+  morphInto(paletteEl,`<div class="phead"><b>🔧 レイアウト編集</b><span class="c" data-pclose="1">✖ 閉じる</span></div>
+    <div class="pcat">${cats.map(c=>`<span class="c ${c[0]===editCat?'on':''}" data-cat="${c[0]}">${c[1]}</span>`).join('')}</div>
+    ${fil?`<div class="pcat pfil">${fil}</div>`:''}
+    <div class="pitems">${items}</div>${acts?`<div class="pcat">${acts}</div>`:''}<div class="phint">${hint}</div>`);
+  // 一覧そのものが別物になったとき（カテゴリ/絞り込み/選択モードの切替）だけ先頭に戻す。
+  // 設置や購入での描き直しではスクロール位置を保つ
+  const view=`${editCat}/${propFilter}/${selMode?1:0}`;
+  if(view!==_paletteView){ _paletteView=view; const it=paletteEl.querySelector('.pitems'); if(it) it.scrollTop=0; }
+  paletteEl.querySelectorAll('[data-pclose]').forEach(el=>el.onclick=()=>toggleEditMode());
+  paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; setSelMode(false); renderPalette(); });
+  paletteEl.querySelectorAll('[data-pfil]').forEach(el=>el.onclick=()=>{ propFilter=el.dataset.pfil==='*'?null:el.dataset.pfil; renderPalette(); });
+  paletteEl.querySelectorAll('[data-selmode]').forEach(el=>el.onclick=()=>{ setSelMode(el.dataset.selmode==='1'); renderPalette(); });
+  paletteEl.querySelectorAll('[data-stow]').forEach(el=>el.onclick=()=>stow(el.dataset.stow));
+  paletteEl.querySelectorAll('[data-bg]').forEach(el=>el.onclick=()=>{ applyBg(el.dataset.bg); renderPalette(); });
+  paletteEl.querySelectorAll('[data-place]').forEach(el=>el.onclick=()=>{ const p=el.dataset.place.split(':'); editSel={kind:p[0],variant:p[1]||null}; window.__editSel=editSel; renderPalette(); });
+}
+window.renderPalette=renderPalette;
+function setSelMode(on){ const s=window.__scene; if(!s) return;
+  selMode=!!on; selN=0; s.setSelectMode(selMode);
+  if(selMode){ editSel=null; window.__editSel=null; }   // 選択中は誤って設置しないように
+}
+// 収納 = 設置済みの装飾を在庫に戻す(位置は失われるが置き直せる)
+function stow(mode){ const s=window.__scene; if(!s) return;
+  let n=0;
+  if(mode==='all'){
+    const total=s.stowables().length;
+    if(!total){ toast('床に装飾がありません'); return; }
+    if(!confirm(`床の装飾 ${total} 個をすべて在庫に戻します。配置はやり直しになります。よろしいですか？`)) return;
+    n=s.stowAll();
+  } else {
+    if(!selN){ toast('戻す装飾を床でクリックして選んでください'); return; }
+    n=s.stowSelected();
+  }
+  snapLayout(); saveGame(); updateBadge(); renderPalette();
+  toast(`${n}個を在庫に戻しました`);
+}
+window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
+  if(availN(sel.kind,sel.variant)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
+  const s=window.__scene; const id = s.addPlaced(sel.kind, sel.variant, {cell:{c,r}, dir:s.placeDir});
+  if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.variant)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
+/* ===== 製造機の設定パネル: 中身は🏭製造の一覧と同じ行（machRow）。
+       違いは「その下に配置（↻回転 / ✥移動）が付く」ことだけ。編集中に機械をクリックで開く ===== */
+window.__openMachine=(id)=>{
+  const F=window.__factory; if(!F) return; _craftPick=null;
+  const dlg=openDialog({ title:'🏭 製造機', subtitle:()=>{ const m=F.getMachine(id); return m?`${m.size}マス${m.lvl>1?` Lv${m.lvl}`:''}`:''; },
+    live:1000,
+    body:()=>{
+    const m=machinesSorted().find(x=>x.id===id);
+    if(!m){ setTimeout(closeOverlay,0); return ''; }
+    return machRow(m)
+      + `<div class="rc" style="margin-top:12px"><div class="mid"><div class="nm">配置</div>`
+      + `<div class="cost">向きを変える / 別の場所へ移す（撤去は🗑ゴミ箱へドラッグ）</div></div>`
+      + `<button data-rot="1">↻ 回転</button><button data-move="1" style="margin-left:5px">✥ 移動</button></div>`;
+  },
+    actions:[{label:'🏭 製造タブへ',kind:'ghost',on:()=>openCraft()}],
+    onRender:(p,d)=>{
+    bindMachRow(p,d);                        // マス・ピッカー・製造開始は一覧と同じ結線
+    p.querySelectorAll('[data-rot]').forEach(el=>el.onclick=()=>{
+      if(!F.rotateMachine(id)){ toast('回した先に空きがありません'); return; } window.__layoutChanged(); renderCraft(); d.refresh(); });
+    // 移動: シーンが「掴んで床クリックで置き直す」モードに入る。
+    // パネルが開いたままだと床をクリックできないので必ず閉じる。保存もシーン側(__layoutChanged)が行う。
+    p.querySelectorAll('[data-move]').forEach(el=>el.onclick=()=>{
+      if(!F.beginMoveMachine(id)){ toast('移動できません'); return; }
+      closeOverlay(); syncEditMode(); });   // 移動は必要なら編集モードをONにするので表示を合わせる
+    // 撤去はドラッグ&ドロップ(🗑ゴミ箱)に一本化したのでボタンは持たない
+  } });
+  return dlg;
+};
+/* ===== 編集モードの寄せ =====
+   パレットを盤面に重ねると工場が隠れるので、編集中は工場を右へスッと寄せ、空いた左にパレットを出す。
+   寄せ方は CSS(#wrap.editing #game の width と margin-left)に任せ、盤面は残り幅いっぱいまで広げる。
+   Phaser(Scale.FIT) は親要素の大きさを 500ms ごとのポーリングでしか見に行かないので、
+   アニメ中だけ毎フレーム scale.refresh() を叩いて、描画も当たり判定もぬるっと追従させる。 */
+const gameEl=document.getElementById('game'), wrapEl=document.getElementById('wrap');
+function slideGame(){
+  const g=window.__game; if(!g||!g.scale) return;
+  const t0=performance.now();
+  const tick=()=>{ g.scale.refresh(); if(performance.now()-t0<620) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+}
+/* 編集モードのON/OFF表示をシーンに合わせる。Eキーや「✥移動」でシーン側から切り替わることがある。
+   入口は ☰メニューの「🔧 レイアウト編集」だけ（盤面に常駐するボタンは置かない）ので、
+   ONかどうかはボタンの見た目ではなくこの変数で覚える。 */
+let _editOn=false;
+function syncEditMode(){ const on=!!(window.__scene&&window.__scene.editMode);
+  if(_editOn===on) return;                                   // 変化したときだけ描き直す
+  _editOn=on; paletteEl.classList.toggle('show',on);
+  wrapEl.classList.toggle('editing',on); slideGame();
+  if(on) renderPalette(); else { editSel=null; window.__editSel=null; } }
+function toggleEditMode(){ if(!window.__scene){ toast('準備中…'); return; }
+  const on=window.__scene.toggleEdit(); syncEditMode();
+  toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 設置済みはドラッグで移動・🗑へドラッグで撤去':'編集モードを終了'); }
+document.getElementById('editMenuBtn').addEventListener('click',toggleEditMode);
+loadGame().then(async (ok)=>{
+  if(!ok) return;                                    // サーバに繋がらない旨は loadGame が出している
+  G.lastT=Date.now();
+  await waitScene(); applyOwned(); updateBadge();
+  setInterval(syncEditMode, 1000); syncEditMode();   // Eキー・移動モードでの編集ON/OFFに追従
+  if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
+  updateDoneBtn(); renderCraft(); pollWp();
+  /* 5秒ごと。OTLP の logs バッチがちょうど5秒間隔なので、
+     これより速く叩いても新しい値は存在しない（＝同じ値を取り直すだけ）。
+     裏に回っている間は pollWp 側で止まる。 */
+  setInterval(pollWp, 5000);
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollWp(); });
+  const q=new URLSearchParams(location.search);
+  // ?unlockall は単一ユーザー版のテスト用だった。💰も在庫もサーバが持つので効かない
+  if(q.get('unlockall')) toast('?unlockall は使えません（💰と在庫はサーバが管理）');
+  if(q.get('edit')){ paletteEl.classList.add('show'); _editOn=true;
+    wrapEl.classList.add('editing'); slideGame(); renderPalette(); }
+  if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop'));
+});
+
+/* module にしたのでトップレベルの名前はもうグローバルではない。
+   外から触る必要がある分だけ、ここで明示的に公開する。
+     ・game/main.js（クラシックスクリプト）が使うもの … window.__* と morphInto
+     ・tools/test_ui_browser.mjs が page 上で評価するもの … 下の一覧
+   ここに無い名前は「この画面の内部」なので、外から参照してはいけない。 */
+Object.assign(window, {
+  // マスタ（テストがジャンル数・製品数を突き合わせる）
+  GENRES, MATS, PRODS, WP_PER_SLOT,
+  // 画面の状態と操作
+  G, NET, wpState, craftState, machState, needWpForSize, machines, machinesSorted,
+  renderCraft, renderBoard, updateDoneBtn, updateBadge, saveGame, snapLayout, toast,
+  // ダイアログ
+  openDialog, closeOverlay, openCollection, openRecipes, openShop,
+  openToday, openLb, openMyPage, openDone, openAgents,
+});
