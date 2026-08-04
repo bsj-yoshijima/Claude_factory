@@ -112,6 +112,8 @@
   .sttabs{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0 4px}
   .sttab{background:#141b20;border:1px solid var(--edge);border-radius:8px 8px 0 0;padding:5px 11px;cursor:pointer;font-size:12px;color:#9fdcc6}
   .sttab.on{background:#1d262c;border-color:var(--gold);color:var(--gold)}
+  /* 見出しに連ならない独立ボタンとして使うとき（リーダーボードの軸・マイページの粒度） */
+  .sttab.pill{border-radius:8px}
   .rc{display:flex;align-items:center;gap:10px;background:#10171b;border:1px solid #243036;border-radius:9px;padding:8px 11px;margin:6px 0}
   .rc .ic{font-size:26px;width:34px;text-align:center}
   .rc .mid{flex:1;min-width:0}
@@ -553,12 +555,60 @@ window.__toast=toast;   // scene(main.js)から通知を出す用
 function updateBadge(){ const m=document.getElementById('shopMoney');
   if(m) m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
 
+/* =========================================================================
+   共通のUI部品 — 同じ見た目のものは同じ関数から出す
+
+   以前は 図鑑 / 📊今日の製造 / 🎁完成品 / 🏪ショップ が、それぞれ同じ入れ子の
+   HTML を手で書いていた。レア度の枠色や NEW バッジの付け方が場所ごとに
+   微妙に違い、片方だけ直る事故が起きやすかった。
+   ========================================================================= */
+/* 製品カード（図鑑・今日の製造・完成品で共通）。
+     p     : 製品（PROD の要素）
+     n     : 個数。null なら個数行を出さない
+     rows  : カード下部に足す行（レシピ絵文字など）の配列
+     isNew : NEW バッジ
+     miss  : 未発見（❓ で伏せる）
+     key   : morphInto 用の data-key（並びが変わる一覧で使う） */
+function prodCard(p,{n=null,rows=[],isNew=false,miss=false,key=null}={}){
+  const col=RAR[p.r].c, k=key?` data-key="${key}"`:'';
+  if(miss) return `<div class="pcard miss"${k}><div class="e">❓</div><div class="nm">？？？</div>
+      <div class="rr" style="color:${col}">${RAR[p.r].n}</div></div>`;
+  return `<div class="pcard"${k} style="border-color:${col}">${isNew?'<span class="new">NEW</span>':''}
+      <div class="e">${p.e}</div><div class="nm">${p.n}</div>
+      <div class="rr" style="color:${col}">${RAR[p.r].n}</div>
+      ${n!=null?`<div class="qn">${n}</div>`:''}${rows.join('')}</div>`;
+}
+/* 原材料の組み合わせを絵文字で1行。title には日本語名を出す */
+function matRow(key,suffix=''){
+  const ids=String(key||'').split(',').filter(Boolean);
+  if(!ids.length) return '';
+  return `<div class="qn" title="${ids.map(x=>MAT[x]?MAT[x].n:x).join(' + ')}">${
+    ids.map(x=>MAT[x]?MAT[x].e:'').join('')}${suffix}</div>`;
+}
+/* レア度ごとの内訳チップ（完成品の売上内訳） */
+const rarChips=(byRar)=>Object.keys(byRar).sort().map(r=>
+  `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
+/* 1行アイテム（ショップの各タブ・エージェント一覧で共通）。
+     icon / name / sub は文字列（HTML可）、action は右端のボタン */
+function itemRow({icon='',name='',sub='',action='',key=null,style=''}){
+  const k=key?` data-key="${key}"`:'';
+  return `<div class="rc"${k}${style?` style="${style}"`:''}><div class="ic">${icon}</div>
+      <div class="mid"><div class="nm">${name}</div>${sub?`<div class="cost">${sub}</div>`:''}</div>${action}</div>`;
+}
+/* 横並びのタブ列。openDialog のタブ機構に載せられない「本文内の切り替え」用。
+   属性名(attr)だけ変えて、リーダーボードの軸ボタンとマイページの粒度切替が同じ見た目になる。
+   pill:true は角丸の独立ボタン（見出しに連なるタブではないとき）。
+   以前はここだけ style="border-radius:8px" をインラインで上書きしていた。 */
+const tabStrip=(items,cur,attr,{pill=false}={})=>
+  `<div class="${pill?'rowline':'sttabs'}">${items.map(t=>
+    `<span class="sttab${t.id===cur?' on':''}${pill?' pill':''}" ${attr}="${t.id}">${t.label}</span>`).join('')}</div>`;
+
 let _collectionGenre='food';     // 図鑑のジャンル切り替え（GENRES + ✨シークレット）
 // 図鑑のタブ＝製品のジャンル。GENRES に足せば自動で増える
 const collectionGenres = ()=>[...GENRES, {id:SECRET_G,e:'✨',n:'シークレット'}];
 /* 図鑑の並びは レア度の低い順 → 同レア度なら必要マス数の少ない順。
-   PRODS の定義順（ジャンル→マス数→単独/ガチャ枠）をそのまま出すと、マス数グループの
-   末尾に置いたガチャ枠の「1段上」のせいで、次のグループの先頭で必ずレア度が下がる。
+   PRODS の定義順（ジャンル→マス数→単独/レシピガチャ枠）をそのまま出すと、マス数グループの
+   末尾に置いたレシピガチャ枠の「1段上」のせいで、次のグループの先頭で必ずレア度が下がる。
    定義順は m を読みやすく並べるためのもので表示順ではないので、ここで並べ直す。 */
 const prodsOfGenre = (g)=>PRODS.filter(p=>p.g===g)
   .sort((a,b)=> a.r-b.r || new Set(a.m||[]).size-new Set(b.m||[]).size);
@@ -579,13 +629,8 @@ function collectionBody(){
   // 図鑑への登録は「🎁完成品の一覧を開いたとき」に行われる
   return `<div class="pgrid">${prodsOfGenre(_collectionGenre).map(p=>{ const n=c.collection[p.id]||0;
       // 発見済みにはレシピ（= m）をそのまま出す。製品ごとに組み合わせは1つだけなので断定して見せられる
-      const recipe=p.m.length?p.m.map(x=>MAT[x]?MAT[x].e:'').join(''):'';
-      const rtitle=p.m.map(x=>MAT[x]?MAT[x].n:x).join(' + ');
-      return n ? `<div class="pcard" style="border-color:${RAR[p.r].c}"><div class="e">${p.e}</div>
-                    <div class="nm">${p.n}</div><div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div>
-                    <div class="qn">×${n}</div><div class="qn" title="レシピ: ${rtitle}">${recipe}</div></div>`
-               : `<div class="pcard miss"><div class="e">❓</div><div class="nm">？？？</div>
-                    <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`; }).join('')}</div>
+      return prodCard(p, n ? {n:`×${n}`, rows:[matRow(p.m.join(','))]} : {miss:true});
+    }).join('')}</div>
       <div class="rowline" style="font-size:11px;color:#9fb0c0">${_collectionGenre===SECRET_G
         ? `シークレットは<b style="color:#ffd27a">ジャンルを跨いだ原材料</b>の特定の組み合わせでのみ、ごく低確率で出る。
            跨いだ組み合わせのほとんどは 🪨 謎のカタマリ。`
@@ -793,11 +838,9 @@ function openToday(){
       return `<div class="pgrid">${list.map(r=>{
           // 製品ごとの組み合わせは1つなので普通は1行。過去の履歴に旧レシピが残る場合だけ複数出る（多い順に3つまで）
           const ks=Object.keys(r.keys).sort((a,b)=>r.keys[b]-r.keys[a]).slice(0,3)
-            .map(k=>`<div class="qn" title="${k.split(',').map(x=>MAT[x]?MAT[x].n:x).join(' + ')}">${
-              k.split(',').map(x=>MAT[x]?MAT[x].e:'').join('')}${r.keys[k]>1?` ×${r.keys[k]}`:''}</div>`).join('');
-          return `<div class="pcard" data-key="pd:${r.p.id}" style="border-color:${RAR[r.p.r].c}"><div class="e">${r.p.e}</div>
-            <div class="nm">${r.p.n}</div><div class="rr" style="color:${RAR[r.p.r].c}">${RAR[r.p.r].n}</div>
-            <div class="qn"><b style="color:#eafff4">×${r.n}</b></div>${ks}</div>`; }).join('')}</div>
+            .map(k=>matRow(k, r.keys[k]>1?` ×${r.keys[k]}`:''));
+          return prodCard(r.p,{ key:`pd:${r.p.id}`, n:`<b style="color:#eafff4">×${r.n}</b>`, rows:ks });
+        }).join('')}</div>
         <div class="rowline" style="font-size:11px;color:#9fb0c0">
           レア度の高い順。数字は今日つくった個数、その下は使った原材料の組み合わせ。
           今日つくったものの合計価値は 💰${gain.toLocaleString()}（完成した時点で 💰 に入っている）。</div>`;
@@ -938,11 +981,8 @@ async function openDone(){
     c.collectionMeta=d.collection||{}; }
   updateBadge(); renderBoard();
   const byRar={}; for(const it of r.items) byRar[it.r]=(byRar[it.r]||0)+1;
-  const cards=[...r.items].reverse().slice(0,200).map(p=>`<div class="pcard">${p.isNew?'<span class="new">NEW</span>':''}
-      <div class="e">${p.e}</div><div class="nm">${p.n}</div>
-      <div class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</div></div>`).join('');
-  const bd=Object.keys(byRar).sort().map(k=>
-    `<span class="chip"><b style="color:${RAR[k].c}">${RAR[k].n}</b>×${byRar[k]} = 💰${(PROD_PRICE[k]*byRar[k]).toLocaleString()}</span>`).join('');
+  const cards=[...r.items].reverse().slice(0,200).map(p=>prodCard(p,{isNew:p.isNew})).join('');
+  const bd=rarChips(byRar);
   openDialog({ title:'🎁 完成品', subtitle:`${r.items.length}個`,
     body:`${r.gain?`<div class="invbar" style="font-size:12px">
           <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
@@ -1015,8 +1055,7 @@ async function openLb(){
     onTab:async(id,d)=>{ _lbPeriod=id; rows=null; d.refresh(); await load(false); d.refresh(); },
     body:()=>{
     const ax=lbAxis(_lbKey);
-    const btns=`<div class="rowline">${LB_AXES.map(a=>
-      `<span class="sttab ${a.key===_lbKey?'on':''}" data-lbk="${a.key}" style="border-radius:8px">${a.label}順</span>`).join('')}</div>`;
+    const btns=tabStrip(LB_AXES.map(a=>({id:a.key,label:`${a.label}順`})), _lbKey, 'data-lbk', {pill:true});
     const note=`<div class="rowline" style="font-size:11px;color:#9fb0c0;line-height:1.7">
         <b style="color:#9fdcc6">${ax.label}順</b>${ax.desc}</div>`;
     if(!rows) return btns+note+'<div class="cost">読み込み中…</div>';
@@ -1176,12 +1215,8 @@ function myBody(){
     : `<div class="myname"><b>🏭 ${myAttr(myName())}</b><span class="ed" id="myNameEdit">✏️ 編集</span></div>`;
   return `${head}
     ${_myData.failed?`<div class="rowline" style="font-size:11px;color:#ff9f7a;margin-top:8px">
-      集計を取得できませんでした。サーバが古い可能性があります（<b>node server/index.mjs</b> を再起動してください）。</div>`:''}
-    <div class="rowline" style="margin-top:14px">
-      ${[['day','日次'],['week','週次']].map(([id,label])=>
-        `<span class="sttab ${id===_myRange?'on':''}" data-myrange="${id}"
-               style="border-radius:8px">${label}</span>`).join('')}
-    </div>
+      集計を取得できませんでした。サーバが古い可能性があります（<b>npm run dev</b> で再起動してください）。</div>`:''}
+    ${tabStrip([{id:'day',label:'日次'},{id:'week',label:'週次'}], _myRange, 'data-myrange', {pill:true})}
     <div class="myperiod">${t.title}</div>
     <div class="mystats">
       <div class="mystat"><div class="k">WP</div><div class="v">${Math.round(t.wp).toLocaleString()}<small>WP</small></div></div>
@@ -1349,55 +1384,68 @@ function buySeries(k){ const S=SERIES[k];
 
 let _shopTab='mach';
 const SHOP_TABS=[['mach','🏭 製造機'],['equip','🧰 設備'],['decor','🎨 内装'],['series','🌏 シリーズ']];
+/* ショップの各行は itemRow() に寄せてある。見出し・在庫バッジ・購入ボタンは
+   どのタブでも同じ形なので、ここでその3つだけを作る小物を持つ。 */
+const shopHead=(t,style='margin:12px 0 6px')=>`<div class="cost" style="${style}">${t}</div>`;
+const stockBadge=(n)=>`<span style="color:#9fb0c0;font-size:10px">在庫 ${n}</span>`;
+const buyBtn=(attr,id,price,label='購入')=>`<button ${attr}="${id}" ${G.money>=price?'':'disabled'}>${label}</button>`;
+/* 所持済みなら「適用」、使用中なら押せない。内装とシリーズで共通の出し分け */
+const applyBtn=(attr,id,own,cur,price)=>
+  `<button ${attr}="${id}" ${(own||G.money>=price)&&!cur?'':'disabled'}>${own?(cur?'---':'適用'):'購入'}</button>`;
 function shopBody(){
     let body='';
     if(_shopTab==='mach'){
-      body = '<div class="cost" style="margin:2px 0 6px">設置済みの製造機（Lv↑で生産量が増える。素材は🏭製造タブでセット）</div>';
+      body = shopHead('設置済みの製造機（Lv↑で生産量が増える。素材は🏭製造タブでセット）','margin:2px 0 6px');
       const machs=(G.layout||[]).filter(e=>e.kind==='machine');
-      body += (machs.length?machs:[]).map(e=>{ const c=lvCost(e.lvl), M=MACH[machVariant(e.variant)];
-        return `<div class="rc"><div class="ic">${M.e}</div>
-        <div class="mid"><div class="nm">${M.n} <span style="color:#7fe6ff;font-size:11px">Lv${e.lvl}</span></div>
-        <div class="cost">${slotSummary(e)} ・ 次のLv 💰${c.toLocaleString()}</div></div>
-        <button data-lv="${e.id}" ${G.money>=c?'':'disabled'}>強化</button></div>`; }).join('') || '<div class="cost" style="padding:6px 2px">未設置。🔧編集で在庫から設置</div>';
-      body += '<div class="cost" style="margin:12px 0 6px">製造機を購入（マス数が多いほど素材を多く入れられる＝作れる物が増える）</div>';
-      body += Object.keys(MACH).map(t=>`<div class="rc"><div class="ic">${MACH[t].e}</div>
-        <div class="mid"><div class="nm">${MACH[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${availN('machine',t)}</span></div><div class="cost">💰${MACH[t].price.toLocaleString()}</div></div>
-        <button data-buymach="${t}" ${G.money>=MACH[t].price?'':'disabled'}>購入</button></div>`).join('');
+      body += machs.map(e=>{ const c=lvCost(e.lvl), M=MACH[machVariant(e.variant)];
+        return itemRow({ icon:M.e, key:`mc:${e.id}`,
+          name:`${M.n} <span style="color:#7fe6ff;font-size:11px">Lv${e.lvl}</span>`,
+          sub:`${slotSummary(e)} ・ 次のLv 💰${c.toLocaleString()}`,
+          action:`<button data-lv="${e.id}" ${G.money>=c?'':'disabled'}>強化</button>` });
+      }).join('') || '<div class="cost" style="padding:6px 2px">未設置。🔧編集で在庫から設置</div>';
+      body += shopHead('製造機を購入（マス数が多いほど素材を多く入れられる＝作れる物が増える）');
+      body += Object.keys(MACH).map(t=>itemRow({ icon:MACH[t].e, key:`mb:${t}`,
+        name:`${MACH[t].n} ${stockBadge(availN('machine',t))}`,
+        sub:`💰${MACH[t].price.toLocaleString()}`,
+        action:buyBtn('data-buymach',t,MACH[t].price) })).join('');
     } else if(_shopTab==='equip'){
-      body = '<div class="cost" style="margin:2px 0 8px">購入すると在庫に入ります。設置は 🔧編集 のパレットから床をクリック。</div>';
-      body += '<div class="cost" style="margin:12px 0 6px">装飾プロップ（Stitch製）</div>';
+      body = shopHead('購入すると在庫に入ります。設置は 🔧編集 のパレットから床をクリック。','margin:2px 0 8px');
+      body += shopHead('装飾プロップ（Stitch製）');
       for(const [th,label] of PROP_GROUPS){
         const all=Object.keys(PROP).filter(t=>(PROP[t].th||'')===th);
         if(!all.length) continue;
-        body += `<div class="cost" style="margin:10px 0 4px;color:#7fe6ff">${label}</div>`;
+        body += shopHead(label,'margin:10px 0 4px;color:#7fe6ff');
         // 基本家具(全テーマ共通スロット)と名物(そのテーマだけの一点物)を分けて並べる
         const ks=[...all.filter(t=>PROP[t].fu), ...all.filter(t=>!PROP[t].fu)];
         body += ks.map(t=>{ const sp=(window.PROP_SPAN||{})[t]||1;   // 占有コマ数(見た目の大きさ)
-          return `<div class="rc"><div class="ic">${PROP[t].e}</div>
-          <div class="mid"><div class="nm">${PROP[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('prop',t)}</span></div>
-          <div class="cost">💰${PROP[t].price}${sp>1?` ・ ${sp}コマ`:''}</div></div>
-          <button data-prop="${t}" ${G.money>=PROP[t].price?'':'disabled'}>購入</button></div>`; }).join('');
+          return itemRow({ icon:PROP[t].e, key:`pr:${t}`,
+            name:`${PROP[t].n} ${stockBadge(ownedN('prop',t))}`,
+            sub:`💰${PROP[t].price}${sp>1?` ・ ${sp}コマ`:''}`,
+            action:buyBtn('data-prop',t,PROP[t].price) }); }).join('');
       }
-      body += '<div class="cost" style="margin:12px 0 6px">その他</div>';
-      body += Object.keys(DECO).map(t=>`<div class="rc"><div class="ic">${DECO[t].e}</div>
-        <div class="mid"><div class="nm">${DECO[t].n} <span style="color:#9fb0c0;font-size:10px">在庫 ${ownedN('deco',t)}</span></div><div class="cost">💰${DECO[t].price}</div></div>
-        <button data-deco="${t}" ${G.money>=DECO[t].price?'':'disabled'}>購入</button></div>`).join('');
+      body += shopHead('その他');
+      body += Object.keys(DECO).map(t=>itemRow({ icon:DECO[t].e, key:`dc:${t}`,
+        name:`${DECO[t].n} ${stockBadge(ownedN('deco',t))}`,
+        sub:`💰${DECO[t].price}`,
+        action:buyBtn('data-deco',t,DECO[t].price) })).join('');
     } else if(_shopTab==='decor'){   // 内装（背景=窓の外の景色 / 床材）
-      const bgRow=Object.keys(BG).map(k=>{ const own=G.bgOwned.includes(k),cur=G.bg===k;
-        return `<div class="rc"><div class="ic">${cur?'✅':'🌇'}</div><div class="mid"><div class="nm">背景: ${BG[k].n}</div>
-          <div class="cost">${own?(cur?'使用中':'所持'):'💰'+BG[k].price.toLocaleString()}</div></div>
-          <button data-bg="${k}" ${(own||G.money>=BG[k].price)&&!cur?'':'disabled'}>${own?(cur?'---':'適用'):'購入'}</button></div>`; }).join('');
-      const flRow=Object.keys(FLOOR).map(k=>{ const own=G.floorOwned.includes(k),cur=G.floor===k;
-        return `<div class="rc"><div class="ic">${cur?'✅':'🔲'}</div><div class="mid"><div class="nm">床材: ${FLOOR[k].n}</div>
-          <div class="cost">${own?(cur?'使用中':'所持'):'💰'+FLOOR[k].price.toLocaleString()}</div></div>
-          <button data-fl="${k}" ${(own||G.money>=FLOOR[k].price)&&!cur?'':'disabled'}>${own?(cur?'---':'適用'):'購入'}</button></div>`; }).join('');
-      body = '<div class="cost" style="margin:2px 0 6px">背景（窓の外の景色）</div>'+bgRow+'<div class="cost" style="margin:12px 0 6px">床材</div>'+flRow;
+      const row=(table,attr,ownList,curKey,prefix,curIcon,offIcon)=>Object.keys(table).map(k=>{
+        const own=ownList.includes(k), cur=curKey===k;
+        return itemRow({ icon:cur?curIcon:offIcon, key:`${attr}:${k}`,
+          name:`${prefix}: ${table[k].n}`,
+          sub:own?(cur?'使用中':'所持'):'💰'+table[k].price.toLocaleString(),
+          action:applyBtn(attr,k,own,cur,table[k].price) }); }).join('');
+      body = shopHead('背景（窓の外の景色）','margin:2px 0 6px')
+           + row(BG,'data-bg',G.bgOwned,G.bg,'背景','✅','🌇')
+           + shopHead('床材')
+           + row(FLOOR,'data-fl',G.floorOwned,G.floor,'床材','✅','🔲');
     } else {   // シリーズ（背景＋床＋絵文字装飾のセット）
-      body = '<div class="cost" style="margin:2px 0 8px">背景・床材・装飾をまとめて着せ替え（購入後は無料で再適用）</div>';
+      body = shopHead('背景・床材・装飾をまとめて着せ替え（購入後は無料で再適用）','margin:2px 0 8px');
       body += Object.keys(SERIES).map(k=>{ const S=SERIES[k],own=G.seriesOwned.includes(k),cur=(G.bg===S.sky&&G.floor===S.floor);
-        return `<div class="rc"><div class="ic">${S.n.split(' ')[0]}</div><div class="mid"><div class="nm">${S.n.split(' ')[1]}シリーズ ${cur?'<span style="color:#7fe6ff;font-size:10px">適用中</span>':''}</div>
-          <div class="cost">${S.decos.join(' ')} ・ ${own?'所持':'💰'+S.price.toLocaleString()}</div></div>
-          <button data-series="${k}" ${((own||G.money>=S.price)&&!cur)?'':'disabled'}>${own?(cur?'---':'適用'):'購入'}</button></div>`; }).join('');
+        return itemRow({ icon:S.n.split(' ')[0], key:`sr:${k}`,
+          name:`${S.n.split(' ')[1]}シリーズ ${cur?'<span style="color:#7fe6ff;font-size:10px">適用中</span>':''}`,
+          sub:`${S.decos.join(' ')} ・ ${own?'所持':'💰'+S.price.toLocaleString()}`,
+          action:applyBtn('data-series',k,own,cur,S.price) }); }).join('');
     }
     return body;
 }
