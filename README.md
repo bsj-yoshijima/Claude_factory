@@ -220,7 +220,8 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
                               /api/state ほか（JSON）
                                         │  5秒ポーリング
                                         ▼
-             factory-phaser.html + game/main.js   Phaser のゲーム画面
+        factory-phaser.html（器）→ game/app.mjs → game/ui/*   画面
+                                    game/main.js（Phaser のシーン）
 ```
 
 - 💰 / 在庫 / 図鑑 / 製造の判定は**すべてサーバが唯一の真実**。クライアントの申告は信じない。
@@ -233,7 +234,11 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 |---|---|
 | `server/*.mjs` | **サーバ**（Postgres / OTLP / hooks / ゲームAPI）。[docs/multiuser.md](docs/multiuser.md) |
 | `db/schema.sql` | スキーマ |
-| `factory-phaser.html` / `game/main.js` | **ゲーム画面**（Phaser版。`/`） |
+| `factory-phaser.html` | 画面の器（CSS と DOM だけ）。動きは `game/app.mjs` から始まる |
+| `game/app.mjs` | エントリ。起動の順番と、`main.js`・テストへ渡す窓口 |
+| `game/state.mjs` / `game/net.mjs` / `game/craft.mjs` | 共有状態 / サーバとの出入口 / 製造の状態とボード |
+| `game/ui/*.mjs` | 画面ごと（`dialog` `parts` `collection` `recipes` `craft-dialog` `shop` `leaderboard` `mypage` `agents` `palette` `morph`） |
+| `game/main.js` | Phaser のシーン（クラシックスクリプト）。UI へは `window.__*` 経由 |
 | `assets/room-*.png` | Stitch 生成のテーマ別背景（`docs/stitch-prompts.md` にプロンプト） |
 | `assets/prop_*.png` | 装飾プロップ（汎用12種 + テーマ別6種×5テーマ）。**表示サイズに合わせて縮小済み** |
 | `assets/prop-src/prop_*.png` | 上記の原寸版（切り出したまま・200〜400px）。サイズを変えるときの元データ |
