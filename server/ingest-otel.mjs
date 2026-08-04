@@ -8,7 +8,7 @@
 //     （自己申告なので、そのまま信じるとリーダーボードでなりすませてしまう）
 //   - 1イベント1行を書かず、受信バッチをメモリ上で分バケットに畳んでから UPSERT する
 //     （100人規模で 600 writes/s → 2 writes/s 程度に落ちる）
-//   - event.sequence による重複排除を行う（WP.md §8 ② の未実装項目。再送で二重加算しない）
+//   - event.sequence による重複排除を行う（docs/wp.md §8 ② の未実装項目。再送で二重加算しない）
 import { q, tx } from './db.mjs';
 import { jstDay } from './time.mjs';
 
@@ -41,7 +41,7 @@ const minuteOf = (ms) => Math.floor(ms / 60000);
 const norm = (name) => String(name).replace(/^claude_code\./, '');
 
 /* ===================== 親 / 子（サブエージェント）の判別 =====================
-   実測（WP.md §3）で、子のツール実行は親と同じ session.id の tool_result として
+   実測（docs/wp.md §3）で、子のツール実行は親と同じ session.id の tool_result として
    混ざって届き、query_source も agent.name も付かない。
    ツールは「直前に完了した api_request の応答」として実行されるので、
    直前の api_request の query_source が agent:* ならそのツールは子のもの。

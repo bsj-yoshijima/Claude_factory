@@ -263,7 +263,7 @@ export async function getCollection(user) {
 }
 
 /* ============================= リーダーボード =============================
-   WP.md §9 の原則どおり、単一の合計値は作らず多軸のまま返す。
+   docs/wp.md §9 の原則どおり、単一の合計値は作らず多軸のまま返す。
    期間フィルタ（今日 / 今週 / 今月 / 今年）は旧実装に無かった機能（§8 ⑧）。 */
 const PERIODS = {
   today: () => [jstDay(), jstDay()],
@@ -296,7 +296,7 @@ export async function getLeaderboard(_user, query) {
       WHERE s.day BETWEEN $1 AND $2
       GROUP BY u.id, fa.name`, [from, to]);
 
-  // 効率スコア。最低成果フィルタが無いと「3行しか書いていない人」が1位になる（WP.md §9）
+  // 効率スコア。最低成果フィルタが無いと「3行しか書いていない人」が1位になる（docs/wp.md §9）
   const EFF = { removed: 0.3, prLines: 150, scale: 1000, minPrs: 1, minLines: 100 };
   const sc = rows.map((r) => {
     const linesAdded = Number(r.lines_added), linesRemoved = Number(r.lines_removed);

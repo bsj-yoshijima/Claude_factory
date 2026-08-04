@@ -5,7 +5,7 @@
 //   2. 生ログを全リプレイせず、wp_source_minute（重みをかける前のカウント）から集計する
 //   3. 重みは DB の wp_weights テーブルに置く。UPDATE すれば全期間が即座に再集計される
 //
-// 重みの意味と較正の根拠は WP.md を参照。ここは値の置き場所でしかない。
+// 重みの意味と較正の根拠は docs/wp.md を参照。ここは値の置き場所でしかない。
 import { q, all, one } from './db.mjs';
 import { jstDay } from './time.mjs';
 
@@ -70,7 +70,7 @@ export async function todayWp(userId) {
   return Number(r?.wp || 0);
 }
 
-/** 上限で削られた量。「黙ってクリップしない」ため画面に出す用（WP.md §4） */
+/** 上限で削られた量。「黙ってクリップしない」ため画面に出す用（docs/wp.md §4） */
 export async function capStats(userId) {
   const r = await one(
     `SELECT COALESCE(SUM(wp),0) AS wp, COALESCE(SUM(wp_raw),0) AS raw,

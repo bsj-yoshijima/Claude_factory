@@ -396,7 +396,7 @@ try {
     eq(await tickAt(), t0, 'WPが増えていないポーリングは書き込みを起こさない（空振りtickの廃止）');
   }
 
-  console.log('\n[9] 重みの変更で過去が再集計されること（WP.md §6 の性質）');
+  console.log('\n[9] 重みの変更で過去が再集計されること（docs/wp.md §6 の性質）');
   {
     const before = (await a('GET', '/api/state')).json.wp.total;
     const { pool } = await import('../server/db.mjs');

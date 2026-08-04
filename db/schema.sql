@@ -2,7 +2,7 @@
 --
 -- 設計の要点:
 --   1. WP は「重み付け後の値」ではなく「重みをかける前のカウント」を分バケットで持つ。
---      → 重みを変えれば全期間が即座に再集計される（WP.md §6 の性質を保ったまま、
+--      → 重みを変えれば全期間が即座に再集計される（docs/wp.md §6 の性質を保ったまま、
 --         生ログ 24MB/日/人 を数KB/日/人 に圧縮する）
 --   2. 集計はすべて user_id で分割する。旧 otel.mjs の wpTotal は全ユーザー合算だった。
 --   3. 💰・図鑑・在庫はサーバだけが書き換える。クライアントは結果を受け取るだけ。
@@ -345,7 +345,7 @@ SELECT user_id,
  GROUP BY 1, 2;
 
 -- ============================== スコアカード ==============================
--- ゲーム用 WP とは別系統（WP.md §9）。サブエージェント係数はかけない生カウント。
+-- ゲーム用 WP とは別系統（docs/wp.md §9）。サブエージェント係数はかけない生カウント。
 CREATE TABLE IF NOT EXISTS scorecard_daily (
   user_id        bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   day            date NOT NULL,
@@ -381,7 +381,7 @@ CREATE TABLE IF NOT EXISTS scorecard_names (
 );
 
 -- ============================== 重複排除 ==============================
--- WP.md §8 ② の未実装項目。OTLP はネットワーク越しだと再送が日常なので必須。
+-- docs/wp.md §8 ② の未実装項目。OTLP はネットワーク越しだと再送が日常なので必須。
 CREATE TABLE IF NOT EXISTS ingest_seen (
   user_id    bigint NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   dedup_key  text NOT NULL,
