@@ -247,9 +247,16 @@ class Main extends Phaser.Scene {
     this.load.image('room_dino','assets/room-dino.png');
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/prop_${n}.png`);
-    for(const s of SKINS) if(s.id!=='none') this.load.image('hat_'+s.id, `assets/hat-${s.id}.png`);   // 被り物。未生成でもPhaserは欠損扱い→描画側でexistsチェック
     this.load.text('machfit','assets/mach-fit.json');   // 投入口のアンカー。素材アイコンを絵の口に乗せる
     this.load.text('hatfit','assets/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る(load.json は中身が壊れるとローダーごと落ちるので text 読み)
+    /* 被り物は「用意できているテーマだけ」読む。どれが用意済みかの正は hat-fit.json のキー。
+       SKINS 全部(32種)を投機的に読むと、絵が無いぶんだけ 404 がコンソールに並んで
+       初見の人には壊れているように見える（描画側は exists チェックで無視していた）。
+       hat-fit.json が読めた時点で追加投入する。Phaser はロード中の追加を受け付ける。 */
+    this.load.once('filecomplete-text-hatfit', (_key,_type,data)=>{
+      let ready={}; try{ ready=JSON.parse(data)||{}; }catch(_){}
+      for(const s of SKINS) if(s.id!=='none' && ready[s.id]) this.load.image('hat_'+s.id, `assets/hat-${s.id}.png`);
+    });
     for(const d of DECOR) this.load.image('dec_'+d, `assets/obj_${d}.png`);
     // 製造機スプライト(Stitch製)。命名規約 mach_<theme>_s<N>。無いテーマは normal → 手続き描画 の順にフォールバック
     for(const th of MACH_ART) for(const n of MACH_SIZES) this.load.image(`mach_${th}_s${n}`, `assets/mach-${th}-s${n}.png`);

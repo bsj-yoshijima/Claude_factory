@@ -25,9 +25,11 @@ const SKINS = [
 
 ## テクスチャ規約
 
-- preload: 各 id について `this.load.image('skin_'+id, 'assets/skin-'+id+'.png')`（'none'は除く）。
-  ※アセット未生成でも `this.load` はエラーで落とさない。Phaserは404画像を欠損テクスチャとして扱う
-  だけなので、描画側で `this.textures.exists('skin_'+id)` を必ずチェックしフォールバックする。
+- preload: **用意できている id だけ**読む。どれが用意済みかの正は `assets/hat-fit.json` のキーで、
+  `hat-fit.json` を先に読み、その `filecomplete` で該当ぶんだけ `this.load.image('hat_'+id, ...)` を追加投入する。
+  ※ Phaser は404を欠損テクスチャとして扱うだけなので全idを投機的に読んでも動くが、
+  未生成のぶん（現状25件）がコンソールに404として並び、初見では壊れて見える。
+  描画側の `this.textures.exists('hat_'+id)` チェックは引き続き残す（二重の安全網）。
 - 適用: エージェント `a.skinId`（既定 'none'）。
   - `a.skinId!=='none' && this.textures.exists('skin_'+a.skinId)` のとき、
     `a.sp.setTexture('skin_'+a.skinId)` を stand/work/sit すべてで使う（ポーズ差分なし・簡略化）。
