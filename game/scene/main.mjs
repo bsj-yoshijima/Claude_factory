@@ -27,7 +27,7 @@ export class Main extends Phaser.Scene {
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/rooms/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/props/prop_${n}.png`);
     this.load.text('machfit','assets/machines/mach-fit.json');   // 投入口のアンカー。素材アイコンを絵の口に乗せる
-    this.load.text('hatfit','assets/hats/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)。非対称な飾りでも頭の中心で被る(load.json は中身が壊れるとローダーごと落ちるので text 読み)
+    this.load.text('hatfit','assets/hats/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)＋下げ量(dy=ドット)。非対称な飾りでも頭の中心で被る(load.json は中身が壊れるとローダーごと落ちるので text 読み)
     /* 被り物は「用意できているテーマだけ」読む。どれが用意済みかの正は hat-fit.json のキー。
        SKINS 全部(32種)を投機的に読むと、絵が無いぶんだけ 404 がコンソールに並んで
        初見の人には壊れているように見える（描画側は exists チェックで無視していた）。
@@ -267,15 +267,17 @@ export class Main extends Phaser.Scene {
      (幅を頭幅に正規化, 底辺中央を頭頂へ)。位置/反転/採光は update 側で毎フレーム同期。座り時は頭が1ドット下がる。 */
   setPose(a, pose){
     a.sp.setTexture(`m${a.ci}_${pose}`).setScale(a.scl);
-    a.hatBaseY = HAT_BASE_Y + (pose==='sit'?1:0);
+    const hf=(this.hatFit())[a.skinId] || null;
+    // dy = 深く被せたい被り物ぶんの下げ量(ドット)。空洞が深い兜などは hat-fit.json で個別に下げる
+    a.hatBaseY = HAT_BASE_Y + (pose==='sit'?1:0) + (hf&&typeof hf.dy==='number'?hf.dy:0);
     const has = a.skinId && a.skinId!=='none' && this.textures.exists('hat_'+a.skinId);
     if(has){
       if(!a.hat){ a.hat=this.add.sprite(a.sp.x,a.sp.y,'hat_'+a.skinId); }
       else if(a.hat.texture.key!=='hat_'+a.skinId){ a.hat.setTexture('hat_'+a.skinId); }
-      const hf=(this.hatFit())[a.skinId];
       a.hat.setOrigin(hf&&typeof hf.cx==='number'?hf.cx:0.5, 1);   // ツバ中心=頭に載る中心。飾りが非対称でも中央に被る
       const nw=a.hat.texture.getSourceImage().width;
-      a.hat.setScale((HAT_W_DOT*DOTP*a.scl)/nw).setVisible(true);
+      const wDot = hf&&typeof hf.w==='number' ? hf.w : HAT_W_DOT;   // w = 被り物の横幅(ドット)。既定は頭幅
+      a.hat.setScale((wDot*DOTP*a.scl)/nw).setVisible(true);
     } else if(a.hat){ a.hat.setVisible(false); }
   }
   /* スキン適用: 該当プロジェクトの全エージェント + this.skins マップ更新 + 既存の保存フックで永続化 */

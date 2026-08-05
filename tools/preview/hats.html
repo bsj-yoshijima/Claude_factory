@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>被り物フィットビューア — Claude Factory</title>
+<style>
+  body{margin:0;background:#0c1014;color:#dfe7e3;font:13px/1.6 ui-monospace,Menlo,monospace}
+  header{position:sticky;top:0;z-index:10;background:#0c1014f2;border-bottom:1px solid #1e2a30;
+         padding:8px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  h1{font-size:13px;margin:0;color:#ffd08a;font-weight:700}
+  .hint{color:#8fa39c;flex:1 1 100%;font-size:11px}
+  button{background:#16202a;color:#dfe7e3;border:1px solid #2b3a44;border-radius:6px;
+         padding:4px 9px;font:inherit;cursor:pointer}
+  button:hover{border-color:#4a6472}
+  button.on{background:#2a3a26;border-color:#ffd08a;color:#ffd08a}
+  #grid{display:flex;flex-wrap:wrap;gap:14px;padding:14px}
+  figure{margin:0;text-align:center;color:#8fa39c}
+  .stage{position:relative;background:#141c22;border:1px solid #1e2a30;border-radius:8px;
+         overflow:hidden;touch-action:none}
+  .stage.sel{border-color:#ffd08a}
+  .stage canvas{position:absolute;image-rendering:pixelated}
+  .stage .mascot{left:0;pointer-events:none}
+  body.mode-move  .stage .hat{cursor:grab}
+  body.mode-erase .stage .hat{cursor:crosshair}
+  body.mode-rect  .stage .hat{cursor:crosshair}
+  .stage .marq{position:absolute;border:1px dashed #ffd08a;background:#ffd08a22;pointer-events:none;display:none}
+  figcaption{margin-top:3px;font-size:11px;white-space:pre}
+  figcaption b{color:#dfe7e3;font-weight:400}
+  .dirty figcaption b{color:#ffd08a}
+  .erased figcaption{color:#8fd0a3}
+  #out{position:fixed;right:0;bottom:0;width:min(560px,50vw);max-height:42vh;overflow:auto;
+       background:#0f1620ee;border:1px solid #2b3a44;border-radius:8px 0 0 0;padding:10px;
+       font-size:11px;white-space:pre-wrap;word-break:break-all;display:none}
+  #out.show{display:block}
+</style>
+</head>
+<body class="mode-move">
+<header>
+  <h1>被り物フィットビューア</h1>
+  <button id="m-move" class="on">移動 (V)</button>
+  <button id="m-erase">消しゴム (E)</button>
+  <button id="m-rect">範囲消し (R)</button>
+  <span>ブラシ <span id="brush">1.5</span> ドット</span>
+  <button id="undo">戻す (Ctrl+Z)</button>
+  <button id="btn-json">JSON を見る</button>
+  <button id="btn-copy">JSON をコピー</button>
+  <button id="btn-reset">位置リセット</button>
+  <button id="btn-reset-erase">消し跡リセット</button>
+  <span class="hint" id="status"></span>
+  <span class="hint">
+    移動: ドラッグ=位置 / ホイール・Shift+上下ドラッグ=大きさ / ←↑↓→=0.125ドット(Shiftで4倍) / +−=大きさ / Alt+クリック=その帽子の位置だけリセット<br>
+    消しゴム: なぞって消す（[ ] でブラシ大きさ）。範囲消し: 囲った矩形を消す。どちらも Ctrl+Z で1手ずつ戻せます<br>
+    位置も消し跡もブラウザに残ります。終わったら「反映して」と言ってください（消し跡は PNG に焼き込みます）
+  </span>
+</header>
+<div id="grid"></div>
+<pre id="out"></pre>
+<script type="module">
+import { DOTP, HAT_BASE_Y, HAT_CX, HAT_W_DOT, PRESETS, makeMascot } from '/game/scene/mascot.mjs';
+
+const q = new URLSearchParams(location.search);
+const S = +(q.get('s') || 8);                 // 1ドット= S px（ゲームは DOTP=3）
+const W = 26, H = 28, PAD = 12;               // マスコットのドットサイズ＋上の余白(背の高い被り物用)
+const only = q.get('id');
+const poses = (q.get('pose') || 'stand').split(',');
+const ids = only ? only.split(',') : null;
+const FIT_STORE = 'hatFitEdits';              // 位置・大きさの編集
+const ERA_STORE = 'hatErase';                 // 消し跡(画像の元ピクセル座標)
+const QUANT = 0.125;
+
+const base = await (await fetch('/assets/hats/hat-fit.json', {cache:'no-store'})).json();
+const edits = JSON.parse(localStorage.getItem(FIT_STORE) || '{}');
+const erase = JSON.parse(localStorage.getItem(ERA_STORE) || '{}');   // id -> [{t,x,y,r} | {t,x,y,w,h}]
+const fitOf = (id) => Object.assign({cx:0.5, dy:0, w:HAT_W_DOT}, base[id], edits[id]);
+const saveFit = () => localStorage.setItem(FIT_STORE, JSON.stringify(edits));
+const saveEra = () => localStorage.setItem(ERA_STORE, JSON.stringify(erase));
+
+let mode = 'move', brush = 1.5, sel = null;
+const cards = [];
+const byId = {};                              // id -> カード配列(同じidの全ポーズをまとめて再描画)
+
+// mascot.mjs は Phaser のテクスチャに焼く API しか公開していないので addCanvas を横取りする
+function mascotCanvas(pose){
+  let out = null;
+  makeMascot({ textures:{ exists:()=>false, remove(){}, addCanvas:(k,cv)=>{ out=cv; } } }, 'k', PRESETS[0], pose);
+  return out;
+}
+
+const grid = document.getElementById('grid');
+const out = document.getElementById('out');
+const status = document.getElementById('status');
+
+for(const id of Object.keys(base)){
+  if(ids && !ids.includes(id)) continue;
+  for(const pose of poses){ const c = makeCard(id, pose); cards.push(c); (byId[id] ||= []).push(c); }
+}
+await Promise.all(cards.map(c => c.ready));
+document.body.dataset.ready = '1';
+renderJson();
+
+function makeCard(id, pose){
+  const fig = document.createElement('figure');
+  const st = document.createElement('div');
+  st.className = 'stage';
+  st.style.width = W*S+'px'; st.style.height = (H+PAD)*S+'px';
+  const mc = mascotCanvas(pose);
+  mc.className = 'mascot';
+  mc.style.width = W*S+'px'; mc.style.height = H*S+'px'; mc.style.top = PAD*S+'px';
+  const hat = document.createElement('canvas');       // 被り物は canvas で描く(消しゴムのため)
+  hat.className = 'hat'; hat.style.visibility = 'hidden';
+  const marq = document.createElement('div'); marq.className = 'marq';
+  st.append(mc, hat, marq);
+  const cap = document.createElement('figcaption');
+  fig.append(st, cap); grid.appendChild(fig);
+
+  const card = { id, pose, fig, st, hat, marq, cap, img:null };
+  const im = new Image();
+  im.src = `/assets/hats/hat-${id}.png?v=${q.get('v')||''}`;
+  card.ready = im.decode().catch(()=>{}).then(()=>{
+    card.img = im;
+    hat.width = im.naturalWidth; hat.height = im.naturalHeight;
+    draw(card); layout(card);
+    hat.style.visibility = 'visible';
+  });
+  wire(card);
+  return card;
+}
+
+/* 元画像を描いて、消し跡を destination-out で抜く */
+function draw(card){
+  const g = card.hat.getContext('2d');
+  g.setTransform(1,0,0,1,0,0);
+  g.clearRect(0, 0, card.hat.width, card.hat.height);
+  g.globalCompositeOperation = 'source-over';
+  g.imageSmoothingEnabled = false;
+  g.drawImage(card.img, 0, 0);
+  g.globalCompositeOperation = 'destination-out';
+  for(const s of (erase[card.id] || [])){
+    if(s.t === 'rect') g.fillRect(s.x, s.y, s.w, s.h);
+    else { g.beginPath(); g.arc(s.x, s.y, s.r, 0, Math.PI*2); g.fill(); }
+  }
+  g.globalCompositeOperation = 'source-over';
+  card.fig.classList.toggle('erased', !!(erase[card.id] && erase[card.id].length));
+}
+
+/* ゲームと同じ較正で置く: 幅を w ドットに正規化し、原点(cx,1)を (HAT_CX, HAT_BASE_Y+dy) ドットへ */
+function layout(card){
+  const f = fitOf(card.id);
+  const ratio = card.hat.height / card.hat.width || 1;
+  const wDot = f.w, hDot = wDot * ratio;
+  const baseY = HAT_BASE_Y + (card.pose === 'sit' ? 1 : 0) + f.dy;
+  card.hat.style.width = wDot*S+'px'; card.hat.style.height = hDot*S+'px';
+  card.hat.style.left = (HAT_CX - wDot*f.cx)*S+'px';
+  card.hat.style.top  = (PAD + baseY - hDot)*S+'px';
+  card.fig.classList.toggle('dirty', !!edits[card.id]);
+  const n = (erase[card.id]||[]).length;
+  card.cap.innerHTML = `${card.id} / ${card.pose}${n?` ✂${n}`:''}\n`
+    + `<b>cx ${f.cx.toFixed(3)}  dy ${f.dy.toFixed(3)}  w ${f.w.toFixed(2)}</b>`;
+}
+const relayout = (id) => { for(const c of byId[id]) layout(c); };
+const redraw   = (id) => { for(const c of byId[id]){ draw(c); layout(c); } renderJson(); };
+
+function put(id, patch){
+  const next = Object.assign({}, fitOf(id), patch);
+  next.cx = Math.round(next.cx * 1e4) / 1e4;
+  next.dy = Math.round(next.dy / QUANT) * QUANT;
+  next.w  = Math.round(next.w * 100) / 100;
+  edits[id] = next; saveFit(); relayout(id); renderJson();
+}
+
+/* 画面座標 → 元画像のピクセル座標 */
+function toImg(card, ev){
+  const r = card.hat.getBoundingClientRect();
+  return { x: (ev.clientX - r.left) / r.width  * card.hat.width,
+           y: (ev.clientY - r.top ) / r.height * card.hat.height };
+}
+const brushPx = (card) => brush * (card.hat.width / fitOf(card.id).w) / 2;   // ブラシ半径(元画像px)
+
+function wire(card){
+  const { hat, st, id } = card;
+  st.addEventListener('pointerdown', (e) => {
+    select(card);
+    if(e.target !== hat) return;
+    e.preventDefault();
+    if(mode === 'move')  return dragMove(card, e);
+    if(mode === 'erase') return dragErase(card, e);
+    if(mode === 'rect')  return dragRect(card, e);
+  });
+  st.addEventListener('wheel', (e) => {
+    e.preventDefault(); select(card);
+    if(mode === 'move') put(id, { w: Math.max(4, fitOf(id).w - Math.sign(e.deltaY)*0.5) });
+    else setBrush(brush - Math.sign(e.deltaY)*0.25);
+  }, {passive:false});
+}
+
+// 監視は window に付ける(帽子の外へポインタが出ても追従する)
+function follow(move, up){
+  const done = (ev) => { move.cleanup && move.cleanup(ev);
+    removeEventListener('pointermove', move); removeEventListener('pointerup', done);
+    removeEventListener('mousemove', move);   removeEventListener('mouseup', done); up && up(ev); };
+  addEventListener('pointermove', move); addEventListener('pointerup', done);
+  addEventListener('mousemove', move);   addEventListener('mouseup', done);
+}
+
+function dragMove(card, e){
+  const id = card.id, f0 = fitOf(id), x0 = e.clientX, y0 = e.clientY;
+  if(e.altKey){ delete edits[id]; saveFit(); relayout(id); renderJson(); return; }
+  follow((ev) => {
+    const dx = (ev.clientX - x0)/S, dy = (ev.clientY - y0)/S;   // ドット単位
+    if(ev.shiftKey) put(id, { w: Math.max(4, f0.w - dy) });     // Shift+上下=大きさ
+    else put(id, { cx: f0.cx - dx/f0.w, dy: f0.dy + dy });      // 左右は原点比で持つ
+  });
+}
+
+function dragErase(card, e){
+  const id = card.id, list = (erase[id] ||= []);
+  const r = brushPx(card);
+  const stroke = [];                       // 1ドラッグ=1手として Ctrl+Z で戻せるようまとめる
+  const add = (p) => { const s = {t:'b', x:Math.round(p.x), y:Math.round(p.y), r:Math.round(r)};
+    stroke.push(s); list.push(s); };
+  add(toImg(card, e)); draw(card);
+  let last = toImg(card, e);
+  follow((ev) => {
+    const p = toImg(card, ev);
+    const d = Math.hypot(p.x-last.x, p.y-last.y), step = Math.max(1, r/2);
+    for(let t = step; t <= d; t += step)     // 間を補間して線が途切れないように
+      add({ x: last.x + (p.x-last.x)*t/d, y: last.y + (p.y-last.y)*t/d });
+    add(p); last = p; redraw(id);
+  }, () => { if(stroke.length){ undoStack.push({id, n:stroke.length}); saveEra(); redraw(id); } });
+}
+
+function dragRect(card, e){
+  const id = card.id, a = toImg(card, e);
+  const r0 = card.hat.getBoundingClientRect(), st = card.st.getBoundingClientRect();
+  const sx = e.clientX, sy = e.clientY;
+  card.marq.style.display = 'block';
+  const paint = (ev) => {
+    const x = Math.min(sx, ev.clientX) - st.left, y = Math.min(sy, ev.clientY) - st.top;
+    card.marq.style.left = x+'px'; card.marq.style.top = y+'px';
+    card.marq.style.width = Math.abs(ev.clientX-sx)+'px'; card.marq.style.height = Math.abs(ev.clientY-sy)+'px';
+  };
+  follow(paint, (ev) => {
+    card.marq.style.display = 'none';
+    const b = toImg(card, ev);
+    const x = Math.round(Math.min(a.x,b.x)), y = Math.round(Math.min(a.y,b.y));
+    const w = Math.round(Math.abs(b.x-a.x)), h = Math.round(Math.abs(b.y-a.y));
+    if(w < 1 || h < 1) return;
+    (erase[id] ||= []).push({t:'rect', x, y, w, h});
+    undoStack.push({id, n:1}); saveEra(); redraw(id);
+  });
+}
+
+const undoStack = [];
+function undo(){
+  const last = undoStack.pop(); if(!last) return;
+  (erase[last.id] || []).splice(-last.n);
+  if(!erase[last.id].length) delete erase[last.id];
+  saveEra(); redraw(last.id);
+}
+
+function select(card){
+  if(sel) sel.st.classList.remove('sel');
+  sel = card; card.st.classList.add('sel');
+  renderJson();
+}
+function setMode(m){
+  mode = m; document.body.className = 'mode-'+m;
+  for(const k of ['move','erase','rect']) document.getElementById('m-'+k).classList.toggle('on', k===m);
+}
+function setBrush(v){ brush = Math.min(12, Math.max(0.25, Math.round(v*4)/4));
+  document.getElementById('brush').textContent = brush; }
+
+addEventListener('keydown', (e) => {
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){ undo(); e.preventDefault(); return; }
+  const k = e.key;
+  if(k === 'v' || k === 'V'){ setMode('move');  return; }
+  if(k === 'e' || k === 'E'){ setMode('erase'); return; }
+  if(k === 'r' || k === 'R'){ setMode('rect');  return; }
+  if(k === '['){ setBrush(brush - 0.25); return; }
+  if(k === ']'){ setBrush(brush + 0.25); return; }
+  if(!sel) return;
+  const f = fitOf(sel.id), step = e.shiftKey ? QUANT*4 : QUANT;
+  if(k === 'ArrowLeft')  put(sel.id, { cx: f.cx + step/f.w });
+  else if(k === 'ArrowRight') put(sel.id, { cx: f.cx - step/f.w });
+  else if(k === 'ArrowUp')    put(sel.id, { dy: f.dy - step });
+  else if(k === 'ArrowDown')  put(sel.id, { dy: f.dy + step });
+  else if(k === '+' || k === '=') put(sel.id, { w: f.w + 0.5 });
+  else if(k === '-' || k === '_') put(sel.id, { w: Math.max(4, f.w - 0.5) });
+  else return;
+  e.preventDefault();
+});
+
+/* hat-fit.json にそのまま貼れる形。既定値(dy=0 / w=19)は省く */
+function json(){
+  const rows = Object.keys(base).map(id => {
+    const f = fitOf(id), parts = [`"cx": ${f.cx}`];
+    if(Math.abs(f.dy) > 1e-9) parts.push(`"dy": ${f.dy}`);
+    if(Math.abs(f.w - HAT_W_DOT) > 1e-9) parts.push(`"w": ${f.w}`);
+    return `"${id}": {${parts.join(', ')}}`;
+  });
+  return '{' + rows.join(', ') + '}';
+}
+function renderJson(){
+  out.textContent = json();
+  const nf = Object.keys(edits).length, ne = Object.keys(erase).length;
+  status.textContent = (sel ? `選択 ${sel.id} / ` : '') + `位置 ${nf} 件 / 消し跡 ${ne} 件`;
+}
+/* 消し跡の書き出し用: 「元は不透明だったが今は透明」な画素を行ごとのランレングスで返す。
+   ストロークの列そのままだと数千手になって受け渡しが重いので、結果のマスクだけを渡す。
+   形式: { "<id>": {w, h, rle:"y:s-e,s-e;y:..."} } (s-e は x の閉区間) */
+window.__eraseMask = () => {
+  const outp = {};
+  for(const id of Object.keys(erase)){
+    const card = byId[id] && byId[id][0]; if(!card) continue;
+    const w = card.hat.width, h = card.hat.height;
+    const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h;
+    const tg = tmp.getContext('2d'); tg.imageSmoothingEnabled = false; tg.drawImage(card.img, 0, 0);
+    const o = tg.getImageData(0,0,w,h).data, c = card.hat.getContext('2d').getImageData(0,0,w,h).data;
+    const rows = [];
+    for(let y = 0; y < h; y++){
+      let runs = '', s = -1;
+      for(let x = 0; x <= w; x++){
+        const i = (y*w + x)*4 + 3;
+        const gone = x < w && o[i] > 0 && c[i] === 0;
+        if(gone && s < 0) s = x;
+        else if(!gone && s >= 0){ runs += (runs?',':'') + s + '-' + (x-1); s = -1; }
+      }
+      if(runs) rows.push([y, runs]);
+    }
+    // 同じ並びが続く行はまとめる("y1-y2:s-e")。ベタ塗りの塊で行数が一気に減る
+    const packed = [];
+    for(const [y, runs] of rows){
+      const last = packed[packed.length-1];
+      if(last && last.runs === runs && last.y1 === y-1) last.y1 = y;
+      else packed.push({y0:y, y1:y, runs});
+    }
+    outp[id] = { w, h, rle: packed.map(p => (p.y0===p.y1 ? p.y0 : p.y0+'-'+p.y1) + ':' + p.runs).join(';') };
+  }
+  return outp;
+};
+
+document.getElementById('m-move').onclick  = () => setMode('move');
+document.getElementById('m-erase').onclick = () => setMode('erase');
+document.getElementById('m-rect').onclick  = () => setMode('rect');
+document.getElementById('undo').onclick = undo;
+document.getElementById('btn-json').onclick = () => out.classList.toggle('show');
+document.getElementById('btn-copy').onclick = async () => {
+  await navigator.clipboard.writeText(json()).catch(()=>{});
+  status.textContent = 'コピーしました';
+};
+document.getElementById('btn-reset').onclick = () => {
+  for(const k of Object.keys(edits)) delete edits[k];
+  localStorage.removeItem(FIT_STORE);
+  for(const c of cards) layout(c); renderJson();
+};
+document.getElementById('btn-reset-erase').onclick = () => {
+  for(const k of Object.keys(erase)) delete erase[k];
+  localStorage.removeItem(ERA_STORE); undoStack.length = 0;
+  for(const c of cards){ draw(c); layout(c); } renderJson();
+};
+</script>
+</body>
+</html>

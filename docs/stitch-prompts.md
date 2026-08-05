@@ -85,7 +85,71 @@ Each object clearly readable as a small game prop.
 
 ---
 
-## 3. エージェント・スキンテンプレート（skin-<id>.png）
+## 3. 被り物テンプレート（hats/hat-<id>.png）★現行方式
+
+スキン = **手続きマスコットの頭に被り物を1枚重ねる**。31テーマぶん生成済み。
+シート生成はStitchが頭の輪郭まで描く癖があるので、**1個ずつ単体生成**する。
+
+### プロンプト（`{{ITEM}}` だけ差し替える。それ以外は固定）
+
+```
+Pixel-art game asset image: ONE single piece of headwear only, front view, centered, filling most of the frame.
+Style: lo-fi 8-bit Famicom pixel-art, VERY chunky pixels, thick clean black outlines, flat vibrant colors, high contrast, simple 2-tone shading.
+ITEM: {{ITEM}}
+IMPORTANT: draw ONLY the headwear itself — NO head, NO face, NO ears, NO character, NO mannequin, NO stand, NO shadow, NO ground, NO text, NO labels, NO UI, NO frame, NO border.
+The bottom edge of the headwear is the hollow opening where a head would go: keep it straight, symmetric and horizontal so the sprite can be pasted on top of a character's head.
+Background: solid pure MAGENTA (#FF00FF) flat fill everywhere around the headwear.
+```
+
+`{{ITEM}}` は `a SAMURAI KABUTO helmet — navy-and-gold lacquered bowl …` のように
+**大文字の品名 + em dash + 形・色・飾りの列挙**で書く。発光色に**マゼンタは使わない**（背景と混ざって抜ける）。
+
+### 抜き（tools/assets/key_hat.py）
+
+```
+python3 tools/assets/key_hat.py <raw.png> assets/hats/hat-<id>.png [--keep-hollow] [--fill=0.5,0.6]
+```
+
+- 背景マゼンタは縁からの flood fill ＋ ほぼ純マゼンタ(r>200,b>200,g<80)の無条件除去。
+- 既定では「頭が入る空洞の黒ベタ」も抜く（黒マスクを収縮した最大成分＝空洞。輪郭線は残る）。
+- `--keep-hollow`: バイザー・仮面・髪など**暗い面を残したい**ものに必須
+  （tokyo / circuit / space / scifi / carnival / haunted / halloween / hell がこれ）。
+- `--fill=x,y`: 空洞が純マゼンタから外れた色で塗られていた場合の逃げ道（幅/高さの比で位置指定）。
+
+### 較正（assets/hats/hat-fit.json）
+
+`{ "<id>": { "cx": 0.5, "dy": 3.375 } }`
+
+- `cx` = 頭に載る中心（幅比）。左右対称なら 0.5。非対称な飾りがあるものだけずらす。
+- `dy` = 下げ量（ドット）。空洞が深い兜・フード・バイザーは下げて深く被せる。
+- `w` = 横幅（ドット）。既定は頭幅の `HAT_W_DOT=19`。大きく見せたい兜や小さい紙帽で変える。
+  共通の載せ位置は `mascot.mjs` の `HAT_W_DOT=19 / HAT_CX=12.5 / HAT_BASE_Y=10.8`。
+- **このJSONのキーが「生成済み」の正**。preload はここにある id だけ読む（未生成の404を出さない）。
+
+### 位置決め・切り取り（tools/preview/hats.html）
+
+ゲームと同じ較正でマスコットに重ねるビューア。`?id=japan,egypt` で絞り込み、
+`?pose=stand,work,sit`、`?v=<数字>` でキャッシュ回避。
+
+- **移動(V)**: ドラッグ=位置 / ホイール・Shift+上下=大きさ / ←↑↓→=0.125ドット / Alt+クリック=リセット
+- **消しゴム(E) / 範囲消し(R)**: 絵の一部を落とす。Ctrl+Z で1手ずつ戻る
+- 値と消し跡は localStorage に溜まる。`JSON をコピー` で `hat-fit.json` に貼り、
+  消し跡は `window.__eraseMask()` の出力を `tools/assets/erase_hat.py` に食わせて PNG に焼く
+- 空洞が頭より広いと開口部から背景が見えるので、`dy` は「目が隠れない」ぎりぎりで止める
+
+### 軽量化（tools/assets/shrink_hats.py）
+
+```
+python3 tools/assets/shrink_hats.py --backup=<原画の退避先> --max=256
+```
+
+盤面での実寸は横 17〜46px しかないので、原画のままだと1枚 200〜600KB は完全に無駄。
+**整数分の1に NEAREST 縮小（長辺256px）＋ PNG8 パレット化（α2値）** で 31件 8.8MB → 0.5MB。
+縦横比を保つので `cx / dy / w` はそのまま通る。すでに PNG8 のファイルは触らない（何度流しても安全）。
+
+---
+
+## 3-b. エージェント・スキンテンプレート（skin-<id>.png）※旧方式・撤回済み
 
 スキン = **今のマスコットに装備を着せた"1枚絵"**。別キャラは作らない。ベースを固定し装備だけ変える。
 1シートに複数キャラを2×3等で並べ→マゼンタ抜き→個別スライス→`assets/skin-<id>.png`。
