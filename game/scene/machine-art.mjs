@@ -137,7 +137,11 @@ export const MachineArt = {
       // 本体が数px持ち上がって浮いて見える(土台が絵の下から食み出す)。
       let imy=by1;
       if(fitA && fitA.gy!=null){
-        const dd=D, cc=C;                                 // 足元の四角形の手前(下)の辺 D→C
+        /* 合わせる先は「機械の長辺のうち手前側の辺」。C は常に最手前の角だが、
+           長辺は向きで入れ替わる: u向き(右下がり)は D→C、v向き(右上がり)は B→C。
+           どちらでも D→C を使うと、v向きのときだけ短辺(手前の角の 22px)の
+           延長線で高さを取ることになり、絵が1マス弱ぶん手前へ落ちる。 */
+        const dd=flip?B:D, cc=C;
         const fy=(cc.x===dd.x)? cc.y : dd.y+(sx0-dd.x)*(cc.y-dd.y)/(cc.x-dd.x);
         imy = fy + dh*(1-fitA.gy);                        // 接地線が fy に来るよう下端を決める
       }
