@@ -7,8 +7,10 @@ export const RAR={1:{n:'N',c:'#9fb0c0',w:58},2:{n:'R',c:'#5fa8e0',w:27},3:{n:'SR
 // ===== 価格・レート（すべて調整可） =====
 // 製造機は「マス数」で選ぶ。1マス=素材スロット1つ。入っている素材の組合せで作れる物が変わる。
 // 製造機は2〜5マス（1マス機は廃止）。最小の2マス機が最初の1台。
-export const MACH={ s2:{e:'2️⃣',n:'製造機 2マス',price:0},      s3:{e:'3️⃣',n:'製造機 3マス',price:6500},
-             s4:{e:'4️⃣',n:'製造機 4マス',price:15000},  s5:{e:'5️⃣',n:'製造機 5マス',price:34000} };
+// ic = ドット絵アイコン(assets/ui/icons/*.png / tools/assets/make_menu_icons.mjs 生成)。
+//      HTMLを置ける場所ではこちらを出す。e(絵文字)はトースト・title属性など文字列だけの場所用。
+export const MACH={ s2:{e:'2️⃣',ic:'mach2',n:'製造機 2マス',price:0},      s3:{e:'3️⃣',ic:'mach3',n:'製造機 3マス',price:6500},
+             s4:{e:'4️⃣',ic:'mach4',n:'製造機 4マス',price:15000},  s5:{e:'5️⃣',ic:'mach5',n:'製造機 5マス',price:34000} };
 export const machVariant=(t)=> MACH[t] ? t : 's2';   // 旧4種(red等)・旧1マス機(s1) はすべて2マス機に読み替え
 export const lvCost=(lvl)=> Math.round(120*lvl*lvl);        // レベルアップ費用
 export const DECO={ crate:{e:'📦',n:'木箱',price:150}, drum:{e:'🛢️',n:'ドラム缶',price:200}, plant:{e:'🪴',n:'観葉植物',price:180}, pallet:{e:'🧱',n:'パレット',price:160}, sign:{e:'🚧',n:'標識',price:220} };
@@ -193,47 +195,50 @@ export const PROP={ vase:{e:'🏺',n:'装飾壺',price:220}, palm:{e:'🌴',n:'�
   ons_rug:{e:'🍁',n:'紅葉の畳マット',price:240,th:'onsen',fu:1},       ons_lamp:{e:'🏮',n:'行灯',price:260,th:'onsen',fu:1},
   ons_plant:{e:'🍁',n:'紅葉の鉢植え',price:220,th:'onsen',fu:1},       ons_rotenburo:{e:'♨️',n:'岩風呂',price:380,th:'onsen'} };
 // ショップでプロップをテーマ別に見出し分けする
-export const PROP_GROUPS=[['','🧰 汎用'],
-  ['japan','⛩️ 日本'],['onsen','♨️ 温泉'],['tokyo','🌃 Tokyo'],['sushi','🍣 回転寿司'],['china','🐉 中華'],
-  ['arabia','🕌 アラビア'],['desert','🏜️ 砂漠'],['egypt','🔺 エジプト'],['jungle','🌿 ジャングル'],['undersea','🐚 海底'],
-  ['diner','🍔 ダイナー'],['cabin','🌲 森コテージ'],['mushroom','🍄 森のキノコ'],['ice','❄️ 氷の城'],['christmas','🎄 クリスマス'],
-  ['fantasy','🧙 ファンタジー'],['dwarf','⛏️ ドワーフ鉱山'],['hell','😈 地獄'],['haunted','👻 幽霊屋敷'],['halloween','🎃 ハロウィン'],
-  ['pirate','🏴‍☠️ 海賊船'],['western','🤠 西部開拓'],['dino','🦖 ダイナソー'],['circus','🎪 サーカス'],['carnival','🎭 カーニバル'],
-  ['circuit','🏁 サーキット'],['steampunk','⚙️ スチームパンク'],['retrofuture','🛸 レトロ未来'],['scifi','🚀 SF宇宙'],['space','🛰️ 宇宙'],
-  ['beehive','🐝 ミツバチの巣']];
+/* 装飾プロップの絞り込み見出し。[テーマキー, 表示名]。
+   アイコンは assets/ui/icons/theme-<キー>.png（部屋の絵の縮小版）を
+   キーから引くので、ラベルに絵文字は持たせない（'' = 汎用だけ部屋が無い）。 */
+export const PROP_GROUPS=[['','汎用'],
+  ['japan','日本'],['onsen','温泉'],['tokyo','Tokyo'],['sushi','回転寿司'],['china','中華'],
+  ['arabia','アラビア'],['desert','砂漠'],['egypt','エジプト'],['jungle','ジャングル'],['undersea','海底'],
+  ['diner','ダイナー'],['cabin','森コテージ'],['mushroom','森のキノコ'],['ice','氷の城'],['christmas','クリスマス'],
+  ['fantasy','ファンタジー'],['dwarf','ドワーフ鉱山'],['hell','地獄'],['haunted','幽霊屋敷'],['halloween','ハロウィン'],
+  ['pirate','海賊船'],['western','西部開拓'],['dino','ダイナソー'],['circus','サーカス'],['carnival','カーニバル'],
+  ['circuit','サーキット'],['steampunk','スチームパンク'],['retrofuture','レトロ未来'],['scifi','SF宇宙'],['space','宇宙'],
+  ['beehive','ミツバチの巣']];
 export const BG={ auto:{n:'標準（時刻連動）',price:0}, blue:{n:'快晴',price:1800}, sunset:{n:'夕焼け',price:2200}, night:{n:'星空',price:2600}, space:{n:'宇宙',price:4200}, aurora:{n:'オーロラ',price:5200} };
 export const FLOOR={ wood:{n:'木材（標準）',price:0}, cool:{n:'クールグレー',price:1000}, crimson:{n:'レッドタイル',price:1200}, forest:{n:'フォレスト',price:1200}, gold:{n:'ゴールド',price:3200} };
 // テーマシリーズ: 空テーマ(sky)＋床材(floor)＋絵文字装飾セット(decos) をまとめて購入/適用
 export const SERIES={
-  arabia:{n:'🕌 アラビア', price:6000, sky:'arabia',   floor:'wood',    decos:[]},
-  undersea:{n:'🐚 海底',   price:6000, sky:'undersea', floor:'wood',    decos:[]},
-  japan:{n:'⛩️ 日本',      price:6000, sky:'japan',    floor:'wood',    decos:[]},
-  china:{n:'🐉 中華',      price:6000, sky:'china',    floor:'wood',    decos:[]},
-  diner:{n:'🍔 ダイナー',   price:6000, sky:'diner',    floor:'wood',    decos:[]},
-  fantasy:{n:'🧙 ファンタジー', price:6000, sky:'fantasy', floor:'wood', decos:[]},
-  scifi:{n:'🚀 SF宇宙',    price:6000, sky:'scifi',    floor:'wood',    decos:[]},
-  cabin:{n:'🌲 森コテージ', price:6000, sky:'cabin',    floor:'wood',    decos:[]},
-  dino:{n:'🦖 ダイナソー',  price:6000, sky:'dino',     floor:'wood',    decos:[]},
-  haunted:{n:'👻 幽霊屋敷',  price:6000, sky:'haunted',  floor:'wood',    decos:[]},
-  pirate:{n:'🏴‍☠️ 海賊船',   price:6000, sky:'pirate',   floor:'wood',    decos:[]},
-  circuit:{n:'🏁 サーキット', price:6000, sky:'circuit',  floor:'wood',    decos:[]},
-  dwarf:{n:'⛏️ ドワーフ鉱山', price:6000, sky:'dwarf',    floor:'wood',    decos:[]},
-  hell:{n:'😈 地獄',         price:6000, sky:'hell',     floor:'wood',    decos:[]},
-  steampunk:{n:'⚙️ スチパン', price:6000, sky:'steampunk',floor:'wood',    decos:[]},
-  retrofuture:{n:'🛸 レトロ未来', price:6000, sky:'retrofuture',floor:'wood', decos:[]},
-  tokyo:{n:'🌃 Tokyo',      price:6000, sky:'tokyo',    floor:'wood',    decos:[]},
-  halloween:{n:'🎃 ハロウィン', price:6000, sky:'halloween',floor:'wood', decos:[]},
-  western:{n:'🤠 西部開拓時代', price:6000, sky:'western',floor:'wood', decos:[]},
-  sushi:{n:'🍣 回転寿司', price:6000, sky:'sushi',floor:'wood', decos:[]},
-  beehive:{n:'🐝 ミツバチの巣', price:6000, sky:'beehive',floor:'wood', decos:[]},
-  circus:{n:'🎪 サーカス', price:6000, sky:'circus',floor:'wood', decos:[]},
-  carnival:{n:'🎭 カーニバル', price:6000, sky:'carnival',floor:'wood', decos:[]},
-  desert:{n:'🏜️ 砂漠', price:6000, sky:'desert',floor:'wood', decos:[]},
-  jungle:{n:'🌴 ジャングル', price:6000, sky:'jungle',floor:'wood', decos:[]},
-  egypt:{n:'🔺 古代エジプト', price:6000, sky:'egypt',floor:'wood', decos:[]},
-  christmas:{n:'🎄 クリスマス', price:6000, sky:'christmas',floor:'wood', decos:[]},
-  space:{n:'🚀 宇宙ステーション', price:6000, sky:'space',floor:'wood', decos:[]},
-  ice:{n:'🧊 氷の城', price:6000, sky:'ice',floor:'wood', decos:[]},
-  mushroom:{n:'🍄 森のキノコ', price:6000, sky:'mushroom',floor:'wood', decos:[]},
-  onsen:{n:'♨️ 和風温泉', price:6000, sky:'onsen',floor:'wood', decos:[]},
+  arabia:{n:'アラビア', price:6000, sky:'arabia',   floor:'wood',    decos:[]},
+  undersea:{n:'海底',   price:6000, sky:'undersea', floor:'wood',    decos:[]},
+  japan:{n:'日本',      price:6000, sky:'japan',    floor:'wood',    decos:[]},
+  china:{n:'中華',      price:6000, sky:'china',    floor:'wood',    decos:[]},
+  diner:{n:'ダイナー',   price:6000, sky:'diner',    floor:'wood',    decos:[]},
+  fantasy:{n:'ファンタジー', price:6000, sky:'fantasy', floor:'wood', decos:[]},
+  scifi:{n:'SF宇宙',    price:6000, sky:'scifi',    floor:'wood',    decos:[]},
+  cabin:{n:'森コテージ', price:6000, sky:'cabin',    floor:'wood',    decos:[]},
+  dino:{n:'ダイナソー',  price:6000, sky:'dino',     floor:'wood',    decos:[]},
+  haunted:{n:'幽霊屋敷',  price:6000, sky:'haunted',  floor:'wood',    decos:[]},
+  pirate:{n:'海賊船',   price:6000, sky:'pirate',   floor:'wood',    decos:[]},
+  circuit:{n:'サーキット', price:6000, sky:'circuit',  floor:'wood',    decos:[]},
+  dwarf:{n:'ドワーフ鉱山', price:6000, sky:'dwarf',    floor:'wood',    decos:[]},
+  hell:{n:'地獄',         price:6000, sky:'hell',     floor:'wood',    decos:[]},
+  steampunk:{n:'スチパン', price:6000, sky:'steampunk',floor:'wood',    decos:[]},
+  retrofuture:{n:'レトロ未来', price:6000, sky:'retrofuture',floor:'wood', decos:[]},
+  tokyo:{n:'Tokyo',      price:6000, sky:'tokyo',    floor:'wood',    decos:[]},
+  halloween:{n:'ハロウィン', price:6000, sky:'halloween',floor:'wood', decos:[]},
+  western:{n:'西部開拓時代', price:6000, sky:'western',floor:'wood', decos:[]},
+  sushi:{n:'回転寿司', price:6000, sky:'sushi',floor:'wood', decos:[]},
+  beehive:{n:'ミツバチの巣', price:6000, sky:'beehive',floor:'wood', decos:[]},
+  circus:{n:'サーカス', price:6000, sky:'circus',floor:'wood', decos:[]},
+  carnival:{n:'カーニバル', price:6000, sky:'carnival',floor:'wood', decos:[]},
+  desert:{n:'砂漠', price:6000, sky:'desert',floor:'wood', decos:[]},
+  jungle:{n:'ジャングル', price:6000, sky:'jungle',floor:'wood', decos:[]},
+  egypt:{n:'古代エジプト', price:6000, sky:'egypt',floor:'wood', decos:[]},
+  christmas:{n:'クリスマス', price:6000, sky:'christmas',floor:'wood', decos:[]},
+  space:{n:'宇宙ステーション', price:6000, sky:'space',floor:'wood', decos:[]},
+  ice:{n:'氷の城', price:6000, sky:'ice',floor:'wood', decos:[]},
+  mushroom:{n:'森のキノコ', price:6000, sky:'mushroom',floor:'wood', decos:[]},
+  onsen:{n:'和風温泉', price:6000, sky:'onsen',floor:'wood', decos:[]},
 };

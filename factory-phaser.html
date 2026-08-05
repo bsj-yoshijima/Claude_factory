@@ -29,10 +29,16 @@
   #menuBtn{position:absolute;top:10px;right:12px;z-index:11;cursor:pointer;font-size:16px;line-height:1;
            background:var(--panel);border:1px solid var(--edge);border-radius:8px;padding:7px 11px;color:var(--mint);backdrop-filter:blur(3px)}
   #menuBtn:hover{border-color:var(--mint)}
-  #menu{position:absolute;top:46px;right:12px;z-index:11;display:none;flex-direction:column;gap:2px;min-width:172px;
+  #menu{position:absolute;top:46px;right:12px;z-index:11;display:none;flex-direction:column;gap:2px;min-width:176px;
         background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:6px;backdrop-filter:blur(5px)}
   #menu.show{display:flex}
-  #menu .mi{padding:8px 11px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--ink);text-decoration:none;display:block}
+  #menu .mi{padding:7px 11px;border-radius:7px;cursor:pointer;font-size:12px;color:var(--ink);text-decoration:none;
+            display:flex;align-items:center;gap:9px}
+  /* アイコンは 16×16 のドット絵（assets/ui/icons）。原寸で出し、
+     高解像度画面での整数倍拡大だけ pixelated に任せる。半端な倍率で縮めると
+     ドットが間引かれるので、大きさを変えるときは
+     tools/assets/make_menu_icons.mjs のグリッドごと描き直すこと。 */
+  #menu .mic{width:16px;height:16px;flex:none;image-rendering:pixelated}
   #menu .mi:hover{background:#1d262c;color:var(--gold)}
   /* 役割ごとの小見出しと区切り（工場 / 仲間 / 記録） */
   #menu .mh{font-size:9px;letter-spacing:.14em;color:#7f9a92;text-transform:uppercase;padding:5px 11px 3px}
@@ -116,6 +122,18 @@
   .sttab.pill{border-radius:8px}
   .rc{display:flex;align-items:center;gap:10px;background:#10171b;border:1px solid #243036;border-radius:9px;padding:8px 11px;margin:6px 0}
   .rc .ic{font-size:26px;width:34px;text-align:center}
+  /* UI機能のドット絵アイコン（16×16・assets/ui/icons）。文字と並べるので少し下げる。
+     lg は整数2倍の32px（#craft のロゴなど文字より大きく出す場所用） */
+  .uic{width:16px;height:16px;image-rendering:pixelated;vertical-align:-3px}
+  /* テーマのサムネイル（assets/ui/icons/theme-*.png = 部屋の絵の縮小版）。
+     ドット絵ではないので pixelated にはしない（縮小に補間が要る）。
+     64×64 を CSS で縮めて出す: 行やチップでは18px、パレットのマスでは38px */
+  .thumb{width:18px;height:18px;border-radius:4px;object-fit:cover;vertical-align:-4px;margin-right:4px}
+  .rc .ic .thumb,.pitem .thumb{width:38px;height:38px;border-radius:6px;margin:0}
+  .uic.lg{width:32px;height:32px;vertical-align:-9px}
+  /* 製造機のドット絵アイコン（32×32・assets/ui/icons）。行の .ic と編集パレットの
+     .pitem で共通。原寸で出す（半端な倍率で縮めるとドットが濁る） */
+  .micon{width:32px;height:32px;image-rendering:pixelated;vertical-align:middle}
   .rc .mid{flex:1;min-width:0}
   .rc .nm{font-size:13px;color:#eafff4;font-weight:700}
   .rc button{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:7px;padding:8px 13px;cursor:pointer;font-family:inherit;font-size:12px}
@@ -298,26 +316,26 @@
 <body>
 <div id="wrap">
   <div id="game"></div>
-  <div id="note">🏭 Claude Factory</div>
+  <div id="note"><img class="uic" src="assets/ui/icons/factory.png" alt=""> Claude Factory</div>
   <div id="menuBtn" title="メニュー">☰</div>
   <div id="menu">
     <div class="mh">あなた</div>
-    <div class="mi" id="myBtn">🏠 マイページ</div>
+    <div class="mi" id="myBtn"><img class="mic" src="assets/ui/icons/mypage.png" alt="">マイページ</div>
     <div class="msep"></div>
     <div class="mh">工場</div>
-    <div class="mi" id="recipeBtn">🧾 製造レシピ</div>
-    <div class="mi" id="shopBtn">🏪 ショップ</div>
-    <div class="mi" id="editMenuBtn">🔧 レイアウト編集</div>
+    <div class="mi" id="recipeBtn"><img class="mic" src="assets/ui/icons/recipe.png" alt="">製造レシピ</div>
+    <div class="mi" id="shopBtn"><img class="mic" src="assets/ui/icons/shop.png" alt="">ショップ</div>
+    <div class="mi" id="editMenuBtn"><img class="mic" src="assets/ui/icons/layout.png" alt="">レイアウト編集</div>
     <div class="msep"></div>
     <div class="mh">記録</div>
-    <div class="mi" id="collectionBtn">📖 図鑑</div>
-    <div class="mi" id="lbBtn">🏆 リーダーボード</div>
+    <div class="mi" id="collectionBtn"><img class="mic" src="assets/ui/icons/collection.png" alt="">図鑑</div>
+    <div class="mi" id="lbBtn"><img class="mic" src="assets/ui/icons/leaderboard.png" alt="">リーダーボード</div>
   </div>
   <div id="topwrap">
     <div id="board"></div>
     <div id="craft"></div>
   </div>
-  <div id="doneBtn">🎁 完成品 <span id="doneN"></span></div>
+  <div id="doneBtn"><img class="uic" src="assets/ui/icons/gift.png" alt=""> 完成品 <span id="doneN"></span></div>
   <div id="hud"></div>
   <div id="palette"></div>
   <div id="toast"></div>

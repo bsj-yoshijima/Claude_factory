@@ -3,7 +3,7 @@
 import { GENRES, MAT, MATS, PRODS } from './data/craft.mjs';
 import { WP_PER_SLOT, needWpForSize } from './data/rules.mjs';
 import { openToday, pollWp, renderBoard, renderCraft, updateDoneBtn, wpState } from './craft.mjs';
-import { NET, loadGame, saveGame } from './net.mjs';
+import { NET, loadGame, saveGame, unlockAll } from './net.mjs';
 import { G, availN, craftState, machState, machines, machinesSorted, reconcileStock, snapLayout } from './state.mjs';
 import { openAgents } from './ui/agents.mjs';
 import { openCollection } from './ui/collection.mjs';
@@ -12,8 +12,8 @@ import { closeOverlay, openDialog, overlay, toast } from './ui/dialog.mjs';
 import { openLb } from './ui/leaderboard.mjs';
 import { morphInto } from './ui/morph.mjs';
 import { openMyPage } from './ui/mypage.mjs';
-import { setEditOn, paletteEl, renderPalette, slideGame, syncEditMode, toggleEditMode } from './ui/palette.mjs';
-import { updateBadge } from './ui/parts.mjs';
+import { renderPalette, syncEditMode, toggleEditMode } from './ui/palette.mjs';
+import { uic, updateBadge } from './ui/parts.mjs';
 import { openRecipes } from './ui/recipes.mjs';
 import { openShop } from './ui/shop.mjs';
 
@@ -83,9 +83,11 @@ window.__craft = {
     const ms=machines(), m=id?ms.find(x=>x.id===id):null;
     if(!m) return {e:'📦', n:'素材セット済み', unknown:false};
     const st=machState(m.id), need=needWpForSize(m.size);
+    // p は盤面の進捗バー用。数値そのものは🏭製造タブと製造機パネルで見せる
+    const p=need ? Math.max(0, Math.min(1, st.wp/need)) : 0;
     return st.running
-      ? {e:'⚙️', n:`製造中 ${Math.floor(st.wp)}/${need}WP`, unknown:false}
-      : {e:'📦', n:'待機中', unknown:true};
+      ? {e:'⚙️', n:`製造中 ${Math.floor(st.wp)}/${need}WP`, p, running:true, unknown:false}
+      : {e:'📦', n:`待機中 ${Math.floor(st.wp)}/${need}WP`, p, running:false, unknown:true};
   },
 };
 
@@ -167,17 +169,17 @@ window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
        違いは「その下に配置（↻回転 / ✥移動）が付く」ことだけ。編集中に機械をクリックで開く ===== */
 window.__openMachine=(id)=>{
   const F=window.__factory; if(!F) return; setCraftPick(null);
-  const dlg=openDialog({ title:'🏭 製造機', subtitle:()=>{ const m=F.getMachine(id); return m?`${m.size}マス${m.lvl>1?` Lv${m.lvl}`:''}`:''; },
+  const dlg=openDialog({ title:`${uic('factory')} 製造機`, subtitle:()=>{ const m=F.getMachine(id); return m?`${m.size}マス${m.lvl>1?` Lv${m.lvl}`:''}`:''; },
     live:1000,
     body:()=>{
     const m=machinesSorted().find(x=>x.id===id);
     if(!m){ setTimeout(closeOverlay,0); return ''; }
     return machRow(m)
       + `<div class="rc" style="margin-top:12px"><div class="mid"><div class="nm">配置</div>`
-      + `<div class="cost">向きを変える / 別の場所へ移す（撤去は🗑ゴミ箱へドラッグ）</div></div>`
+      + `<div class="cost">向きを変える / 別の場所へ移す（撤去は${uic('trash')}ゴミ箱へドラッグ）</div></div>`
       + `<button data-rot="1">↻ 回転</button><button data-move="1" style="margin-left:5px">✥ 移動</button></div>`;
   },
-    actions:[{label:'🏭 製造タブへ',kind:'ghost',on:()=>openCraft()}],
+    actions:[{label:`${uic('factory')} 製造タブへ`,kind:'ghost',on:()=>openCraft()}],
     onRender:(p,d)=>{
     bindMachRow(p,d);                        // マス・ピッカー・製造開始は一覧と同じ結線
     p.querySelectorAll('[data-rot]').forEach(el=>el.onclick=()=>{
@@ -210,10 +212,10 @@ loadGame().then(async (ok)=>{
   setInterval(pollWp, 5000);
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollWp(); });
   const q=new URLSearchParams(location.search);
-  // ?unlockall は単一ユーザー版のテスト用だった。💰も在庫もサーバが持つので効かない
-  if(q.get('unlockall')) toast('?unlockall は使えません（💰と在庫はサーバが管理）');
-  if(q.get('edit')){ paletteEl.classList.add('show'); setEditOn(true);
-    wrapEl.classList.add('editing'); slideGame(); renderPalette(); }
+  /* ?unlockall … 開発用の裏道。全背景・全床・全シリーズ・全在庫・💰 を解放する。
+     サーバ側は dev ログイン有効時だけ受け付ける（無効なら unlockAll がその旨を出す）。
+     解放されるのは所持品・在庫・💰なので、盤面ではなくバッジとパレットを描き直す。 */
+  if(q.get('unlockall') && await unlockAll()){ updateBadge(); renderPalette(); }
   if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop'));
 });
 

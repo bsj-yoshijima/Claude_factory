@@ -1,6 +1,7 @@
 /* 🧑‍🏭 エージェント一覧 — 稼働状況と被り物(スキン)の変更。 */
 import { _dlg, openDialog, toast } from './dialog.mjs';
 import { BG_META } from './palette.mjs';
+import { uic } from './parts.mjs';
 
 let _agentSel=null;                     // スキン選択を開いているプロジェクト(null=閉じている)
 function agentRows(){                   // プロジェクト単位に集約(同名エージェントは稼働数をまとめる)
@@ -34,7 +35,7 @@ function skinThumb(id,px){ const e=(id==='none')?'🧑‍🏭':((BG_META[id]&&BG
 }
 export function openAgents(){
   const esc=(s)=>String(s||'').replace(/[<>&]/g,'');
-  return openDialog({ title:'🧑‍🏭 エージェント',
+  return openDialog({ title:`${uic('worker')} エージェント`,
     subtitle:()=>{ const r=agentRows(), n=r.reduce((s,p)=>s+p.n,0), b=r.reduce((s,p)=>s+p.busy,0);
       return `稼働 ${b} / 休憩 ${n-b}`; },
     live:1000,                          // 開いている間は最新の稼働状況に追従

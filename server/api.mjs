@@ -430,3 +430,62 @@ export async function getMade(user, query) {
   const from = query.get('from') || to;
   return jsonOk({ from, to, made: await madeBetween(user.id, from, to) });
 }
+
+/* ============================ 開発用の全解放 ============================
+   `?unlockall` の実体。server/index.mjs が dev ログイン有効時だけ結線する
+   （＝Google SSO を設定していないローカル開発のときだけ存在するルート）。
+
+   旧・単一ユーザー版はクライアントの G を書き換えて localStorage に保存していたが、
+   いまは所持品・在庫・💰の正が DB なので、ここで書かないと次のポーリングで消える
+   （＝画面側だけで解放しても無意味）。何度叩いても増殖しないよう、在庫も💰も
+   「足す」のではなく「その値まで底上げする」形にしてある。 */
+const DEV_STOCK = 3;         // 製造機 / プロップ / 絵文字装飾を1種あたりこの数まで
+const DEV_MONEY = 999999;    // 💰 はこの額まで（既にそれ以上なら減らさない）
+
+export async function postDevUnlockAll(user) {
+  /* factoryOf は tx の外（別の接続）で読むのでコミット前の値は見えない。
+     ほかの API は rev を上げて次のポーリングに拾わせているので露呈しないが、
+     ここは「解放した結果」を即返したいので、書き込みを閉じてから読む。 */
+  const r = await tx(async (c) => {
+    const f = (await c.query(
+      `SELECT stock, bg_owned, floor_owned, series_owned
+         FROM factories WHERE user_id=$1 FOR UPDATE`, [user.id])).rows[0];
+    if (!f) return bad('工場がありません');
+
+    // 在庫: 種類ごとに DEV_STOCK まで底上げ
+    const stock = f.stock || {};
+    for (const [kind, table] of [['machine', GD.MACH], ['prop', GD.PROP], ['deco', GD.DECO]]) {
+      stock[kind] = stock[kind] || {};
+      for (const id of Object.keys(table)) {
+        stock[kind][id] = Math.max(DEV_STOCK, Number(stock[kind][id] || 0));
+      }
+    }
+
+    // 所持品: 既存を消さずに足す。テーマシリーズを買うと BG に無い空（'japan' 等）と
+    // 床が bg_owned / floor_owned に入るので、シリーズぶんもここで一緒に入れておく
+    const union = (...xs) => [...new Set(xs.flat().filter(Boolean))];
+    const series = Object.values(GD.SERIES);
+    const bgOwned = union(f.bg_owned, Object.keys(GD.BG), series.map((s) => s.sky));
+    const floorOwned = union(f.floor_owned, Object.keys(GD.FLOOR), series.map((s) => s.floor));
+    const seriesOwned = union(f.series_owned, Object.keys(GD.SERIES));
+
+    await c.query(
+      `UPDATE factories
+          SET money        = GREATEST(money, $2),
+              stock        = $3::jsonb,
+              bg_owned     = $4::text[],
+              floor_owned  = $5::text[],
+              series_owned = $6::text[]
+        WHERE user_id=$1`,
+      [user.id, DEV_MONEY, JSON.stringify(stock), bgOwned, floorOwned, seriesOwned]);
+    await bumpRev(c, user.id);
+    return { bg: bgOwned.length, floor: floorOwned.length, series: seriesOwned.length };
+  });
+  if (r.status) return r;                                  // bad() がそのまま返ってきた場合
+
+  const factory = await factoryOf(user.id);                // コミット後に読み直す
+  return jsonOk({
+    ok: true, factory,
+    granted: { money: factory.money, ...r, stock: DEV_STOCK },
+  });
+}

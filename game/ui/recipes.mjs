@@ -3,6 +3,7 @@ import { RAR } from '../data/econ.mjs';
 import { GENRES, MAT, PRODS, SECRETS, SECRET_G, UNKNOWN_PRODUCT } from '../data/craft.mjs';
 import { craftState } from '../state.mjs';
 import { openDialog } from './dialog.mjs';
+import { uic } from './parts.mjs';
 
 function secretMatsOf(pid){
   const k=Object.keys(SECRETS).find(k=>SECRETS[k].pid===pid);
@@ -37,6 +38,6 @@ function recipeBody(){
   return body+`<div class="rowline" style="font-size:11px;color:#9fb0c0">
     左が原材料の組み合わせ、右がそれで作れる製品。1度も作っていない製品は
     <b style="color:#eafff4">シルエット</b>だけ見える。作れば名前とレア度が出る。
-    作った数は 📖 図鑑 で見られる。</div>`;
+    作った数は ${uic('collection')} 図鑑 で見られる。</div>`;
 }
-export function openRecipes(){ return openDialog({ title:'🧾 製造レシピ', body:recipeBody }); }
+export function openRecipes(){ return openDialog({ title:`${uic('recipe')} 製造レシピ`, body:recipeBody }); }

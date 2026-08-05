@@ -7,7 +7,7 @@ import { NET, applyFactory } from '../net.mjs';
 import { craftState, machState, machines, machinesSorted, runningCount, snapLayout } from '../state.mjs';
 import { openCollection } from './collection.mjs';
 import { openDialog, toast } from './dialog.mjs';
-import { prodCard, rarChips, updateBadge } from './parts.mjs';
+import { prodCard, rarChips, uic, updateBadge } from './parts.mjs';
 
 export let _craftPick=null;                       // {mid, idx} = いま原材料を選んでいるマス
 /* 選択の解除は他モジュール(app の設置直後)からも起きる。
@@ -56,12 +56,12 @@ export function bindMachRow(p,d){
 }
 export function openCraft(){
   _craftPick=null;
-  return openDialog({ title:'🏭 製造',
+  return openDialog({ title:`${uic('factory')} 製造`,
     subtitle:()=>{ const ms=machines(); return ms.length?`${ms.length}台 / 稼働 ${runningCount()}台`:'製造機がありません'; },
     live:1000,
     body:()=>{
       const ms=machinesSorted();
-      if(!ms.length) return '<div class="cost" style="padding:12px">製造機がありません。🏪ショップで購入 → 🔧レイアウト編集で床に設置してください。</div>';
+      if(!ms.length) return `<div class="cost" style="padding:12px">製造機がありません。${uic('shop')}ショップで購入 → ${uic('layout')}レイアウト編集で床に設置してください。</div>`;
       return ms.map(machRow).join('');
     },
     onRender:bindMachRow });
@@ -93,13 +93,13 @@ export async function openDone(){
   const byRar={}; for(const it of r.items) byRar[it.r]=(byRar[it.r]||0)+1;
   const cards=[...r.items].reverse().slice(0,200).map(p=>prodCard(p,{isNew:p.isNew})).join('');
   const bd=rarChips(byRar);
-  openDialog({ title:'🎁 完成品', subtitle:`${r.items.length}個`,
+  openDialog({ title:`${uic('gift')} 完成品`, subtitle:`${r.items.length}個`,
     body:`${r.gain?`<div class="invbar" style="font-size:12px">
           <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
-          <b style="color:#ffd27a;font-size:19px">💰 ${r.gain.toLocaleString()}</b>${bd}</div>`
+          <b style="color:#ffd27a;font-size:19px">${uic('yen')} ${r.gain.toLocaleString()}</b>${bd}</div>`
         :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
-        ${r.registered?`${r.registered}個を📖図鑑に登録しました。`:''}NEW は初めて作られた製品です。</div>
+        ${r.registered?`${r.registered}個を${uic('collection')}図鑑に登録しました。`:''}NEW は初めて作られた製品です。</div>
       <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
-    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
+    actions:[{label:`${uic('collection')} 図鑑を見る`,kind:'ghost',on:()=>openCollection()}] });
 }

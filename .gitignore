@@ -2,6 +2,9 @@
 _*
 *.b64
 
+# dev サーバの異常終了ログ
+dev-server.log
+
 # OS / editor
 .DS_Store
 node_modules/

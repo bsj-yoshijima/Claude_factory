@@ -14,6 +14,14 @@ export const DATABASE_URL =
 
 export const pool = new Pool({ connectionString: DATABASE_URL, max: 10 });
 
+// アイドル中の接続が切れると pg は pool に 'error' を emit する。リスナが無いと
+// EventEmitter がそれを throw し、uncaughtException でプロセスごと落ちる
+// （Mac のスリープ・Docker の再起動などで実際に起きる）。ここで受けて捨てる。
+// 壊れた接続は pg 側が既にプールから外しているので、次のクエリは新しい接続で通る。
+pool.on('error', (err) => {
+  console.error(`  [db] アイドル接続のエラー（プールから除外済み）: ${err.message}`);
+});
+
 export const q = (text, params) => pool.query(text, params);
 /** 1行だけ返すクエリ。無ければ null */
 export const one = async (text, params) => (await pool.query(text, params)).rows[0] ?? null;
