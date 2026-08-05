@@ -3,7 +3,7 @@ import { GENRE, GENRES, PRODS, SECRET_G } from '../data/craft.mjs';
 import { WP_PER_SLOT } from '../data/rules.mjs';
 import { craftState } from '../state.mjs';
 import { openDialog } from './dialog.mjs';
-import { matRow, prodCard } from './parts.mjs';
+import { matRow, prodCard, uic } from './parts.mjs';
 
 let _collectionGenre='food';     // 図鑑のジャンル切り替え（GENRES + ✨シークレット）
 // 図鑑のタブ＝製品のジャンル。GENRES に足せば自動で増える
@@ -45,7 +45,7 @@ export function openCollection(genre){
   const gs=collectionGenres();
   if(genre&&gs.some(g=>g.id===genre)) _collectionGenre=genre;
   if(!gs.some(g=>g.id===_collectionGenre)) _collectionGenre=gs[0].id;   // GENRES から消えたジャンルを覚えていたとき
-  return openDialog({ title:'📖 図鑑', subtitle:collectionSubtitle,
+  return openDialog({ title:`${uic('collection')} 図鑑`, subtitle:collectionSubtitle,
     tabs:collectionTabs, tab:_collectionGenre,
     onTab:(id,d)=>{ _collectionGenre=id; d.refresh(); },
     body:collectionBody });

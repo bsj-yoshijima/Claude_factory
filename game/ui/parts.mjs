@@ -1,11 +1,30 @@
 /* 共通のUI部品 — 同じ見た目のものは同じ関数から出す。 */
-import { RAR } from '../data/econ.mjs';
+import { MACH, RAR, machVariant } from '../data/econ.mjs';
 import { MAT } from '../data/craft.mjs';
 import { PROD_PRICE } from '../data/rules.mjs';
 import { G } from '../state.mjs';
 
 export function updateBadge(){ const m=document.getElementById('shopMoney');
-  if(m) m.textContent='💰 '+Math.floor(G.money).toLocaleString(); }
+  if(m) m.innerHTML=uic('yen')+' '+Math.floor(G.money).toLocaleString(); }
+
+/* UI機能のドット絵アイコン（16×16 を原寸。lg=true は整数2倍の32px）。
+   ダイアログの見出し・タブ・ボタン・説明文など「HTMLを置ける場所」だけで使う。
+   toast() は textContent、title 属性も文字列しか入らないので、そこは絵文字のまま。
+   材料・製品・装飾・テーマの絵文字はゲームの中身なので触っていない。 */
+export const uic=(name,lg=false)=>`<img class="uic${lg?' lg':''}" src="assets/ui/icons/${name}.png" alt="">`;
+
+/* テーマのサムネイル（部屋の絵の縮小版 64×64。tools/assets/make_theme_thumbs.mjs 生成）。
+   ドット絵ではないので pixelated にはせず、CSS 側で普通に縮めて出す。
+   汎用（キーなし）だけは対応する部屋が無いので道具箱のアイコンで代用する。 */
+export const themeIcon=(key)=> key
+  ? `<img class="thumb" src="assets/ui/icons/theme-${key}.png" alt="">`
+  : uic('toolbox');
+
+/* 製造機のドット絵アイコン（32×32 を原寸で出す）。
+   HTMLを置ける場所（ショップの行・編集パレット）だけで使う。トーストや title 属性は
+   文字列しか入らないので、そこは MACH[].e の絵文字のまま。 */
+export const machIcon=(variant)=>
+  `<img class="micon" src="assets/ui/icons/${MACH[machVariant(variant)].ic}.png" alt="">`;
 
 /* =========================================================================
    共通のUI部品 — 同じ見た目のものは同じ関数から出す
@@ -39,7 +58,7 @@ export function matRow(key,suffix=''){
 }
 /* レア度ごとの内訳チップ（完成品の売上内訳） */
 export const rarChips=(byRar)=>Object.keys(byRar).sort().map(r=>
-  `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = 💰${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
+  `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = ${uic('yen')}${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
 /* 1行アイテム（ショップの各タブ・エージェント一覧で共通）。
      icon / name / sub は文字列（HTML可）、action は右端のボタン */
 export function itemRow({icon='',name='',sub='',action='',key=null,style=''}){

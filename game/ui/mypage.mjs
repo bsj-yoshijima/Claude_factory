@@ -2,7 +2,7 @@
 import { NET } from '../net.mjs';
 import { G } from '../state.mjs';
 import { openDialog, toast } from './dialog.mjs';
-import { tabStrip } from './parts.mjs';
+import { tabStrip, uic } from './parts.mjs';
 
 const MY_DAYS=90;                      // 週次12週分を作るのに必要な日数。日次は末尾14日だけ使う
 const MY_DAILY_N=14, MY_WEEK_N=12;
@@ -115,7 +115,7 @@ function myBody(){
          value="${myAttr(myName())}">
        <span class="ed" id="myNameSave">保存</span><span class="ed" id="myNameCancel">やめる</span></div>
        <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:4px">24文字まで。空にすると「${myAttr(myDefaultName())}」に戻ります。</div>`
-    : `<div class="myname"><b>🏭 ${myAttr(myName())}</b><span class="ed" id="myNameEdit">✏️ 編集</span></div>`;
+    : `<div class="myname"><b>${uic('factory')} ${myAttr(myName())}</b><span class="ed" id="myNameEdit">✏️ 編集</span></div>`;
   return `${head}
     ${_myData.failed?`<div class="rowline" style="font-size:11px;color:#ff9f7a;margin-top:8px">
       集計を取得できませんでした。サーバが古い可能性があります（<b>npm run dev</b> で再起動してください）。</div>`:''}
@@ -124,7 +124,7 @@ function myBody(){
     <div class="mystats">
       <div class="mystat"><div class="k">WP</div><div class="v">${Math.round(t.wp).toLocaleString()}<small>WP</small></div></div>
       <div class="mystat"><div class="k">製造個数</div><div class="v">${t.made.toLocaleString()}<small>個</small></div></div>
-      <div class="mystat"><div class="k">売上</div><div class="v">${Math.round(t.sales).toLocaleString()}<small>💰</small></div></div>
+      <div class="mystat"><div class="k">売上</div><div class="v">${Math.round(t.sales).toLocaleString()}<small>${uic('yen')}</small></div></div>
     </div>
     <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:14px">
       ※グラフをクリックで切り替え
@@ -141,7 +141,7 @@ async function saveFactoryName(name,dlg){
 }
 export async function openMyPage(){
   _myEdit=false; _myData=null; _mySel=null; _myRange='day';
-  const dlg=openDialog({ title:'🏠 マイページ', body:myBody,
+  const dlg=openDialog({ title:`${uic('mypage')} マイページ`, body:myBody,
     onRender:(p,d)=>{
       p.querySelectorAll('[data-myrange]').forEach(el=>el.onclick=()=>{
         _myRange=el.dataset.myrange; _mySel=null; d.refresh();   // 粒度を変えたら最新の点に戻す
