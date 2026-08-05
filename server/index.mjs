@@ -263,6 +263,7 @@ async function handle(req, res) {
       master: GD.summary(),
       ingest: stats,
       auth: { google: Auth.google.enabled, devLogin: Auth.DEV_LOGIN, hd: Auth.google.hd || null },
+      dev: { unlockAll: Auth.DEV_LOGIN },
       thresholds: { publicUrl: PUBLIC_URL },
     });
   }
@@ -301,6 +302,14 @@ async function handle(req, res) {
         case 'PUT /api/factory/name': r = await API.putFactoryName(user, body); break;
         case 'GET /api/skins':        r = { status: 200, body: { skins: await API.skinsOf(user.id) } }; break;
         case 'GET /api/setup.json':   r = { status: 200, body: { note: '/setup の内容と同じ' } }; break;
+        /* 開発用の裏道（画面の ?unlockall）。dev ログインが有効なとき＝Google SSO を
+           設定していないローカル開発のときだけ通す。SSO を設定した本番相当の環境では
+           ルート自体が存在しない（未知のルートと見分けがつかない 404）。
+           これなら同僚は環境変数を足さずにクエリパラメータだけで使える。 */
+        case 'POST /api/dev/unlockall':
+          r = Auth.DEV_LOGIN ? await API.postDevUnlockAll(user)
+                             : { status: 404, body: { error: `no route: ${method} ${route}` } };
+          break;
         default: r = { status: 404, body: { error: `no route: ${method} ${route}` } };
       }
       return send(res, r.status, r.body);
@@ -360,7 +369,9 @@ async function main() {
     console.log(`  マスタ: ${GD.summary()}`);
     console.log(`  認証  : ${Auth.google.enabled ? `Google SSO${Auth.google.hd ? ` (${Auth.google.hd} 限定)` : ''}`
       : 'dev ログイン（GOOGLE_CLIENT_ID 未設定のため）'}`);
-    console.log(`  受信  : POST ${PUBLIC_URL}/v1/logs, /v1/metrics, /hooks/*\n`);
+    console.log(`  受信  : POST ${PUBLIC_URL}/v1/logs, /v1/metrics, /hooks/*`);
+    if (Auth.DEV_LOGIN) console.log(`  裏道  : ?unlockall で全解放できます（dev ログイン中のみ。SSO を設定すると消えます）`);
+    console.log('');
   });
   setInterval(() => purgeOldSessions().catch(() => {}), 3600e3).unref();
 }

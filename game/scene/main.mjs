@@ -79,7 +79,7 @@ export class Main extends Phaser.Scene {
         const p1=uvXY(0,w.v0),p2=uvXY(0,w.v1),p3=uvXY(this.uLen,w.v1+this.sh),p4=uvXY(this.uLen,w.v0+this.sh);
         g.lineStyle(2,0x33ffcc,0.8); g.strokePoints([p1,p2,p3,p4],true); } }
     this.agents={}; this.hud=document.getElementById('hud');
-    if(new URLSearchParams(location.search).get('edit')==='1') this.toggleEdit(true);   // 編集(グリッド/ドラッグ/ベルト矢印)
+    // 編集(グリッド/ドラッグ)の入口は ☰メニューの「🔧 レイアウト編集」と Eキーの2つ
     this.input.keyboard.on('keydown-E', ()=>this.toggleEdit());
     window.__scene=this;
     // Scene↔UI ブリッジ(スキン選択画面が参照)

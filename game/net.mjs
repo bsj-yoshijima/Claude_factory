@@ -72,4 +72,21 @@ export async function loadGame(){
   const sk=await NET.call('GET','/api/skins'); if(sk) G.skins=sk.skins||{};
   return true;
 }
+/* 開発用の全解放（?unlockall）。所持品・在庫・💰の正はサーバなので、
+   ここで G を書いても次のポーリングで消える。サーバに書かせて結果を受け取る。
+   dev ログインのサーバ（＝Google SSO 未設定のローカル開発）でしかルートが無いので、
+   本番相当の環境では 404 が返る。
+   NET.call は 404 のとき素の "no route: …" を出してしまうので、ここは直に叩く。 */
+export async function unlockAll(){
+  let r;
+  try{ r=await fetch('/api/dev/unlockall',{method:'POST',cache:'no-store'}); }
+  catch(_){ toast('サーバに繋がりません'); return false; }
+  if(r.status===404){ toast('このサーバでは ?unlockall は使えません（ローカル開発用の裏道です）'); return false; }
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){ toast(j.error||`全解放に失敗しました (${r.status})`); return false; }
+  applyFactory(j.factory);
+  const g=j.granted||{};
+  toast(`✅ 全解放しました（💰${g.money} / 背景${g.bg} / 床${g.floor} / シリーズ${g.series} / 在庫各${g.stock}）`);
+  return true;
+}
 // 在庫と配置数

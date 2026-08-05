@@ -11,7 +11,7 @@ const SKY_THEMES=['blue','sunset','night','space','aurora'];
 export const BG_META={auto:{e:'🕐',n:'標準'},blue:{e:'☀️',n:'快晴'},sunset:{e:'🌆',n:'夕焼け'},night:{e:'🌙',n:'星空'},space:{e:'🌌',n:'宇宙'},aurora:{e:'🌈',n:'オーロラ'},arabia:{e:'🕌',n:'アラビア'},undersea:{e:'🐚',n:'海底'},japan:{e:'⛩️',n:'日本'},china:{e:'🐉',n:'中華'},diner:{e:'🍔',n:'ダイナー'},fantasy:{e:'🧙',n:'ファンタジー'},scifi:{e:'🚀',n:'SF宇宙'},cabin:{e:'🌲',n:'森コテージ'},dino:{e:'🦖',n:'ダイナソー'},haunted:{e:'👻',n:'幽霊屋敷'},pirate:{e:'🏴‍☠️',n:'海賊船'},circuit:{e:'🏁',n:'サーキット'},dwarf:{e:'⛏️',n:'ドワーフ鉱山'},hell:{e:'😈',n:'地獄'},steampunk:{e:'⚙️',n:'スチパン'},retrofuture:{e:'🛸',n:'レトロ未来'},tokyo:{e:'🌃',n:'Tokyo'},halloween:{e:'🎃',n:'ハロウィン'},western:{e:'🤠',n:'西部開拓時代'},sushi:{e:'🍣',n:'回転寿司'},beehive:{e:'🐝',n:'ミツバチの巣'},circus:{e:'🎪',n:'サーカス'},carnival:{e:'🎭',n:'カーニバル'},desert:{e:'🏜️',n:'砂漠'},jungle:{e:'🌴',n:'ジャングル'},egypt:{e:'🔺',n:'古代エジプト'},christmas:{e:'🎄',n:'クリスマス'},space:{e:'🚀',n:'宇宙ステーション'},ice:{e:'🧊',n:'氷の城'},mushroom:{e:'🍄',n:'森のキノコ'},onsen:{e:'♨️',n:'和風温泉'}};
 function ownedBgs(){ const a=['auto']; for(const k of SKY_THEMES) if(G.bgOwned.includes(k)) a.push(k); for(const k of ROOM_THEMES) if(G.seriesOwned.includes(k)) a.push(k); return a; }
 function applyBg(k){ G.bg=k; if(window.__scene){ window.__scene.setSkyTheme(k); window.__scene.setFloor(ROOM_THEMES.includes(k)?'wood':G.floor); } saveGame(); updateBadge(); }
-export const paletteEl=document.getElementById('palette');
+const paletteEl=document.getElementById('palette');
 let editCat='bg', editSel=null; window.__editSel=null;
 let selMode=false, selN=0;                       // 収納の複数選択モードと選択数
 let propFilter=null;                             // 装飾の絞り込みテーマ(null=すべて / ''=汎用)
@@ -90,7 +90,7 @@ function stow(mode){ const s=window.__scene; if(!s) return;
   toast(`${n}個を在庫に戻しました`);
 }
 const gameEl=document.getElementById('game'), wrapEl=document.getElementById('wrap');
-export function slideGame(){
+function slideGame(){
   const g=window.__game; if(!g||!g.scale) return;
   const t0=performance.now();
   const tick=()=>{ g.scale.refresh(); if(performance.now()-t0<620) requestAnimationFrame(tick); };
@@ -99,9 +99,7 @@ export function slideGame(){
 /* 編集モードのON/OFF表示をシーンに合わせる。Eキーや「✥移動」でシーン側から切り替わることがある。
    入口は ☰メニューの「🔧 レイアウト編集」だけ（盤面に常駐するボタンは置かない）ので、
    ONかどうかはボタンの見た目ではなくこの変数で覚える。 */
-export let _editOn=false;
-/* 起動時に ?edit=1 で開いたときだけ app 側から立てる。理由は setCraftPick と同じ。 */
-export const setEditOn=(v)=>{ _editOn=v; };
+let _editOn=false;
 export function syncEditMode(){ const on=!!(window.__scene&&window.__scene.editMode);
   if(_editOn===on) return;                                   // 変化したときだけ描き直す
   _editOn=on; paletteEl.classList.toggle('show',on);

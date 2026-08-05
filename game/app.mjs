@@ -3,7 +3,7 @@
 import { GENRES, MAT, MATS, PRODS } from './data/craft.mjs';
 import { WP_PER_SLOT, needWpForSize } from './data/rules.mjs';
 import { openToday, pollWp, renderBoard, renderCraft, updateDoneBtn, wpState } from './craft.mjs';
-import { NET, loadGame, saveGame } from './net.mjs';
+import { NET, loadGame, saveGame, unlockAll } from './net.mjs';
 import { G, availN, craftState, machState, machines, machinesSorted, reconcileStock, snapLayout } from './state.mjs';
 import { openAgents } from './ui/agents.mjs';
 import { openCollection } from './ui/collection.mjs';
@@ -12,7 +12,7 @@ import { closeOverlay, openDialog, overlay, toast } from './ui/dialog.mjs';
 import { openLb } from './ui/leaderboard.mjs';
 import { morphInto } from './ui/morph.mjs';
 import { openMyPage } from './ui/mypage.mjs';
-import { setEditOn, paletteEl, renderPalette, slideGame, syncEditMode, toggleEditMode } from './ui/palette.mjs';
+import { renderPalette, syncEditMode, toggleEditMode } from './ui/palette.mjs';
 import { updateBadge } from './ui/parts.mjs';
 import { openRecipes } from './ui/recipes.mjs';
 import { openShop } from './ui/shop.mjs';
@@ -210,10 +210,10 @@ loadGame().then(async (ok)=>{
   setInterval(pollWp, 5000);
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollWp(); });
   const q=new URLSearchParams(location.search);
-  // ?unlockall は単一ユーザー版のテスト用だった。💰も在庫もサーバが持つので効かない
-  if(q.get('unlockall')) toast('?unlockall は使えません（💰と在庫はサーバが管理）');
-  if(q.get('edit')){ paletteEl.classList.add('show'); setEditOn(true);
-    wrapEl.classList.add('editing'); slideGame(); renderPalette(); }
+  /* ?unlockall … 開発用の裏道。全背景・全床・全シリーズ・全在庫・💰 を解放する。
+     サーバ側は dev ログイン有効時だけ受け付ける（無効なら unlockAll がその旨を出す）。
+     解放されるのは所持品・在庫・💰なので、盤面ではなくバッジとパレットを描き直す。 */
+  if(q.get('unlockall') && await unlockAll()){ updateBadge(); renderPalette(); }
   if(q.get('shop'))openShop(q.get('shop')==='1'?undefined:q.get('shop'));
 });
 
