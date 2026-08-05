@@ -1,36 +1,38 @@
-/* ファビコンを生成する。依存ゼロ（Node標準のzlibだけでPNGを書く）。
+/* ファビコンを生成する。依存ゼロ（Node標準のzlibだけでPNGを読み書きする）。
      使い方: node tools/assets/make_favicon.mjs
      出力  : assets/ui/favicon.png (96px) / assets/ui/favicon-192.png (Appleのホーム画面用)
 
-   絵の中身は「工場 + 左下にClaude君」。
-   Claude君は画面左下のHUDに出ているアイコンと同じもの ——
-   game/main.js の mascotCanvas() の手順をそのまま移植して、1ドット=3pxで描いている。
-   （HUDのアイコンは canvas に描いて data URL 化したものでPNGファイルが無いため、
-     ファイルを流用するのではなく描画手順のほうを合わせている。
-     マスコットの形を変えたときは両方直すこと。）
+   絵の中身は「工場 + 手前に Claude君」。
+     工場     : assets/ui/icons/factory.png（メニューと同じ1色のドット絵アイコン）を
+                そのまま整数倍で拡大して使う。絵を二重に持たない。
+     Claude君 : 画面左下のHUDに出ているアイコンと同じもの ——
+                game/scene/mascot.mjs の描画手順を移植して 1ドット=2px で描いている。
+                （HUDのアイコンは canvas に描いて data URL 化したものでPNGファイルが
+                  無いため、ファイルを流用するのではなく描画手順のほうを合わせている。
+                  マスコットの形を変えたときは両方直すこと。）
 
-   下地は白系。Claude君の体がテラコッタ(#c15f3c)なので、地を同系色にすると溶ける。
+   下地は暗色。工場アイコンが明色1色なので、地を明るくすると工場が消える。
+   Claude君の体はテラコッタ(#c15f3c)で、暗い地にも明るい工場にも埋もれない。
 
    96×96 で描いて整数倍で拡大する。96 は 16/32/48 で割り切れるので、タブの
    16px・32px へ縮めても輪郭が濁らない。
-   ファビコンは実寸 16〜32px で見るものなので、余白を詰めて Claude君 と工場を
-   タイルいっぱいに描く（Claude君はマスコット1ドット=3px）。 */
+   ファビコンは実寸 16〜32px で見るものなので、余白を詰めてタイルいっぱいに描く。 */
 import zlib from 'node:zlib';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readPng } from './mach_axis.mjs';
 
 const S = 96;                                   // 元のドット絵の一辺
-const OUT = path.join(import.meta.dirname, '..', '..', 'assets');
+const ROOT = path.join(import.meta.dirname, '..', '..');
+const OUT = path.join(ROOT, 'assets', 'ui');
 
 /* --- 配色 --- */
-const INK = '#3b4643', EYE = '#241713';         // game/main.js と同じ
+const INK = '#3b4643', EYE = '#241713';         // game/scene/mascot.mjs と同じ
 const PAL = {b:'#c15f3c', s:'#9d4527', l:'#d67e57'};   // PRESETS[0] = Claude君の体色
 const C = {
-  bg    : '#f6f1e7',   // 下地。白すぎない生成り（明るいタブでも輪郭が残る）
-  bgEdge: '#ddd3c4',   // 下地のふち
-  wall  : '#4b5a55',   // 工場の壁
-  roof  : '#35413d',   // 屋根・煙突
-  win   : '#ffc95e',   // 窓の灯り
+  bg    : '#1b2b4a',   // 下地。暗い藍色（工場が明色1色なので地は暗くする）
+  bgEdge: '#2c4740',   // 下地のふち（本編の --edge）
+  fac   : '#e6fff4',   // 工場。アイコン自身の色（本編の --ink）
 };
 
 /* --- 96×96 のキャンバス。値は色文字列 or null(透明) ---
@@ -49,24 +51,20 @@ const rect=(x,y,w,h,c)=>{ for(let j=0;j<h;j++) for(let i=0;i<w;i++) put(x+i,y+j,
 
 for(let y=0;y<S;y++) for(let x=0;x<S;x++) put(x,y,C.bg);
 
-/* --- 工場: 煙突2本 + のこぎり屋根の建屋 + 灯りのついた窓 ---
-   Claude君が左下に大きく立つので、建屋は右へ寄せて上半分を見せる。
-   煙は 16px では消えるうえ、縦を煙突と屋根に使いたいので描かない。 */
-rect(72,4,11,16,C.roof);  rect(72,4,11,3,INK);              // 右(奥)の煙突
-rect(54,10,11,10,C.roof); rect(54,10,11,3,INK);             // 左(手前)の煙突
-// のこぎり屋根の歯先は Claude君 の頭から十分離す。近いと歯が角のように見える
-const BX=28, BY=18, BW=66, BH=62;
-rect(BX,BY,BW,BH,C.wall);
-for(let i=0;i<BW;i++){                                      // のこぎり屋根（9ドット周期）
-  const top = 8-(i%9);
-  rect(BX+i,BY,1,top,C.bg);                                 // 屋根の上は下地でくり抜く
-  rect(BX+i,BY+top,1,3,C.roof);
+/* --- 工場: メニューアイコンをそのまま拡大して背景に置く ---
+   煙突と のこぎり屋根 が Claude君 より上に出るよう、上へ寄せて配置する。 */
+const FAC_P = 5;                                // アイコン1ドット = 5px（16×16 → 80×80）
+const FAC_X = 14, FAC_Y = 4;                    // 置き始めの px
+{
+  const ico = readPng(path.join(OUT, 'icons', 'factory.png'));
+  for(let y=0;y<ico.h;y++) for(let x=0;x<ico.w;x++){
+    const a = ico.px[(y*ico.w+x)*ico.ch + ico.ch-1];
+    if(a > 32) rect(FAC_X+x*FAC_P, FAC_Y+y*FAC_P, FAC_P, FAC_P, C.fac);
+  }
 }
-rect(BX,BY+BH-3,BW,3,C.roof);                               // 接地
-for(let k=0;k<3;k++) rect(BX+29+k*13,BY+40,9,9,C.win);      // 窓の灯り（Claude君に隠れない右側だけ）
 
 /* =========================================================================
-   Claude君 — game/main.js の mascotCanvas() の移植（'work'ポーズ）
+   Claude君 — game/scene/mascot.mjs の移植（'work'ポーズ）
    ========================================================================= */
 const MTOP = [3,2,1,1,0,0,1,2,3,3,2,1,0,0,1,1,2,3];
 /* P = マスコット1ドットあたりの px。本編は 1ドット=3px(DOTP) で描いているので合わせている。
@@ -87,22 +85,23 @@ function drawMascot(ox,oy,pal,pose,P=1,plot=put){
   }
   const ey=topBase+4; px(x0+5,ey,EYE); px(x0+6,ey,EYE); px(x0+11,ey,EYE); px(x0+12,ey,EYE);
 }
-/* 建屋の左手前に立たせる。1ドット=3px なので、腕と脚を含めて
-   22×18 ドット = 66×54px（タイルの約7割）を占める。
+/* 工場の左手前に立たせる。1ドット=2px で、腕と脚を含めて 22×18 ドット = 44×36px。
+   3px(66×54px)にすると工場をほぼ覆ってしまい、背景の工場が読めなくなる。
+   工場が背景・Claude君が手前という関係が崩れない大きさに留めている。
    一度べつの層に描いてから、まわり HALO px を下地で塗ってのせる。
-   Claude君の頭は2つの山の間が谷になっていて、そこへ建屋の暗色が入り込むと
+   Claude君の頭は2つの山の間が谷になっていて、そこへ工場の明色が入り込むと
    「角が生えた」ように見える。下地を回すとその谷も下地色になり、
-   小さいサイズでもシルエットが建屋から分離する。 */
+   小さいサイズでもシルエットが工場から分離する。 */
 const HALO = 3;
 const layer = new Map();
-drawMascot(-4, 15, PAL, 'work', 3, (x,y,c)=>{ if(c) layer.set(`${x},${y}`, c); });
+drawMascot(-2, 38, PAL, 'work', 2, (x,y,c)=>{ if(c) layer.set(`${x},${y}`, c); });
 const pts = [...layer.keys()].map(k=>k.split(',').map(Number));
 // まわりを HALO px ぶん下地で塗る
 for(const [x,y] of pts)
   for(let dy=-HALO; dy<=HALO; dy++) for(let dx=-HALO; dx<=HALO; dx++)
     if(!layer.has(`${x+dx},${y+dy}`)) put(x+dx, y+dy, C.bg);
 // 頭の上は「水平に切り揃えて」下地で塗る。HALO だけでは頭の谷の奥（数px）に
-// 建屋の暗色が残り、それが角のように見えてしまう
+// 工場の明色が残り、それが角のように見えてしまう
 const colTop = new Map();                       // x -> その列で一番上のドット
 for(const [x,y] of pts) if(!colTop.has(x) || y < colTop.get(x)) colTop.set(x, y);
 const skyY = Math.min(...colTop.values()) - HALO;
@@ -133,5 +132,5 @@ function png(scale){
 }
 for(const [name,scale] of [['favicon.png',1],['favicon-192.png',2]]){
   fs.writeFileSync(path.join(OUT,name), png(scale));
-  console.log(`  ${name} (${S*scale}×${S*scale})`);
+  console.log(`  assets/ui/${name} (${S*scale}×${S*scale})`);
 }
