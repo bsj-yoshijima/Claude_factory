@@ -4,7 +4,7 @@ import { MAT } from '../data/craft.mjs';
 import { NET, applyFactory } from '../net.mjs';
 import { G, availN, machState, ownedN } from '../state.mjs';
 import { openDialog, toast } from './dialog.mjs';
-import { itemRow, machIcon, themeIcon, uic, updateBadge } from './parts.mjs';
+import { itemRow, machIcon, themeIcon, uic, updateBadge, yen } from './parts.mjs';
 
 async function apiBuy(kind,id,okMsg){
   const r=await NET.call('POST','/api/shop/buy',{kind,id});
@@ -55,13 +55,13 @@ function shopBody(){
       body += machs.map(e=>{ const c=lvCost(e.lvl), M=MACH[machVariant(e.variant)];
         return itemRow({ icon:machIcon(e.variant), key:`mc:${e.id}`,
           name:`${M.n} <span style="color:#7fe6ff;font-size:11px">Lv${e.lvl}</span>`,
-          sub:`${slotSummary(e)} ・ 次のLv ${uic('yen')}${c.toLocaleString()}`,
+          sub:`${slotSummary(e)} ・ 次のLv ${yen(c)}`,
           action:`<button data-lv="${e.id}" ${G.money>=c?'':'disabled'}>強化</button>` });
       }).join('') || `<div class="cost" style="padding:6px 2px">未設置。${uic('layout')}編集で在庫から設置</div>`;
       body += shopHead('製造機を購入（マス数が多いほど素材を多く入れられる＝作れる物が増える）');
       body += Object.keys(MACH).map(t=>itemRow({ icon:machIcon(t), key:`mb:${t}`,
         name:`${MACH[t].n} ${stockBadge(availN('machine',t))}`,
-        sub:`${uic('yen')}${MACH[t].price.toLocaleString()}`,
+        sub:`${yen(MACH[t].price)}`,
         action:buyBtn('data-buymach',t,MACH[t].price) })).join('');
     } else if(_shopTab==='equip'){
       body = shopHead(`購入すると在庫に入ります。設置は ${uic('layout')}編集 のパレットから床をクリック。`,'margin:2px 0 8px');
@@ -75,20 +75,20 @@ function shopBody(){
         body += ks.map(t=>{ const sp=(window.PROP_SPAN||{})[t]||1;   // 占有コマ数(見た目の大きさ)
           return itemRow({ icon:PROP[t].e, key:`pr:${t}`,
             name:`${PROP[t].n} ${stockBadge(ownedN('prop',t))}`,
-            sub:`${uic('yen')}${PROP[t].price}${sp>1?` ・ ${sp}コマ`:''}`,
+            sub:`${yen(PROP[t].price)}${sp>1?` ・ ${sp}コマ`:''}`,
             action:buyBtn('data-prop',t,PROP[t].price) }); }).join('');
       }
       body += shopHead('その他');
       body += Object.keys(DECO).map(t=>itemRow({ icon:DECO[t].e, key:`dc:${t}`,
         name:`${DECO[t].n} ${stockBadge(ownedN('deco',t))}`,
-        sub:`${uic('yen')}${DECO[t].price}`,
+        sub:`${yen(DECO[t].price)}`,
         action:buyBtn('data-deco',t,DECO[t].price) })).join('');
     } else if(_shopTab==='decor'){   // 内装（背景=窓の外の景色 / 床材）
       const row=(table,attr,ownList,curKey,prefix,curIcon,offIcon)=>Object.keys(table).map(k=>{
         const own=ownList.includes(k), cur=curKey===k;
         return itemRow({ icon:cur?curIcon:offIcon, key:`${attr}:${k}`,
           name:`${prefix}: ${table[k].n}`,
-          sub:own?(cur?'使用中':'所持'):uic('yen')+table[k].price.toLocaleString(),
+          sub:own?(cur?'使用中':'所持'):yen(table[k].price),
           action:applyBtn(attr,k,own,cur,table[k].price) }); }).join('');
       body = shopHead('背景（窓の外の景色）','margin:2px 0 6px')
            + row(BG,'data-bg',G.bgOwned,G.bg,'背景','✅','🌇')
@@ -100,14 +100,14 @@ function shopBody(){
         return itemRow({ icon:themeIcon(S.sky), key:`sr:${k}`,
           name:`${S.n}シリーズ ${cur?'<span style="color:#7fe6ff;font-size:10px">適用中</span>':''}`,
           // decos は空のシリーズもあるので、あるときだけ区切りを出す（先頭に「・」が浮くのを防ぐ）
-          sub:`${S.decos.length?S.decos.join(' ')+' ・ ':''}${own?'所持':uic('yen')+S.price.toLocaleString()}`,
+          sub:`${S.decos.length?S.decos.join(' ')+' ・ ':''}${own?'所持':yen(S.price)}`,
           action:applyBtn('data-series',k,own,cur,S.price) }); }).join('');
     }
     return body;
 }
 export function openShop(tab){ if(tab)_shopTab=tab;
   return openDialog({ title:`${uic('shop')} ショップ`,
-    subtitle:()=>`<span id="shopMoney" style="color:#ffd27a;font-size:13px">${uic('yen')} ${Math.floor(G.money).toLocaleString()}</span>`,
+    subtitle:()=>`<span id="shopMoney" style="color:#ffd27a;font-size:13px">${yen(Math.floor(G.money))}</span>`,
     tabs:SHOP_TABS.map(t=>({id:t[0],label:t[1]})), tab:_shopTab,
     onTab:(id,d)=>{ _shopTab=id; d.refresh(); },
     body:shopBody,

@@ -5,13 +5,22 @@ import { PROD_PRICE } from '../data/rules.mjs';
 import { G } from '../state.mjs';
 
 export function updateBadge(){ const m=document.getElementById('shopMoney');
-  if(m) m.innerHTML=uic('yen')+' '+Math.floor(G.money).toLocaleString(); }
+  if(m) m.innerHTML=yen(Math.floor(G.money)); }
 
 /* UI機能のドット絵アイコン（16×16 を原寸。lg=true は整数2倍の32px）。
    ダイアログの見出し・タブ・ボタン・説明文など「HTMLを置ける場所」だけで使う。
    toast() は textContent、title 属性も文字列しか入らないので、そこは絵文字のまま。
    材料・製品・装飾・テーマの絵文字はゲームの中身なので触っていない。 */
 export const uic=(name,lg=false)=>`<img class="uic${lg?' lg':''}" src="assets/ui/icons/${name}.png" alt="">`;
+
+/* 💰の表示は必ずこれを通す（uic('yen') を直に書かない）。
+   金額とアイコンの「並び・大きさ・縦の揃え」を1箇所に閉じ込めるため:
+     ・アイコンは必ず数値の後ろ（前に置く書き方を残すと混在する）
+     ・大きさは数字の半分。桁の大小に追従させたいので px ではなく em（CSS 側）
+     ・下端を数字のベースラインに合わせる（CSS 側）
+   丸めは呼ぶ側の判断（floor か round か）に任せ、ここでは桁区切りだけ入れる。 */
+export const yen=(n)=>
+  `<span class="yenv">${Number(n||0).toLocaleString()}<img class="uic yen" src="assets/ui/icons/yen.png" alt="円"></span>`;
 
 /* テーマのサムネイル（部屋の絵の縮小版 64×64。tools/assets/make_theme_thumbs.mjs 生成）。
    ドット絵ではないので pixelated にはせず、CSS 側で普通に縮めて出す。
@@ -58,7 +67,7 @@ export function matRow(key,suffix=''){
 }
 /* レア度ごとの内訳チップ（完成品の売上内訳） */
 export const rarChips=(byRar)=>Object.keys(byRar).sort().map(r=>
-  `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = ${uic('yen')}${(PROD_PRICE[r]*byRar[r]).toLocaleString()}</span>`).join('');
+  `<span class="chip"><b style="color:${RAR[r].c}">${RAR[r].n}</b>×${byRar[r]} = ${yen(PROD_PRICE[r]*byRar[r])}</span>`).join('');
 /* 1行アイテム（ショップの各タブ・エージェント一覧で共通）。
      icon / name / sub は文字列（HTML可）、action は右端のボタン */
 export function itemRow({icon='',name='',sub='',action='',key=null,style=''}){
