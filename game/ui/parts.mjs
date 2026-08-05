@@ -24,12 +24,12 @@ export const yen=(n)=>
 
 /* テーマのサムネイル（部屋の絵の縮小版 64×64。tools/assets/make_theme_thumbs.mjs 生成）。
    ドット絵ではないので pixelated にはせず、CSS 側で普通に縮めて出す。
-   汎用（キーなし）だけは対応する部屋が無いので道具箱のアイコンで代用する。 */
+   汎用（キーなし）だけは対応する部屋が無いのでソファのアイコンで代用する。 */
 export const themeIcon=(key)=> key
   ? `<img class="thumb" src="assets/ui/icons/theme-${key}.png" alt="">`
-  : uic('toolbox');
+  : uic('sofa');
 
-/* 製造機のドット絵アイコン（32×32 を原寸で出す）。
+/* 製造機のドット絵アイコン（16×16。編集パレットでは原寸、ショップの行だけ2倍）。
    HTMLを置ける場所（ショップの行・編集パレット）だけで使う。トーストや title 属性は
    文字列しか入らないので、そこは MACH[].e の絵文字のまま。 */
 export const machIcon=(variant)=>

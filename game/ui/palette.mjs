@@ -1,23 +1,58 @@
 /* 🔧 レイアウト編集 — パレット / 設置 / 製造機の設定パネル / 編集モードの寄せ。 */
-import { DECO, MACH, PROP, PROP_GROUPS } from '../data/econ.mjs';
-import { saveGame } from '../net.mjs';
+import { BG, DECO, MACH, PROP, PROP_GROUPS } from '../data/econ.mjs';
+import { NET, applyFactory, saveGame } from '../net.mjs';
 import { G, availN, snapLayout } from '../state.mjs';
 import { toast } from './dialog.mjs';
 import { morphInto } from './morph.mjs';
 import { machIcon, themeIcon, uic, updateBadge } from './parts.mjs';
 
 const ROOM_THEMES=['arabia','undersea','japan','china','diner','fantasy','scifi','cabin','dino','haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen'];
-const SKY_THEMES=['blue','sunset','night','space','aurora'];
-export const BG_META={auto:{e:'🕐',n:'標準'},blue:{e:'☀️',n:'快晴'},sunset:{e:'🌆',n:'夕焼け'},night:{e:'🌙',n:'星空'},space:{e:'🌌',n:'宇宙'},aurora:{e:'🌈',n:'オーロラ'},arabia:{e:'🕌',n:'アラビア'},undersea:{e:'🐚',n:'海底'},japan:{e:'⛩️',n:'日本'},china:{e:'🐉',n:'中華'},diner:{e:'🍔',n:'ダイナー'},fantasy:{e:'🧙',n:'ファンタジー'},scifi:{e:'🚀',n:'SF宇宙'},cabin:{e:'🌲',n:'森コテージ'},dino:{e:'🦖',n:'ダイナソー'},haunted:{e:'👻',n:'幽霊屋敷'},pirate:{e:'🏴‍☠️',n:'海賊船'},circuit:{e:'🏁',n:'サーキット'},dwarf:{e:'⛏️',n:'ドワーフ鉱山'},hell:{e:'😈',n:'地獄'},steampunk:{e:'⚙️',n:'スチパン'},retrofuture:{e:'🛸',n:'レトロ未来'},tokyo:{e:'🌃',n:'Tokyo'},halloween:{e:'🎃',n:'ハロウィン'},western:{e:'🤠',n:'西部開拓時代'},sushi:{e:'🍣',n:'回転寿司'},beehive:{e:'🐝',n:'ミツバチの巣'},circus:{e:'🎪',n:'サーカス'},carnival:{e:'🎭',n:'カーニバル'},desert:{e:'🏜️',n:'砂漠'},jungle:{e:'🌴',n:'ジャングル'},egypt:{e:'🔺',n:'古代エジプト'},christmas:{e:'🎄',n:'クリスマス'},space:{e:'🚀',n:'宇宙ステーション'},ice:{e:'🧊',n:'氷の城'},mushroom:{e:'🍄',n:'森のキノコ'},onsen:{e:'♨️',n:'和風温泉'}};
-function ownedBgs(){ const a=['auto']; for(const k of SKY_THEMES) if(G.bgOwned.includes(k)) a.push(k); for(const k of ROOM_THEMES) if(G.seriesOwned.includes(k)) a.push(k); return a; }
-function applyBg(k){ G.bg=k; if(window.__scene){ window.__scene.setSkyTheme(k); window.__scene.setFloor(ROOM_THEMES.includes(k)?'wood':G.floor); } saveGame(); updateBadge(); }
+const SKY_THEMES=['blue','sunset','night','space'];   // オーロラは星空・宇宙と同じ暗い夜空で見分けが付かないので外した
+/* 背景の表示名とフォールバックの絵文字。キーは空テーマ(SKY_THEMES)と部屋テーマ(ROOM_THEMES)の
+   両方をまとめて持つ。'space' は両方に属していて、以前はここで2回定義していた
+   （後ろの「宇宙ステーション」が勝っていた）。二重定義はやめて1つにしてある。 */
+export const BG_META={auto:{e:'🕐',n:'標準'},blue:{e:'☀️',n:'快晴'},sunset:{e:'🌆',n:'夕焼け'},night:{e:'🌙',n:'星空'},arabia:{e:'🕌',n:'アラビア'},undersea:{e:'🐚',n:'海底'},japan:{e:'⛩️',n:'日本'},china:{e:'🐉',n:'中華'},diner:{e:'🍔',n:'ダイナー'},fantasy:{e:'🧙',n:'ファンタジー'},scifi:{e:'🚀',n:'SF宇宙'},cabin:{e:'🌲',n:'森コテージ'},dino:{e:'🦖',n:'ダイナソー'},haunted:{e:'👻',n:'幽霊屋敷'},pirate:{e:'🏴‍☠️',n:'海賊船'},circuit:{e:'🏁',n:'サーキット'},dwarf:{e:'⛏️',n:'ドワーフ鉱山'},hell:{e:'😈',n:'地獄'},steampunk:{e:'⚙️',n:'スチパン'},retrofuture:{e:'🛸',n:'レトロ未来'},tokyo:{e:'🌃',n:'Tokyo'},halloween:{e:'🎃',n:'ハロウィン'},western:{e:'🤠',n:'西部開拓時代'},sushi:{e:'🍣',n:'回転寿司'},beehive:{e:'🐝',n:'ミツバチの巣'},circus:{e:'🎪',n:'サーカス'},carnival:{e:'🎭',n:'カーニバル'},desert:{e:'🏜️',n:'砂漠'},jungle:{e:'🌴',n:'ジャングル'},egypt:{e:'🔺',n:'古代エジプト'},christmas:{e:'🎄',n:'クリスマス'},space:{e:'🚀',n:'宇宙ステーション'},ice:{e:'🧊',n:'氷の城'},mushroom:{e:'🍄',n:'森のキノコ'},onsen:{e:'♨️',n:'和風温泉'}};
+/* 所持している背景。'space' は空テーマにも部屋テーマにも入っているので、
+   両方所持していると同じマスが2つ並ぶ。重複は落とす（先に出たほうを残す）。 */
+function ownedBgs(){ const a=['auto'];
+  for(const k of SKY_THEMES) if(G.bgOwned.includes(k)) a.push(k);
+  for(const k of ROOM_THEMES) if(G.seriesOwned.includes(k)) a.push(k);
+  return [...new Set(a)]; }
+/* 背景の切り替え。見た目はその場で変え、保存はサーバに投げる。
+   saveGame()（PUT /api/layout）は配置しか送らないので、これが無いと再読込で戻ってしまう。
+   使う口は購入と同じ /api/shop/buy — 所持済みなら無料で再適用される。
+
+   種別は BG（空の背景。'auto' を含む）にキーがあれば 'bg'、無ければ 'series' で判定する。
+   SERIES を先に見てはいけない —— 'space' は BG(背景単体 4,200円)にも
+   SERIES(宇宙ステーション 6,000円)にも同じキーで入っているので、SERIES 側に倒すと
+   「背景単体で買った人が選び直すたびにシリーズを買わされる」。
+   シリーズを買うとサーバが S.sky を bg_owned にも入れるので、'bg' で送れば
+   どちらの買い方でも所持済み＝無料の再適用になる。
+   （SKY_THEMES で判定すると 'auto'(標準) が漏れて 'series' 扱いになり、サーバに弾かれる）
+
+   所持していないキーはそもそも送らない（送ると購入になってしまう）。
+   一覧には所持しているものしか並ばないので通常は起こらないが、課金口を叩くので二重に守る。 */
+function applyBg(k){
+  const owned=(G.bgOwned||[]).includes(k)||(G.seriesOwned||[]).includes(k);
+  if(!owned){ toast('未所持です。ショップ→背景 で購入してください'); return; }
+  const prev=G.bg, prevFloor=G.floor;
+  const paint=(bg)=>{ G.bg=bg;
+    if(window.__scene){ window.__scene.setSkyTheme(bg); window.__scene.setFloor(ROOM_THEMES.includes(bg)?'wood':G.floor); } };
+  paint(k);
+  const kind=BG[k]?'bg':'series';
+  NET.call('POST','/api/shop/buy',{kind,id:k}).then(r=>{
+    if(r){ applyFactory(r.factory); updateBadge(); renderPalette(); }
+    // 失敗したら見た目も戻す（サーバとずれたまま残さない）
+    else { G.floor=prevFloor; paint(prev); renderPalette(); }
+  });
+}
 const paletteEl=document.getElementById('palette');
 let editCat='bg', editSel=null; window.__editSel=null;
 let selMode=false, selN=0;                       // 収納の複数選択モードと選択数
 let propFilter=null;                             // 装飾の絞り込みテーマ(null=すべて / ''=汎用)
 let _paletteView=null;                           // 最後に描いた一覧の種類。切り替わったときだけスクロールを戻す
 export function renderPalette(){
-  const cats=[['bg',`${uic('sky')} 背景`],['prop',`${uic('toolbox')} 装飾`],['machine',`${uic('factory')} 製造機`]];
+  const cats=[['bg',`${uic('sky')} 背景`],['prop',`${uic('sofa')} 装飾`],['machine',`${uic('factory')} 製造機`]];
   let items='', hint='', acts='', fil='';
   // key は差分適用でノードを持ち回すための識別子（在庫が増減しても他の項目が作り直されない）
   const cell=(key,dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" data-key="${key}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
@@ -35,7 +70,7 @@ export function renderPalette(){
       const inFilter=(th)=> propFilter===null || (th||'')===propFilter;
       const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`prop:${t}`,`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.variant===t));
       const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`deco:${t}`,`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.variant===t));
-      items=(P.concat(D).join(''))||`<div class="phint" style="padding:8px">${propFilter===null?`在庫なし。${uic('shop')}ショップ→設備 で購入してください。`:`このテーマの在庫がありません。「すべて」に戻すか、${uic('shop')}ショップで購入してください。`}</div>`;
+      items=(P.concat(D).join(''))||`<div class="phint" style="padding:8px">${propFilter===null?`在庫なし。${uic('shop')}ショップ→装飾 で購入してください。`:`このテーマの在庫がありません。「すべて」に戻すか、${uic('shop')}ショップで購入してください。`}</div>`;
       // 絞り込み行: 在庫のあるテーマだけ出す。適用中の背景と同じテーマには印を付ける
       const nOf=(th)=> Object.keys(PROP).filter(t=>(PROP[t].th||'')===th&&availN('prop',t)>0).length
                      + (th===''?Object.keys(DECO).filter(t=>availN('deco',t)>0).length:0);

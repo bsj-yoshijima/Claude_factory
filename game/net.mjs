@@ -30,7 +30,7 @@ export function applyFactory(f){
   if(typeof f.rev==='number') NET.rev=f.rev;
   G.money=f.money; G.bg=f.bg; G.floor=f.floor; G.factoryName=f.name||'';
   G.bgOwned=f.bgOwned||['auto']; G.floorOwned=f.floorOwned||['wood'];
-  G.seriesOwned=f.seriesOwned||[]; G.stock=f.stock||{machine:{},prop:{},deco:{}};
+  G.seriesOwned=f.seriesOwned||[]; G.skinOwned=f.skinOwned||[]; G.stock=f.stock||{machine:{},prop:{},deco:{}};
   G.emojiDecos=f.emojiDecos||[];
   G.layout=[
     ...(f.machines||[]).map(m=>({id:m.id,kind:'machine',variant:m.variant,dir:m.dir,c:m.cx,r:m.cy,lvl:m.lvl,slots:m.slots})),
@@ -86,7 +86,7 @@ export async function unlockAll(){
   if(!r.ok){ toast(j.error||`全解放に失敗しました (${r.status})`); return false; }
   applyFactory(j.factory);
   const g=j.granted||{};
-  toast(`✅ 全解放しました（💰${g.money} / 背景${g.bg} / 床${g.floor} / シリーズ${g.series} / 在庫各${g.stock}）`);
+  toast(`✅ 全解放しました（💰${g.money} / 背景${g.bg} / 床${g.floor} / シリーズ${g.series} / スキン${g.skin} / 在庫各${g.stock}）`);
   return true;
 }
 // 在庫と配置数

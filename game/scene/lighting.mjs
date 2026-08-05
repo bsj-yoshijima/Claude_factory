@@ -84,7 +84,6 @@ export const Lighting = {
       sunset:{amb:0xffce9e,obj:0xecc196,shaft:0xffb277,son:0.18,sky:0xef8f56,day:0.55,nf:0},
       night:{amb:0x47597f,obj:0x4c5c7e,shaft:0xafc0e6,son:0.10,sky:0x0c1430,day:0,nf:1},
       space:{amb:0x3a3f66,obj:0x40466e,shaft:0x8aa0d8,son:0.08,sky:0x0a0a22,day:0,nf:1},
-      aurora:{amb:0x4a6a72,obj:0x4f6f74,shaft:0x9fe0c8,son:0.12,sky:0x123b3a,day:0,nf:1},
       arabia:{amb:0xecba70,obj:0xe8c79a,shaft:0xffcf94,son:0.18,sky:0xE8A15A,day:0.4,nf:0.2},   // 砂漠の夕(壁=テラコッタ)
       undersea:{amb:0x8fc2d2,obj:0x7fb3c6,shaft:0x9fe6f0,son:0.14,sky:0x1E6E7E,day:0,nf:0},      // 海中
       japan:{amb:0xffe6ea,obj:0xf0d8dc,shaft:0xffd0d8,son:0.14,sky:0xF6B5C0,day:0.5,nf:0},        // 桜の空

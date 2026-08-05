@@ -3,7 +3,7 @@
 import { keyOfSlots } from './data/craft.mjs';
 
 export let G={ money:0, machines:[{variant:'s2',lvl:1}], decos:{},
-        bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, seriesOwned:[], emojiDecos:[], layout:[],
+        bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, skinOwned:[], seriesOwned:[], emojiDecos:[], layout:[],
         stock:{machine:{},prop:{},deco:{}}, lastT:null };
 /* =========================================================================
    NET — データ層。工場のデータはすべてサーバ(server/index.mjs)が持つ。

@@ -64,15 +64,15 @@
                            margin:0 0 0 3px;color:#ffd27a}
   #board .m.hit{cursor:pointer}                     /* クリックで今日の製造を開く */
   #board .m.hit:hover{background:rgba(127,230,255,.09)}
-  /* 稼働/休憩は Claude君の絵で示す（稼働=作業ポーズ+火花 / 休憩=座り+☕）。
+  /* 稼働/休憩は Claude君の絵で示す（稼働=作業ポーズ+✨ / 休憩=座り+☕）。
+     右端に出していた 👥▸ は、クリックできることが枠とカーソルで分かるのでやめた。
      常時見えるのはこのコンパクト表示だけ。クリックでエージェント一覧ダイアログを開く。 */
   #hud{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;gap:8px;background:var(--panel);
        border:1px solid var(--edge);border-radius:10px;padding:5px 9px;backdrop-filter:blur(3px);cursor:pointer}
   #hud:hover{border-color:var(--mint)}
-  #hud::after{content:'👥▸';align-self:center;font-size:10px;color:#9fdcc6;margin-left:1px}
   #hud .st{position:relative;display:flex;align-items:flex-end;gap:2px}
-  #hud .st img{width:30px;height:32px;image-rendering:pixelated;display:block}
   #hud .st .fx{position:absolute;top:-2px;right:12px;font-size:12px;font-style:normal;line-height:1}
+  #hud .st img{width:30px;height:32px;image-rendering:pixelated;display:block}
   #hud b{font-size:15px;color:var(--gold);font-variant-numeric:tabular-nums;line-height:1.6}
   #hud b.idle{color:#9fdcc6}
   #note{position:absolute;top:10px;left:12px;font-size:10px;color:#9fdcc6;background:var(--panel);padding:4px 9px;border-radius:6px;z-index:6}
@@ -122,6 +122,9 @@
   .sttab.pill{border-radius:8px}
   .rc{display:flex;align-items:center;gap:10px;background:#10171b;border:1px solid #243036;border-radius:9px;padding:8px 11px;margin:6px 0}
   .rc .ic{font-size:26px;width:34px;text-align:center}
+  /* 被り物の見本（assets/hats）。元画像が 747×525 以上あって 32px まで大きく縮めるので、
+     pixelated（最近傍）にするとドットが間引かれてジャギーになる。補間に任せる */
+  .rc .ic .hat{width:32px;height:32px;object-fit:contain;vertical-align:middle}
   /* UI機能のドット絵アイコン（16×16・assets/ui/icons）。文字と並べるので少し下げる。
      lg は整数2倍の32px（#craft のロゴなど文字より大きく出す場所用） */
   .uic{width:16px;height:16px;image-rendering:pixelated;vertical-align:-3px}
@@ -140,9 +143,11 @@
   .thumb{width:18px;height:18px;border-radius:4px;object-fit:cover;vertical-align:-4px;margin-right:4px}
   .rc .ic .thumb,.pitem .thumb{width:38px;height:38px;border-radius:6px;margin:0}
   .uic.lg{width:32px;height:32px;vertical-align:-9px}
-  /* 製造機のドット絵アイコン（32×32・assets/ui/icons）。行の .ic と編集パレットの
-     .pitem で共通。原寸で出す（半端な倍率で縮めるとドットが濁る） */
-  .micon{width:32px;height:32px;image-rendering:pixelated;vertical-align:middle}
+  /* 製造機のドット絵アイコン（16×16・assets/ui/icons）。編集パレットのマスでは原寸、
+     ショップの行（.rc .ic）だけ整数2倍に拡大する。半端な倍率で縮めるとドットが濁るので
+     倍率は 1倍か2倍だけにすること */
+  .micon{width:16px;height:16px;image-rendering:pixelated;vertical-align:middle}
+  .rc .ic .micon{width:32px;height:32px}
   .rc .mid{flex:1;min-width:0}
   .rc .nm{font-size:13px;color:#eafff4;font-weight:700}
   .rc button{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:7px;padding:8px 13px;cursor:pointer;font-family:inherit;font-size:12px}
