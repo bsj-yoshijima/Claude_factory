@@ -317,6 +317,23 @@ async function handle(req, res) {
   return sendHtml(res, fs.readFileSync(path.join(ROOT, 'factory-phaser.html'), 'utf8'));
 }
 
+/* ============================ 死因を残す ============================ */
+// dev サーバは標準出力しか持たないので、親シェルが閉じると落ちた理由も消える。
+// 想定外の終了だけ dev-server.log に追記して、次に落ちたとき原因が分かるようにする。
+const DEATH_LOG = path.join(ROOT, 'dev-server.log');
+function recordDeath(kind, detail) {
+  const line = `${new Date().toISOString()} [${kind}] pid=${process.pid} ${detail}\n`;
+  console.error(`\n  ${line}`);
+  try { fs.appendFileSync(DEATH_LOG, line); } catch {}
+}
+// 握り潰した例外でプロセスを落とさない（可視化ツールなので生存を優先する）
+process.on('uncaughtException', (e) => recordDeath('uncaughtException', e?.stack || String(e)));
+process.on('unhandledRejection', (e) => recordDeath('unhandledRejection', e?.stack || String(e)));
+// 外から殺された場合（親シェルの終了・kill・Docker 停止）もそれと分かるように
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+  process.on(sig, () => { recordDeath('signal', sig); process.exit(0); });
+}
+
 /* ================================ 起動 ================================ */
 const stats = { logs: 0, metrics: 0, traces: 0, hooks: 0, lastAt: null, startedAt: Date.now() };
 const oauthStates = new Map();
