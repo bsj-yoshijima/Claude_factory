@@ -12,7 +12,7 @@ function agentRows(){                   // プロジェクト単位に集約(同
   return Object.values(by);
 }
 const skinName=(id)=>{ const s=((window.__factory&&window.__factory.skinList)||[]).find(x=>x.id===id); return s?s.n:'デフォルト'; };
-/* 被り物の画像(assets/hats/hat-*.png)は未生成のものが多い。
+/* 被り物の画像(assets/hats/hat-*.png)は31テーマぶん揃っているが、増減しても壊れないようにしておく。
    onerror で DOM を差し替える手は、差分適用のたびに元の <img> へ戻されて
    読み直し→また差し替え…とちらつくので使わない。
    「その画像があるか」を一度だけ判定してキャッシュし、描画は常に決定的にする。 */
