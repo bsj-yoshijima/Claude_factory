@@ -83,9 +83,11 @@ window.__craft = {
     const ms=machines(), m=id?ms.find(x=>x.id===id):null;
     if(!m) return {e:'📦', n:'素材セット済み', unknown:false};
     const st=machState(m.id), need=needWpForSize(m.size);
+    // p は盤面の進捗バー用。数値そのものは🏭製造タブと製造機パネルで見せる
+    const p=need ? Math.max(0, Math.min(1, st.wp/need)) : 0;
     return st.running
-      ? {e:'⚙️', n:`製造中 ${Math.floor(st.wp)}/${need}WP`, unknown:false}
-      : {e:'📦', n:'待機中', unknown:true};
+      ? {e:'⚙️', n:`製造中 ${Math.floor(st.wp)}/${need}WP`, p, running:true, unknown:false}
+      : {e:'📦', n:`待機中 ${Math.floor(st.wp)}/${need}WP`, p, running:false, unknown:true};
   },
 };
 

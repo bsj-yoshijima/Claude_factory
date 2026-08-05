@@ -108,6 +108,7 @@ export const MachineArt = {
     const g=this.add.graphics().setDepth(dFront+0.1); objs.push(g); e._gfx=g;   // 掴み手(main)。絵は帯ごとの graphics が持つ
     const cellG=[];                                   // 手続き描画のときのマスごとの graphics
     let HG, spotPts=null;   // 天面の高さ(px) / 投入口の実位置(スプライトのときアンカーから算出)
+    let artTop=null, artMidX=null;   // 絵の上端と中心x。稼働バッジをここの真上に出す
     e._lit=[];              // 採光tintの対象。帯の数だけある
     if(tex){
       // 絵は「1マスの送り = ゲームの1マス × MACH_DRAW」で焼いてある(tools/cut_machines.py)。
@@ -178,6 +179,7 @@ export const MachineArt = {
         im.setCrop(x0, 0, Math.max(0,x1-x0), ih);   // 位置は変えず、自分の帯だけを見せる
         objs.push(im); e._lit.push(im); this.lit.push({sp:im,u,v});
       });
+      artTop=imy-dh; artMidX=imx;
     } else {
       HG = MACH_GEO.height*CELL;
       const up=(q)=>({x:q.x, y:q.y-HG});
@@ -223,14 +225,32 @@ export const MachineArt = {
              objs.push(t); e._slotObjs.push(t); }
     });
 
-    // 完成品の表示(筐体の上)。素材未設定なら出さない
+    /* 稼働バッジ(筐体の上)。素材未設定なら出さない。
+       アンカーは絵の上端。by0-HG(足元の最奥を筐体の高さぶん持ち上げた点)は
+       絵の上端より30px ほど高く、盤面で機械から浮いて見えていた。
+       手続き描画のときは絵が無いので従来どおり by0-HG を使う。 */
     const prod=recipeFor(e.slots, e.id); e.product=prod;
-    const mid={x:(bx0+bx1)/2, y:by0-HG};
+    const mid={ x: (artMidX!=null?artMidX:(bx0+bx1)/2),
+                y: (artTop!=null?artTop:by0-HG) };
     if(prod){
-      const badge=this.add.text(mid.x, mid.y-CELL*0.30, prod.e, {fontSize:Math.round(CELL*0.8)+'px'}).setOrigin(0.5,1).setDepth(C.y+2);
-      const nm=this.add.text(mid.x, mid.y-CELL*0.28, prod.n, {fontFamily:'monospace',fontSize:'10px',color:prod.unknown?'#d9b48a':'#eafff6'}).setOrigin(0.5,0).setDepth(C.y+2);
-      nm.setShadow(0,1,'#000',3,true,true);
-      objs.push(badge,nm); e._badge=badge;
+      /* 「⚙️/📦 + 進捗バー」だけの小さな表示。
+         以前は完成品名と「製造中 x/yWP」を並べていたが、10px の文字列でも
+         機械より横に長くなり、盤面で一番目立つのがこの文字になっていた。
+         数値は🏭製造タブと製造機パネルで見られるので、盤面では
+         「動いているか」と「あとどれくらいか」だけ分かればよい。 */
+      const FS=Math.round(CELL*0.42), BW=Math.round(CELL*0.95), BH=4, GAP=2;
+      const hasBar=(typeof prod.p==='number');
+      const w=FS+(hasBar?GAP+BW:0), x0=mid.x-w/2, cy=mid.y-2-FS/2;
+      const badge=this.add.text(x0, cy, prod.e, {fontSize:FS+'px'}).setOrigin(0,0.5).setDepth(C.y+2);
+      objs.push(badge); e._badge=badge;
+      if(hasBar){
+        const bx=x0+FS+GAP, by=Math.round(cy-BH/2), p=Math.max(0,Math.min(1,prod.p));
+        const pb=this.add.graphics().setDepth(C.y+2); objs.push(pb);
+        pb.fillStyle(0x000000,0.55); pb.fillRect(bx-1,by-1,BW+2,BH+2);   // 縁。明るい床でも輪郭が出る
+        pb.fillStyle(0x1b2430,0.95); pb.fillRect(bx,by,BW,BH);           // 溝
+        pb.fillStyle(prod.running?0x33ffcc:0x8fa0ae,1);                  // 稼働=緑 / 停止=灰
+        pb.fillRect(bx,by,Math.round(BW*p),BH);
+      }
     } else {
       const hint=this.add.text(mid.x, mid.y-CELL*0.1, '素材未設定', {fontFamily:'monospace',fontSize:'10px',color:'#93a39d'}).setOrigin(0.5,1).setDepth(C.y+2);
       hint.setShadow(0,1,'#000',3,true,true); objs.push(hint);
