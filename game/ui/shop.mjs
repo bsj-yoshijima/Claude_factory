@@ -1,8 +1,9 @@
-/* 🏪 ショップ — 製造機・設備・内装の購入と強化。💰の増減は必ずサーバが決める。 */
-import { BG, DECO, FLOOR, MACH, PROP, PROP_GROUPS, SERIES, lvCost, machVariant } from '../data/econ.mjs';
+/* 🏪 ショップ — 製造機・装飾・背景の購入と強化。💰の増減は必ずサーバが決める。 */
+import { DECO, MACH, PROP, PROP_GROUPS, SERIES, SKIN, lvCost, machVariant } from '../data/econ.mjs';
 import { MAT } from '../data/craft.mjs';
 import { NET, applyFactory } from '../net.mjs';
 import { G, availN, machState, ownedN } from '../state.mjs';
+import { hatReady } from './agents.mjs';
 import { openDialog, toast } from './dialog.mjs';
 import { itemRow, machIcon, themeIcon, uic, updateBadge } from './parts.mjs';
 
@@ -23,28 +24,33 @@ function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machin
 function slotSummary(e){ const mats=[...new Set((e.slots||[]).filter(Boolean))].sort();
   if(!mats.length) return '素材未設定';
   const icons=mats.map(m=>(MAT[m]||{}).e||'?').join('');
-  return `${icons}${machState(e.id).running?` ・ ${uic('gear')}製造中`:''}`; }
+  // ここは 11px の1行なので、24×24 の歯車を並べると行が倍の高さになる。文字だけにする
+  return `${icons}${machState(e.id).running?' ・ 製造中':''}`; }
 function buyDeco(t){ if(G.money<DECO[t].price)return;
   apiBuy('deco',t,`${DECO[t].e} ${DECO[t].n} を購入（🔧編集で設置）`); }
 function buyProp(t){ if(G.money<PROP[t].price)return;
   apiBuy('prop',t,`${PROP[t].n} を購入（🔧編集で設置）`); }
-function selectBg(k){
-  apiBuy('bg',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setSkyTheme) window.__scene.setSkyTheme(k); }); }
-function selectFloor(k){
-  apiBuy('floor',k).then(okk=>{ if(okk&&window.__scene&&window.__scene.setFloor) window.__scene.setFloor(k); }); }
+// スキンは「買う」だけ。誰に被せるかはエージェント一覧で選ぶ
+function buySkin(id){ if(!SKIN[id])return; if(G.money<SKIN[id].price)return;
+  apiBuy('skin',id,`${SKIN[id].n} を購入（エージェント一覧で被せられます）`); }
 function buySeries(k){ const S=SERIES[k];
   apiBuy('series',k,`${S.n} シリーズを適用`).then(okk=>{ if(okk&&window.__scene){
     window.__scene.setSkyTheme(S.sky); window.__scene.setFloor(S.floor); } }); }
 
 let _shopTab='mach';
-const SHOP_TABS=[['mach',`${uic('factory')} 製造機`],['equip',`${uic('toolbox')} 設備`],
-                 ['decor',`${uic('paint')} 内装`],['series',`${uic('layers')} シリーズ`]];
+/* タブ名とアイコンは編集パレットのカテゴリと1対1で揃えてある
+   （製造機=factory / 装飾=sofa / 背景=sky）。
+   背景は「部屋ごとの着せ替え」に一本化した。以前は別に「内装」タブがあって
+   背景(窓の外の景色)と床材を1つずつ買えたが、シリーズが両方まとめて着せ替える
+   ので二重だった。タブIDの 'series' は ?shop=series で使えるので変えていない。 */
+const SHOP_TABS=[['mach',`${uic('factory')} 製造機`],['equip',`${uic('sofa')} 装飾`],
+                 ['series',`${uic('sky')} 背景`],['skin',`${uic('agent')} スキン`]];
 /* ショップの各行は itemRow() に寄せてある。見出し・在庫バッジ・購入ボタンは
    どのタブでも同じ形なので、ここでその3つだけを作る小物を持つ。 */
 const shopHead=(t,style='margin:12px 0 6px')=>`<div class="cost" style="${style}">${t}</div>`;
 const stockBadge=(n)=>`<span style="color:#9fb0c0;font-size:10px">在庫 ${n}</span>`;
 const buyBtn=(attr,id,price,label='購入')=>`<button ${attr}="${id}" ${G.money>=price?'':'disabled'}>${label}</button>`;
-/* 所持済みなら「適用」、使用中なら押せない。内装とシリーズで共通の出し分け */
+/* 所持済みなら「適用」、使用中なら押せない。背景・床材とシリーズで共通の出し分け */
 const applyBtn=(attr,id,own,cur,price)=>
   `<button ${attr}="${id}" ${(own||G.money>=price)&&!cur?'':'disabled'}>${own?(cur?'---':'適用'):'購入'}</button>`;
 function shopBody(){
@@ -83,29 +89,26 @@ function shopBody(){
         name:`${DECO[t].n} ${stockBadge(ownedN('deco',t))}`,
         sub:`${uic('yen')}${DECO[t].price}`,
         action:buyBtn('data-deco',t,DECO[t].price) })).join('');
-    } else if(_shopTab==='decor'){   // 内装（背景=窓の外の景色 / 床材）
-      const row=(table,attr,ownList,curKey,prefix,curIcon,offIcon)=>Object.keys(table).map(k=>{
-        const own=ownList.includes(k), cur=curKey===k;
-        return itemRow({ icon:cur?curIcon:offIcon, key:`${attr}:${k}`,
-          name:`${prefix}: ${table[k].n}`,
-          sub:own?(cur?'使用中':'所持'):uic('yen')+table[k].price.toLocaleString(),
-          action:applyBtn(attr,k,own,cur,table[k].price) }); }).join('');
-      body = shopHead('背景（窓の外の景色）','margin:2px 0 6px')
-           + row(BG,'data-bg',G.bgOwned,G.bg,'背景','✅','🌇')
-           + shopHead('床材')
-           + row(FLOOR,'data-fl',G.floorOwned,G.floor,'床材','✅','🔲');
-    } else {   // シリーズ（背景＋床＋絵文字装飾のセット）
-      body = shopHead('背景・床材・装飾をまとめて着せ替え（購入後は無料で再適用）','margin:2px 0 8px');
+    } else if(_shopTab==='skin'){   // スキン — エージェントの被り物
+      body = shopHead('買うとエージェント一覧で被せられる。被り物はプロジェクト単位で選べる','margin:2px 0 8px');
+      body += Object.keys(SKIN).map(id=>{ const S=SKIN[id], own=(G.skinOwned||[]).includes(id), ready=hatReady(id);
+        return itemRow({ icon:ready?`<img class="hat" src="assets/hats/hat-${id}.png" alt="">`:uic('agent',true),
+          key:`sk:${id}`, name:S.n,
+          // 画像が未生成のスキンは買っても見た目が変わらないので、その旨を行に出す
+          sub:`${own?'':uic('yen')+S.price.toLocaleString()+(ready?'':' ・ ')}${ready?'':'画像準備中'}`,
+          action:own?'<button disabled>所持</button>':buyBtn('data-skin',id,S.price) }); }).join('');
+    } else {   // 背景 — 部屋ごとの着せ替え（背景＋床材＋装飾のセット）
+      body = shopHead('部屋ごと着せ替え。購入したものは編集の「背景」からいつでも切り替えられる','margin:2px 0 8px');
       body += Object.keys(SERIES).map(k=>{ const S=SERIES[k],own=G.seriesOwned.includes(k),cur=(G.bg===S.sky&&G.floor===S.floor);
         return itemRow({ icon:themeIcon(S.sky), key:`sr:${k}`,
-          name:`${S.n}シリーズ ${cur?'<span style="color:#7fe6ff;font-size:10px">適用中</span>':''}`,
+          name:`${S.n} ${cur?'<span style="color:#7fe6ff;font-size:10px">適用中</span>':''}`,
           // decos は空のシリーズもあるので、あるときだけ区切りを出す（先頭に「・」が浮くのを防ぐ）
           sub:`${S.decos.length?S.decos.join(' ')+' ・ ':''}${own?'所持':uic('yen')+S.price.toLocaleString()}`,
           action:applyBtn('data-series',k,own,cur,S.price) }); }).join('');
     }
     return body;
 }
-export function openShop(tab){ if(tab)_shopTab=tab;
+export function openShop(tab){ if(tab&&SHOP_TABS.some(t=>t[0]===tab))_shopTab=tab;
   return openDialog({ title:`${uic('shop')} ショップ`,
     subtitle:()=>`<span id="shopMoney" style="color:#ffd27a;font-size:13px">${uic('yen')} ${Math.floor(G.money).toLocaleString()}</span>`,
     tabs:SHOP_TABS.map(t=>({id:t[0],label:t[1]})), tab:_shopTab,
@@ -117,8 +120,7 @@ export function openShop(tab){ if(tab)_shopTab=tab;
       p.querySelectorAll('[data-buymach]').forEach(b=>b.onclick=()=>{ buyMachine(b.dataset.buymach); re(); });
       p.querySelectorAll('[data-deco]').forEach(b=>b.onclick=()=>{ buyDeco(b.dataset.deco); re(); });
       p.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>{ buyProp(b.dataset.prop); re(); });
-      p.querySelectorAll('[data-bg]').forEach(b=>b.onclick=()=>{ selectBg(b.dataset.bg); re(); });
-      p.querySelectorAll('[data-fl]').forEach(b=>b.onclick=()=>{ selectFloor(b.dataset.fl); re(); });
       p.querySelectorAll('[data-series]').forEach(b=>b.onclick=()=>{ buySeries(b.dataset.series); re(); });
+      p.querySelectorAll('[data-skin]').forEach(b=>b.onclick=()=>{ buySkin(b.dataset.skin); re(); });
     } });
 }

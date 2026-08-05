@@ -8,7 +8,7 @@
 //
 // ここは「サーバから見た窓口」に徹する。マスタを増やすときは game/data/ を触ること。
 export {
-  RAR, MACH, machVariant, lvCost, DECO, PROP, BG, FLOOR, SERIES,
+  RAR, MACH, machVariant, lvCost, DECO, PROP, BG, FLOOR, SERIES, SKIN,
 } from '../game/data/econ.mjs';
 export {
   GENRES, GENRE, SECRET_G, MATS, MAT, PRODS, PROD, RECIPES, SECRETS, UNKNOWN_PRODUCT,
@@ -16,12 +16,12 @@ export {
 } from '../game/data/craft.mjs';
 export { WP_PER_SLOT, PROD_PRICE, sizeOf, needWp } from '../game/data/rules.mjs';
 
-import { MACH, PROP, DECO, BG, FLOOR, SERIES } from '../game/data/econ.mjs';
+import { MACH, PROP, DECO, BG, FLOOR, SERIES, SKIN } from '../game/data/econ.mjs';
 import { GENRES, MATS, PRODS, RECIPES, SECRETS } from '../game/data/craft.mjs';
 
 /** 購入可能なものの値段を1箇所で引く。サーバ側の購入検証はすべてこれを通す。 */
 export function priceOf(kind, id) {
-  const table = { machine: MACH, prop: PROP, deco: DECO, bg: BG, floor: FLOOR, series: SERIES }[kind];
+  const table = { machine: MACH, prop: PROP, deco: DECO, bg: BG, floor: FLOOR, series: SERIES, skin: SKIN }[kind];
   if (!table) return null;
   const e = table[id];
   return e && typeof e.price === 'number' ? e.price : null;

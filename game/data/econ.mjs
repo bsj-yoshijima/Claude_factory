@@ -198,6 +198,23 @@ export const PROP={ vase:{e:'🏺',n:'装飾壺',price:220}, palm:{e:'🌴',n:'�
 /* 装飾プロップの絞り込み見出し。[テーマキー, 表示名]。
    アイコンは assets/ui/icons/theme-<キー>.png（部屋の絵の縮小版）を
    キーから引くので、ラベルに絵文字は持たせない（'' = 汎用だけ部屋が無い）。 */
+/* エージェントの被り物（スキン）。id はテーマキーで、盤面では hat_<id> のテクスチャを
+   マスコットの頭に1枚重ねる。'none'（デフォルト）は所持の概念を持たない常設なので入れない。
+   帽子の画像(assets/hats/hat-<id>.png)はまだ6種ぶんしか無く、未生成のものは買っても
+   見た目が変わらない。ショップの行には「画像準備中」と出して、それが分かるようにしてある。
+   値段は一律。テーマ部屋(シリーズ)より安く、装飾より高いくらいの位置づけ。 */
+export const SKIN_PRICE = 3000;
+export const SKIN = Object.fromEntries([
+  ['arabia','魔人'],['undersea','人魚'],['japan','侍'],['china','皇帝'],
+  ['diner','ウェイトレス'],['fantasy','魔法使い'],['scifi','宇宙人'],['cabin','きこり'],
+  ['dino','恐竜'],['haunted','ゴースト'],['pirate','海賊'],['circuit','レーサー'],
+  ['dwarf','ドワーフ'],['hell','デビル'],['steampunk','発明家'],['retrofuture','ネモ船長'],
+  ['tokyo','サイバー'],['halloween','吸血鬼'],['western','ガンマン'],['sushi','寿司職人'],
+  ['beehive','みつばち'],['circus','ピエロ'],['carnival','仮面'],['desert','遊牧民'],
+  ['jungle','探検家'],['egypt','ファラオ'],['christmas','サンタ'],['space','宇宙飛行士'],
+  ['ice','氷の女王'],['mushroom','妖精'],['onsen','湯上がり'],
+].map(([id,n])=>[id,{n,price:SKIN_PRICE}]));
+
 export const PROP_GROUPS=[['','汎用'],
   ['japan','日本'],['onsen','温泉'],['tokyo','Tokyo'],['sushi','回転寿司'],['china','中華'],
   ['arabia','アラビア'],['desert','砂漠'],['egypt','エジプト'],['jungle','ジャングル'],['undersea','海底'],
@@ -206,7 +223,8 @@ export const PROP_GROUPS=[['','汎用'],
   ['pirate','海賊船'],['western','西部開拓'],['dino','ダイナソー'],['circus','サーカス'],['carnival','カーニバル'],
   ['circuit','サーキット'],['steampunk','スチームパンク'],['retrofuture','レトロ未来'],['scifi','SF宇宙'],['space','宇宙'],
   ['beehive','ミツバチの巣']];
-export const BG={ auto:{n:'標準（時刻連動）',price:0}, blue:{n:'快晴',price:1800}, sunset:{n:'夕焼け',price:2200}, night:{n:'星空',price:2600}, space:{n:'宇宙',price:4200}, aurora:{n:'オーロラ',price:5200} };
+// 空の背景。オーロラは星空・宇宙と同じ暗い夜空になって見分けが付かないため廃止した。
+export const BG={ auto:{n:'標準（時刻連動）',price:0}, blue:{n:'快晴',price:1800}, sunset:{n:'夕焼け',price:2200}, night:{n:'星空',price:2600}, space:{n:'宇宙',price:4200} };
 export const FLOOR={ wood:{n:'木材（標準）',price:0}, cool:{n:'クールグレー',price:1000}, crimson:{n:'レッドタイル',price:1200}, forest:{n:'フォレスト',price:1200}, gold:{n:'ゴールド',price:3200} };
 // テーマシリーズ: 空テーマ(sky)＋床材(floor)＋絵文字装飾セット(decos) をまとめて購入/適用
 export const SERIES={

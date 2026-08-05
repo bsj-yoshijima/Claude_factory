@@ -35,6 +35,7 @@ async function factoryOf(userId) {
     name: f.name || '',
     bg: f.bg, floor: f.floor,
     bgOwned: f.bg_owned, floorOwned: f.floor_owned, seriesOwned: f.series_owned,
+    skinOwned: f.skin_owned || [],
     props: f.props, stock: f.stock, emojiDecos: f.emoji_decos,
     machines: machines.map((m) => ({
       id: m.id, variant: m.variant, dir: m.dir, cx: m.cx, cy: m.cy, lvl: m.lvl,
@@ -104,14 +105,30 @@ export async function postClaim(user) {
 
 /* =============================== ショップ =============================== */
 export async function postBuy(user, body) {
-  const { kind, id } = body || {};
+  /* 文字列に固定してから使う。配列やオブジェクトのままだと JS のキー変換で
+     GD.priceOf は値を引けてしまうのに、所持チェックの includes は一致しないので
+     「同じものを何度でも買えて、DBには壊れた要素が入る」経路ができる。 */
+  const kind = String(body?.kind ?? ''), id = String(body?.id ?? '');
   const price = GD.priceOf(kind, id);
   if (price == null) return bad(`買えないものです: ${kind}/${id}`);
 
-  return tx(async (c) => {
+  /* factoryOf は pool の別接続で読むので、tx の中で呼ぶとコミット前の古い値が返る。
+     購入直後の画面が1回ぶん遅れて見えるので、書き込みを閉じてから読み直す。 */
+  const r = await tx(async (c) => {
     const f = (await c.query(
-      `SELECT money, bg_owned, floor_owned, series_owned, stock
+      `SELECT money, bg_owned, floor_owned, series_owned, skin_owned, stock
          FROM factories WHERE user_id=$1 FOR UPDATE`, [user.id])).rows[0];
+
+    // スキンは買うだけ（誰に被せるかは PUT /api/skin で別に決める）。二重購入はしない
+    if (kind === 'skin') {
+      if ((f.skin_owned || []).includes(id)) return bad('すでに持っています');
+      if (Number(f.money) < price) return bad('💰が足りません');
+      await c.query(
+        `UPDATE factories SET money = money - $2, skin_owned = array_append(skin_owned, $3)
+          WHERE user_id=$1`, [user.id, price, id]);
+      await bumpRev(c, user.id);
+      return { bought: true };
+    }
 
     // 内装は「所持していれば無料で再適用」。所持していなければ購入
     if (kind === 'bg' || kind === 'floor' || kind === 'series') {
@@ -135,7 +152,7 @@ export async function postBuy(user, body) {
             WHERE user_id=$1`, [user.id, S.sky, S.floor]);
       }
       await bumpRev(c, user.id);
-      return jsonOk({ ok: true, factory: await factoryOf(user.id) });
+      return { bought: true };
     }
 
     // machine / prop / deco は在庫に入る（設置は🔧編集から）
@@ -146,8 +163,10 @@ export async function postBuy(user, body) {
     await c.query(`UPDATE factories SET money = money - $2, stock = $3 WHERE user_id=$1`,
       [user.id, price, JSON.stringify(stock)]);
     await bumpRev(c, user.id);
-    return jsonOk({ ok: true, factory: await factoryOf(user.id) });
+    return { bought: true };
   });
+  if (!r?.bought) return r;                       // bad() がそのまま返ってきた場合
+  return jsonOk({ ok: true, factory: await factoryOf(user.id) });   // コミット後に読む
 }
 
 export async function postLevelUp(user, body) {
@@ -241,6 +260,11 @@ export async function putSkin(user, body) {
   const project = String(body?.project || '');
   const skinId = String(body?.skinId || 'none');
   if (!project) return bad('project が必要です');
+  // 所持していないスキンは被せられない（ショップで買うもの。'none' はデフォルトなので常にOK）
+  if (skinId !== 'none') {
+    const f = await one(`SELECT skin_owned FROM factories WHERE user_id=$1`, [user.id]);
+    if (!(f?.skin_owned || []).includes(skinId)) return bad('そのスキンは持っていません');
+  }
   if (skinId === 'none') await q(`DELETE FROM skins WHERE user_id=$1 AND project=$2`, [user.id, project]);
   else await q(
     `INSERT INTO skins(user_id, project, skin_id) VALUES ($1,$2,$3)
@@ -448,7 +472,7 @@ export async function postDevUnlockAll(user) {
      ここは「解放した結果」を即返したいので、書き込みを閉じてから読む。 */
   const r = await tx(async (c) => {
     const f = (await c.query(
-      `SELECT stock, bg_owned, floor_owned, series_owned
+      `SELECT stock, bg_owned, floor_owned, series_owned, skin_owned
          FROM factories WHERE user_id=$1 FOR UPDATE`, [user.id])).rows[0];
     if (!f) return bad('工場がありません');
 
@@ -468,6 +492,7 @@ export async function postDevUnlockAll(user) {
     const bgOwned = union(f.bg_owned, Object.keys(GD.BG), series.map((s) => s.sky));
     const floorOwned = union(f.floor_owned, Object.keys(GD.FLOOR), series.map((s) => s.floor));
     const seriesOwned = union(f.series_owned, Object.keys(GD.SERIES));
+    const skinOwned = union(f.skin_owned, Object.keys(GD.SKIN));
 
     await c.query(
       `UPDATE factories
@@ -475,11 +500,12 @@ export async function postDevUnlockAll(user) {
               stock        = $3::jsonb,
               bg_owned     = $4::text[],
               floor_owned  = $5::text[],
-              series_owned = $6::text[]
+              series_owned = $6::text[],
+              skin_owned   = $7::text[]
         WHERE user_id=$1`,
-      [user.id, DEV_MONEY, JSON.stringify(stock), bgOwned, floorOwned, seriesOwned]);
+      [user.id, DEV_MONEY, JSON.stringify(stock), bgOwned, floorOwned, seriesOwned, skinOwned]);
     await bumpRev(c, user.id);
-    return { bg: bgOwned.length, floor: floorOwned.length, series: seriesOwned.length };
+    return { bg: bgOwned.length, floor: floorOwned.length, series: seriesOwned.length, skin: skinOwned.length };
   });
   if (r.status) return r;                                  // bad() がそのまま返ってきた場合
 

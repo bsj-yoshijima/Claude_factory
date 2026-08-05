@@ -141,7 +141,7 @@ document.addEventListener('click',e=>{ if(!menuEl.contains(e.target)&&e.target!=
 document.getElementById('hud').addEventListener('click',()=>{ if(!window.__factory){ toast('準備中…'); return; } openAgents(); });
 document.getElementById('hud').title='クリックでエージェント一覧';
 
-/* ===== ショップ（製造機・設備・内装の購入と強化） ===== */
+/* ===== ショップ（製造機・装飾・背景/床材の購入と強化） ===== */
 /* 💰 の増減は必ずサーバが決める（クライアントの申告を信じない） */
 document.getElementById('shopBtn').addEventListener('click',()=>openShop());
 

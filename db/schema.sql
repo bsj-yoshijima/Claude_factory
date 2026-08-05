@@ -78,6 +78,8 @@ UPDATE factories f
  WHERE u.id = f.user_id AND f.name = '';
 ALTER TABLE factories ADD COLUMN IF NOT EXISTS rev bigint NOT NULL DEFAULT 0;
 
+-- 被り物(スキン)の所持カラムは、参照する skins テーブルを作ったあとで足す（このファイル下部）。
+
 -- 製造機だけは行にする（running / wp を機械ごとに持つため）。
 -- ★ id はクライアントが生成するレイアウトIDなので、主キーは必ず (user_id, id)。
 --   id 単独にすると他人と同じIDを送るだけで相手の機械を書き換えられる。
@@ -268,6 +270,22 @@ CREATE TABLE IF NOT EXISTS skins (
   skin_id text NOT NULL,
   PRIMARY KEY (user_id, project)
 );
+
+-- 被り物の所持。以前は全スキンを無料で選べたので、すでに適用しているものは購入済みとして引き継ぐ。
+-- ★ このUPDATEは skins テーブルを作った「後」に置くこと。schema.sql は migrate() が
+--   1バッチで投げるので、前に置くと新規DBでは "relation skins does not exist" で
+--   ファイル全体がロールバックし、テーブルが1つも作られない（＝サーバが起動できない）。
+ALTER TABLE factories ADD COLUMN IF NOT EXISTS skin_owned text[] NOT NULL DEFAULT '{}';
+UPDATE factories f
+   SET skin_owned = sub.ids
+  FROM (SELECT user_id, array_agg(DISTINCT skin_id) AS ids
+          FROM skins WHERE skin_id <> 'none' GROUP BY user_id) sub
+ WHERE f.user_id = sub.user_id AND f.skin_owned = '{}';
+
+-- オーロラの背景は廃止した（星空・宇宙と同じ暗い夜空で見分けが付かなかった）。
+-- 買えない・持てないようにするので、所持から外し、使用中だった工場は標準に戻す。
+UPDATE factories SET bg_owned = array_remove(bg_owned, 'aurora') WHERE 'aurora' = ANY(bg_owned);
+UPDATE factories SET bg = 'auto' WHERE bg = 'aurora';
 
 -- ============================== WP の素材 ==============================
 -- ★ここが設計の肝。重みをかける「前」のカウントを分バケットで持つ。

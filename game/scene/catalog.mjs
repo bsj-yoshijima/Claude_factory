@@ -1,5 +1,6 @@
 /* 見た目のカタログ — 製造機/素材/プロップ/部屋/スキンの対応表。
    「何をどのテクスチャで描くか」だけを持ち、ゲームのルールは持たない。 */
+import { SKIN } from '../data/econ.mjs';
 
 /* ===== 製造機のスキン =====
    スキンは「テクスチャの命名規約 + パレット」の2段。
@@ -144,17 +145,8 @@ window.PROP_SPAN = PROP_SPAN;   // ショップ表示(factory-phaser.html)から
 export const STOWABLE = ['prop','deco'];
 // エージェントのスキン(id=テーマキー・31種＋'none')。スキン=被り物(帽子)だけ。ベースのマスコットは常にそのまま、
 // 頭上に被り物テクスチャ hat_<id>(形状指定でStitch生成→マゼンタ抜き)を1枚重ねる。定義のあるidだけ帽子が乗る。プロジェクト単位で永続化。
-export const SKINS = [
-  {id:'none', n:'デフォルト'},
-  {id:'arabia',n:'魔人'},{id:'undersea',n:'人魚'},{id:'japan',n:'侍'},{id:'china',n:'皇帝'},
-  {id:'diner',n:'ウェイトレス'},{id:'fantasy',n:'魔法使い'},{id:'scifi',n:'宇宙人'},{id:'cabin',n:'きこり'},
-  {id:'dino',n:'恐竜'},{id:'haunted',n:'ゴースト'},{id:'pirate',n:'海賊'},{id:'circuit',n:'レーサー'},
-  {id:'dwarf',n:'ドワーフ'},{id:'hell',n:'デビル'},{id:'steampunk',n:'発明家'},{id:'retrofuture',n:'ネモ船長'},
-  {id:'tokyo',n:'サイバー'},{id:'halloween',n:'吸血鬼'},{id:'western',n:'ガンマン'},{id:'sushi',n:'寿司職人'},
-  {id:'beehive',n:'みつばち'},{id:'circus',n:'ピエロ'},{id:'carnival',n:'仮面'},{id:'desert',n:'遊牧民'},
-  {id:'jungle',n:'探検家'},{id:'egypt',n:'ファラオ'},{id:'christmas',n:'サンタ'},{id:'space',n:'宇宙飛行士'},
-  {id:'ice',n:'氷の女王'},{id:'mushroom',n:'妖精'},{id:'onsen',n:'湯上がり'},
-];
+export const SKINS = [{ id:'none', n:'デフォルト' },
+  ...Object.entries(SKIN).map(([id, e]) => ({ id, n:e.n }))];
 export const DECOR = ['crate','drum','plant','pallet','sign'];
 // 製造機はショップ経済側(G.machines)が設置する。ここは無料の初期装飾のみ。
 export const DEMO = [

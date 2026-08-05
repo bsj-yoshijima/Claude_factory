@@ -100,7 +100,9 @@ export function renderCraft(){
   const el=document.getElementById('craft'); if(!el) return;
   const ms=machines(), run=ms.filter(m=>machState(m.id).running).length;
   // メインは「製造機設定」。稼働状況は下に小さく添える（何のボタンか一目で分かるように）
-  const st = !ms.length ? '製造機なし' : run ? `${uic('gear')} 製造中 ${run}/${ms.length}台` : `${uic('box')} 待機中 ${ms.length}台`;
+  // 製造中は文字だけ。歯車アイコンは 16ドットでは歯車に見えず、24ドットに上げても
+  // 馴染まなかったので置かないことにした
+  const st = !ms.length ? '製造機なし' : run ? `製造中 ${run}/${ms.length}台` : `${uic('box')} 待機中 ${ms.length}台`;
   morphInto(el,`<span class="pe">${uic('factory',true)}</span>
     <div class="mid"><div class="nm">製造機設定</div>
       <div class="note">${st}</div>${
