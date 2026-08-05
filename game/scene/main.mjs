@@ -15,10 +15,6 @@ import { DOTP, HAT_BASE_Y, HAT_CX, HAT_W_DOT, PRESETS, makeMascot, mascotIcons }
 export class Main extends Phaser.Scene {
   preload(){
     this.load.image('bg_room','assets/rooms/factory-room.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
-    // 背景の床をグリッドに合わせる補正表(tools/fit_room.py --json)。
-    // 画像を焼き直すとリサンプルが2回になって甘くなるので、表示時の倍率と位置で直す。
-    // load.json は中身が壊れているとローダーごと死ぬので text で読んで自前で parse する。
-    this.load.text('roomfit','assets/rooms/room-fit.json');
     this.load.image('room_arabia','assets/rooms/room-arabia.png');   // Stitch製 テーマ部屋(壁/床/窓 焼き込み)
     this.load.image('room_undersea','assets/rooms/room-undersea.png');
     this.load.image('room_japan','assets/rooms/room-japan.png');
@@ -48,8 +44,6 @@ export class Main extends Phaser.Scene {
 
   }
   create(){
-    // 背景をグリッドに合わせて縮めるとキャンバスの端に隙間が出る。部屋の余白色で裏打ちする
-    this.bgVoid=this.add.rectangle(0,0,W,H,0x0c1014).setOrigin(0,0).setDepth(-1001);
     this.bgImg=this.add.image(0,0,'bg_room').setOrigin(0,0).setDisplaySize(W,H).setDepth(-1000);
     this._hourQ = new URLSearchParams(location.search).get('hour');
     this.lit=[];      // 位置ライティングで色付けする設置物 {sp,x,y}
