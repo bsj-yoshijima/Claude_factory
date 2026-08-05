@@ -13,7 +13,7 @@ import { openLb } from './ui/leaderboard.mjs';
 import { morphInto } from './ui/morph.mjs';
 import { openMyPage } from './ui/mypage.mjs';
 import { setEditOn, paletteEl, renderPalette, slideGame, syncEditMode, toggleEditMode } from './ui/palette.mjs';
-import { updateBadge } from './ui/parts.mjs';
+import { uic, updateBadge } from './ui/parts.mjs';
 import { openRecipes } from './ui/recipes.mjs';
 import { openShop } from './ui/shop.mjs';
 
@@ -167,17 +167,17 @@ window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
        違いは「その下に配置（↻回転 / ✥移動）が付く」ことだけ。編集中に機械をクリックで開く ===== */
 window.__openMachine=(id)=>{
   const F=window.__factory; if(!F) return; setCraftPick(null);
-  const dlg=openDialog({ title:'🏭 製造機', subtitle:()=>{ const m=F.getMachine(id); return m?`${m.size}マス${m.lvl>1?` Lv${m.lvl}`:''}`:''; },
+  const dlg=openDialog({ title:`${uic('factory')} 製造機`, subtitle:()=>{ const m=F.getMachine(id); return m?`${m.size}マス${m.lvl>1?` Lv${m.lvl}`:''}`:''; },
     live:1000,
     body:()=>{
     const m=machinesSorted().find(x=>x.id===id);
     if(!m){ setTimeout(closeOverlay,0); return ''; }
     return machRow(m)
       + `<div class="rc" style="margin-top:12px"><div class="mid"><div class="nm">配置</div>`
-      + `<div class="cost">向きを変える / 別の場所へ移す（撤去は🗑ゴミ箱へドラッグ）</div></div>`
+      + `<div class="cost">向きを変える / 別の場所へ移す（撤去は${uic('trash')}ゴミ箱へドラッグ）</div></div>`
       + `<button data-rot="1">↻ 回転</button><button data-move="1" style="margin-left:5px">✥ 移動</button></div>`;
   },
-    actions:[{label:'🏭 製造タブへ',kind:'ghost',on:()=>openCraft()}],
+    actions:[{label:`${uic('factory')} 製造タブへ`,kind:'ghost',on:()=>openCraft()}],
     onRender:(p,d)=>{
     bindMachRow(p,d);                        // マス・ピッカー・製造開始は一覧と同じ結線
     p.querySelectorAll('[data-rot]').forEach(el=>el.onclick=()=>{

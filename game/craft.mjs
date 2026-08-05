@@ -7,7 +7,7 @@ import { G, craftState, machState, machines } from './state.mjs';
 import { openCollection } from './ui/collection.mjs';
 import { _dlg, openDialog, toast } from './ui/dialog.mjs';
 import { morphInto } from './ui/morph.mjs';
-import { matRow, prodCard, updateBadge } from './ui/parts.mjs';
+import { matRow, prodCard, uic, updateBadge } from './ui/parts.mjs';
 
 export let wpState={ total:0, today:0, ok:false, scorecard:[] };
 export let pendingCount=0;
@@ -45,7 +45,7 @@ export function renderBoard(){
     <div class="m prod hit" id="todayBtn" title="クリックで今日つくったものを見る">
       <div class="v">${madeToday()}<small>個</small></div>
       <div class="l">今日の製造</div></div>
-    <div class="m sales"><div class="v">${Math.floor(salesToday()).toLocaleString()}<small>💰</small></div>
+    <div class="m sales"><div class="v">${Math.floor(salesToday()).toLocaleString()}<small>${uic('yen')}</small></div>
       <div class="l">今日の売上</div></div>`);
   const b=document.getElementById('todayBtn'); if(b) b.onclick=openToday;
 }
@@ -63,8 +63,8 @@ const madeTodayRows = ()=> _madeToday||[];
    原材料の組み合わせも出すので、当たった組み合わせを見返す用途にも使える。 */
 export function openToday(){
   _madeToday=null;                                  // 開くたび取り直す（前回開いた内容を出さない）
-  const dlg=openDialog({ title:'📊 今日の製造',
-    subtitle:()=>`${madeToday()}個 / 売上 💰${Math.floor(salesToday()).toLocaleString()}`,
+  const dlg=openDialog({ title:`${uic('chart')} 今日の製造`,
+    subtitle:()=>`${madeToday()}個 / 売上 ${uic('yen')}${Math.floor(salesToday()).toLocaleString()}`,
     live:2000,
     body:()=>{
       if(!_madeToday) return '<div class="cost" style="padding:12px">読み込み中…</div>';
@@ -73,7 +73,7 @@ export function openToday(){
         const r=rows[m.pid]||(rows[m.pid]={p, n:0, keys:{}});
         r.n++; if(m.key) r.keys[m.key]=(r.keys[m.key]||0)+1; }
       const list=Object.values(rows).sort((a,b)=>(b.p.r-a.p.r)||(b.n-a.n));
-      if(!list.length) return '<div class="cost" style="padding:12px">今日はまだ何も作っていません。🏭製造で原材料をセットして ▶製造開始。</div>';
+      if(!list.length) return `<div class="cost" style="padding:12px">今日はまだ何も作っていません。${uic('factory')}製造で原材料をセットして ▶製造開始。</div>`;
       const gain=list.reduce((s,r)=>s+(PROD_PRICE[r.p.r]||0)*r.n,0);
       return `<div class="pgrid">${list.map(r=>{
           // 製品ごとの組み合わせは1つなので普通は1行。過去の履歴に旧レシピが残る場合だけ複数出る（多い順に3つまで）
@@ -83,9 +83,9 @@ export function openToday(){
         }).join('')}</div>
         <div class="rowline" style="font-size:11px;color:#9fb0c0">
           レア度の高い順。数字は今日つくった個数、その下は使った原材料の組み合わせ。
-          今日つくったものの合計価値は 💰${gain.toLocaleString()}（完成した時点で 💰 に入っている）。</div>`;
+          今日つくったものの合計価値は ${uic('yen')}${gain.toLocaleString()}（完成した時点で ${uic('yen')} に入っている）。</div>`;
     },
-    actions:[{label:'📖 図鑑を見る',kind:'ghost',on:()=>openCollection()}] });
+    actions:[{label:`${uic('collection')} 図鑑を見る`,kind:'ghost',on:()=>openCollection()}] });
   // 開いている間だけ記録を取りに行く（閉じたら止める）
   const pull=()=>{ if(_dlg!==dlg){ clearInterval(t); return; } fetchMadeToday(dlg); };
   const t=setInterval(pull, 5000); pull();
@@ -100,8 +100,8 @@ export function renderCraft(){
   const el=document.getElementById('craft'); if(!el) return;
   const ms=machines(), run=ms.filter(m=>machState(m.id).running).length;
   // メインは「製造機設定」。稼働状況は下に小さく添える（何のボタンか一目で分かるように）
-  const st = !ms.length ? '製造機なし' : run ? `⚙️ 製造中 ${run}/${ms.length}台` : `📦 待機中 ${ms.length}台`;
-  morphInto(el,`<span class="pe">🏭</span>
+  const st = !ms.length ? '製造機なし' : run ? `${uic('gear')} 製造中 ${run}/${ms.length}台` : `${uic('box')} 待機中 ${ms.length}台`;
+  morphInto(el,`<span class="pe">${uic('factory',true)}</span>
     <div class="mid"><div class="nm">製造機設定</div>
       <div class="note">${st}</div>${
       wpState.ok?'':'<div class="note warn">WP未取得（サーバ未接続）</div>'}</div>

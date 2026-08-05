@@ -1,7 +1,7 @@
 /* 🏆 リーダーボード — 期間 × 軸。単一の合計点は作らない（docs/wp.md §9）。 */
 import { NET } from '../net.mjs';
 import { openDialog } from './dialog.mjs';
-import { tabStrip } from './parts.mjs';
+import { tabStrip, uic } from './parts.mjs';
 
 const LB_PERIODS=[['today','今日'],['week','今週'],['month','今月'],['year','今年']];
 const LB_PAGE=20;
@@ -52,7 +52,7 @@ export async function openLb(){
     total=(d&&d.total)||rows.length;
     loading=false;
   }
-  const dlg=openDialog({ title:'🏆 リーダーボード',
+  const dlg=openDialog({ title:`${uic('leaderboard')} リーダーボード`,
     tabs:LB_PERIODS.map(([k,l])=>({id:k,label:l})), tab:_lbPeriod,
     onTab:async(id,d)=>{ _lbPeriod=id; rows=null; d.refresh(); await load(false); d.refresh(); },
     body:()=>{
@@ -75,7 +75,7 @@ export async function openLb(){
           <tr style="border-top:1px solid #22322e">
             <td style="text-align:left;color:#9fb0c0" title="${i+1}位">${LB_MEDAL[i]
               ? `<span style="font-size:15px;line-height:1">${LB_MEDAL[i]}</span>` : i+1}</td>
-            <td style="text-align:left;color:#eafff4" title="${u.name||u.id||''}">🏭 ${fname(u)}</td>
+            <td style="text-align:left;color:#eafff4" title="${u.name||u.id||''}">${uic('factory')} ${fname(u)}</td>
             <td style="text-align:right">${ax.fmt(u)}</td></tr>`).join('')
           :'<tr><td colspan="3" style="color:#9fb0c0;padding:10px">データがありません（OTelの設定を確認）</td></tr>'}</tbody></table>
       ${more}`;
