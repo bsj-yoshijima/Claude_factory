@@ -56,7 +56,7 @@ for(let y=0;y<S;y++) for(let x=0;x<S;x++) put(x,y,C.bg);
    アイコンは煙突が左端にあるので、この置き方だと煙突・のこぎり屋根・窓1つが
    Claude君に隠れずに残る（右下に置くと煙突しか見えなくなる）。 */
 const FAC_P = 4;                                // アイコン1ドット = 4px（16×16 → 64×64）
-const FAC_X = 2, FAC_Y = -2;                    // 置き始めの px
+const FAC_X = 2, FAC_Y = 2;                    // 置き始めの px
 {
   const ico = readPng(path.join(OUT, 'icons', 'factory.png'));
   for(let y=0;y<ico.h;y++) for(let x=0;x<ico.w;x++){
