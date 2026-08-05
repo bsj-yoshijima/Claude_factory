@@ -7,7 +7,7 @@ import { G, craftState, machState, machines } from './state.mjs';
 import { openCollection } from './ui/collection.mjs';
 import { _dlg, openDialog, toast } from './ui/dialog.mjs';
 import { morphInto } from './ui/morph.mjs';
-import { matRow, prodCard, uic, updateBadge, yen } from './ui/parts.mjs';
+import { machIcon, matRow, prodCard, uic, updateBadge, yen } from './ui/parts.mjs';
 
 export let wpState={ total:0, today:0, ok:false, scorecard:[] };
 export let pendingCount=0;
@@ -100,8 +100,11 @@ export function renderCraft(){
   const el=document.getElementById('craft'); if(!el) return;
   const ms=machines(), run=ms.filter(m=>machState(m.id).running).length;
   // メインは「製造機設定」。稼働状況は下に小さく添える（何のボタンか一目で分かるように）
-  const st = !ms.length ? '製造機なし' : run ? `${uic('gear')} 製造中 ${run}/${ms.length}台` : `${uic('box')} 待機中 ${ms.length}台`;
-  morphInto(el,`<span class="pe">${uic('factory',true)}</span>
+  // 左に製造機のアイコンがあるので、稼働状況の行にアイコンは付けない（1行に2つ並ぶと読みにくい）
+  const st = !ms.length ? '製造機なし' : run ? `製造中 ${run}/${ms.length}台` : `待機中 ${ms.length}台`;
+  // アイコンは工場ではなく製造機（2マス）。このボタンが開くのは工場全体ではなく
+  // 「製造機に素材をセットする画面」なので、対象そのものの絵を出す
+  morphInto(el,`<span class="pe">${machIcon('s2')}</span>
     <div class="mid"><div class="nm">製造機設定</div>
       <div class="note">${st}</div>${
       wpState.ok?'':'<div class="note warn">WP未取得（サーバ未接続）</div>'}</div>
