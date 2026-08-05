@@ -2,7 +2,7 @@
 import { NET } from '../net.mjs';
 import { G } from '../state.mjs';
 import { openDialog, toast } from './dialog.mjs';
-import { tabStrip, uic } from './parts.mjs';
+import { tabStrip, uic, yen } from './parts.mjs';
 
 const MY_DAYS=90;                      // 週次12週分を作るのに必要な日数。日次は末尾14日だけ使う
 const MY_DAILY_N=14, MY_WEEK_N=12;
@@ -124,7 +124,7 @@ function myBody(){
     <div class="mystats">
       <div class="mystat"><div class="k">WP</div><div class="v">${Math.round(t.wp).toLocaleString()}<small>WP</small></div></div>
       <div class="mystat"><div class="k">製造個数</div><div class="v">${t.made.toLocaleString()}<small>個</small></div></div>
-      <div class="mystat"><div class="k">売上</div><div class="v">${Math.round(t.sales).toLocaleString()}<small>${uic('yen')}</small></div></div>
+      <div class="mystat"><div class="k">売上</div><div class="v">${yen(Math.round(t.sales))}</div></div>
     </div>
     <div class="rowline" style="font-size:11px;color:#9fb0c0;margin-top:14px">
       ※グラフをクリックで切り替え

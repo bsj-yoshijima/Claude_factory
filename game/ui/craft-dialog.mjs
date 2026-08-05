@@ -7,7 +7,7 @@ import { NET, applyFactory } from '../net.mjs';
 import { craftState, machState, machines, machinesSorted, runningCount, snapLayout } from '../state.mjs';
 import { openCollection } from './collection.mjs';
 import { openDialog, toast } from './dialog.mjs';
-import { prodCard, rarChips, uic, updateBadge } from './parts.mjs';
+import { prodCard, rarChips, uic, updateBadge, yen } from './parts.mjs';
 
 export let _craftPick=null;                       // {mid, idx} = いま原材料を選んでいるマス
 /* 選択の解除は他モジュール(app の設置直後)からも起きる。
@@ -96,7 +96,7 @@ export async function openDone(){
   openDialog({ title:`${uic('gift')} 完成品`, subtitle:`${r.items.length}個`,
     body:`${r.gain?`<div class="invbar" style="font-size:12px">
           <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
-          <b style="color:#ffd27a;font-size:19px">${uic('yen')} ${r.gain.toLocaleString()}</b>${bd}</div>`
+          <b style="color:#ffd27a;font-size:19px">${yen(r.gain)}</b>${bd}</div>`
         :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
         ${r.registered?`${r.registered}個を${uic('collection')}図鑑に登録しました。`:''}NEW は初めて作られた製品です。</div>

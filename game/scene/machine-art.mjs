@@ -233,24 +233,19 @@ export const MachineArt = {
     const mid={ x: (artMidX!=null?artMidX:(bx0+bx1)/2),
                 y: (artTop!=null?artTop:by0-HG) };
     if(prod){
-      /* 「⚙️/📦 + 進捗バー」だけの小さな表示。
-         以前は完成品名と「製造中 x/yWP」を並べていたが、10px の文字列でも
-         機械より横に長くなり、盤面で一番目立つのがこの文字になっていた。
-         数値は🏭製造タブと製造機パネルで見られるので、盤面では
-         「動いているか」と「あとどれくらいか」だけ分かればよい。 */
-      const FS=Math.round(CELL*0.42), BW=Math.round(CELL*0.95), BH=4, GAP=2;
-      const hasBar=(typeof prod.p==='number');
-      const w=FS+(hasBar?GAP+BW:0), x0=mid.x-w/2, cy=mid.y-2-FS/2;
-      const badge=this.add.text(x0, cy, prod.e, {fontSize:FS+'px'}).setOrigin(0,0.5).setDepth(C.y+2);
-      objs.push(badge); e._badge=badge;
-      if(hasBar){
-        const bx=x0+FS+GAP, by=Math.round(cy-BH/2), p=Math.max(0,Math.min(1,prod.p));
-        const pb=this.add.graphics().setDepth(C.y+2); objs.push(pb);
-        pb.fillStyle(0x000000,0.55); pb.fillRect(bx-1,by-1,BW+2,BH+2);   // 縁。明るい床でも輪郭が出る
-        pb.fillStyle(0x1b2430,0.95); pb.fillRect(bx,by,BW,BH);           // 溝
-        pb.fillStyle(prod.running?0x33ffcc:0x8fa0ae,1);                  // 稼働=緑 / 停止=灰
-        pb.fillRect(bx,by,Math.round(BW*p),BH);
-      }
+      /* 進捗バーだけの小さな表示。
+         以前は完成品名と「製造中 x/yWP」を並べ、そのあと ⚙️/📦 のアイコンを
+         添えていたが、盤面では絵が主役なので文字もアイコンも要らない。
+         稼働しているかはバーの色で分かる（緑=稼働 / 灰=停止）。
+         数値は🏭製造タブと製造機パネルで見られる。 */
+      const BW=Math.round(CELL*0.95), BH=4;
+      const bx=Math.round(mid.x-BW/2), by=Math.round(mid.y-2-BH);
+      const p=Math.max(0,Math.min(1, typeof prod.p==='number'?prod.p:0));
+      const pb=this.add.graphics().setDepth(C.y+2); objs.push(pb);
+      pb.fillStyle(0x000000,0.55); pb.fillRect(bx-1,by-1,BW+2,BH+2);   // 縁。明るい床でも輪郭が出る
+      pb.fillStyle(0x1b2430,0.95); pb.fillRect(bx,by,BW,BH);           // 溝
+      pb.fillStyle(prod.running?0x33ffcc:0x8fa0ae,1);                  // 稼働=緑 / 停止=灰
+      pb.fillRect(bx,by,Math.round(BW*p),BH);
     } else {
       const hint=this.add.text(mid.x, mid.y-CELL*0.1, '素材未設定', {fontFamily:'monospace',fontSize:'10px',color:'#93a39d'}).setOrigin(0.5,1).setDepth(C.y+2);
       hint.setShadow(0,1,'#000',3,true,true); objs.push(hint);

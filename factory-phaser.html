@@ -128,6 +128,15 @@
   /* UI機能のドット絵アイコン（16×16・assets/ui/icons）。文字と並べるので少し下げる。
      lg は整数2倍の32px（#craft のロゴなど文字より大きく出す場所用） */
   .uic{width:16px;height:16px;image-rendering:pixelated;vertical-align:-3px}
+  /* 💰だけは金額のすぐ後ろに添える単位なので、他のアイコンと扱いを分ける。
+     高さは数字の半分(0.5em)。px で固定すると、13px の行でも 19px の見出しでも
+     同じ大きさになって片方で不釣り合いになるため em で追従させる。
+     vertical-align:baseline で画像の下端がベースラインに乗る = 数字の底と揃う
+     （.uic の -3px はベースラインより下げる指定なので、そこだけ打ち消す）。 */
+  .uic.yen{width:auto;height:0.5em;vertical-align:baseline;margin-left:2px}
+  /* 金額とアイコンの間で行が折れないようにする。狭い桁（ショップの行など）で
+     折れるとアイコンだけ次の行に落ち、「数字の後ろ」も底辺の揃えも崩れる */
+  .yenv{white-space:nowrap}
   /* テーマのサムネイル（assets/ui/icons/theme-*.png = 部屋の絵の縮小版）。
      ドット絵ではないので pixelated にはしない（縮小に補間が要る）。
      64×64 を CSS で縮めて出す: 行やチップでは18px、パレットのマスでは38px */

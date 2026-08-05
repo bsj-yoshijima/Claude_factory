@@ -7,7 +7,7 @@ import { G, craftState, machState, machines } from './state.mjs';
 import { openCollection } from './ui/collection.mjs';
 import { _dlg, openDialog, toast } from './ui/dialog.mjs';
 import { morphInto } from './ui/morph.mjs';
-import { matRow, prodCard, uic, updateBadge } from './ui/parts.mjs';
+import { machIcon, matRow, prodCard, uic, updateBadge, yen } from './ui/parts.mjs';
 
 export let wpState={ total:0, today:0, ok:false, scorecard:[] };
 export let pendingCount=0;
@@ -45,7 +45,7 @@ export function renderBoard(){
     <div class="m prod hit" id="todayBtn" title="クリックで今日つくったものを見る">
       <div class="v">${madeToday()}<small>個</small></div>
       <div class="l">今日の製造</div></div>
-    <div class="m sales"><div class="v">${Math.floor(salesToday()).toLocaleString()}<small>${uic('yen')}</small></div>
+    <div class="m sales"><div class="v">${yen(Math.floor(salesToday()))}</div>
       <div class="l">今日の売上</div></div>`);
   const b=document.getElementById('todayBtn'); if(b) b.onclick=openToday;
 }
@@ -64,7 +64,7 @@ const madeTodayRows = ()=> _madeToday||[];
 export function openToday(){
   _madeToday=null;                                  // 開くたび取り直す（前回開いた内容を出さない）
   const dlg=openDialog({ title:`${uic('chart')} 今日の製造`,
-    subtitle:()=>`${madeToday()}個 / 売上 ${uic('yen')}${Math.floor(salesToday()).toLocaleString()}`,
+    subtitle:()=>`${madeToday()}個 / 売上 ${yen(Math.floor(salesToday()))}`,
     live:2000,
     body:()=>{
       if(!_madeToday) return '<div class="cost" style="padding:12px">読み込み中…</div>';
@@ -83,7 +83,7 @@ export function openToday(){
         }).join('')}</div>
         <div class="rowline" style="font-size:11px;color:#9fb0c0">
           レア度の高い順。数字は今日つくった個数、その下は使った原材料の組み合わせ。
-          今日つくったものの合計価値は ${uic('yen')}${gain.toLocaleString()}（完成した時点で ${uic('yen')} に入っている）。</div>`;
+          今日つくったものの合計価値は ${yen(gain)}（完成した時点で ${uic('yen')} に入っている）。</div>`;
     },
     actions:[{label:`${uic('collection')} 図鑑を見る`,kind:'ghost',on:()=>openCollection()}] });
   // 開いている間だけ記録を取りに行く（閉じたら止める）
@@ -100,10 +100,11 @@ export function renderCraft(){
   const el=document.getElementById('craft'); if(!el) return;
   const ms=machines(), run=ms.filter(m=>machState(m.id).running).length;
   // メインは「製造機設定」。稼働状況は下に小さく添える（何のボタンか一目で分かるように）
-  // 製造中は文字だけ。歯車アイコンは 16ドットでは歯車に見えず、24ドットに上げても
-  // 馴染まなかったので置かないことにした
-  const st = !ms.length ? '製造機なし' : run ? `製造中 ${run}/${ms.length}台` : `${uic('box')} 待機中 ${ms.length}台`;
-  morphInto(el,`<span class="pe">${uic('factory',true)}</span>
+  // 左に製造機のアイコンがあるので、稼働状況の行にアイコンは付けない（1行に2つ並ぶと読みにくい）
+  const st = !ms.length ? '製造機なし' : run ? `製造中 ${run}/${ms.length}台` : `待機中 ${ms.length}台`;
+  // アイコンは工場ではなく製造機（2マス）。このボタンが開くのは工場全体ではなく
+  // 「製造機に素材をセットする画面」なので、対象そのものの絵を出す
+  morphInto(el,`<span class="pe">${machIcon('s2')}</span>
     <div class="mid"><div class="nm">製造機設定</div>
       <div class="note">${st}</div>${
       wpState.ok?'':'<div class="note warn">WP未取得（サーバ未接続）</div>'}</div>
