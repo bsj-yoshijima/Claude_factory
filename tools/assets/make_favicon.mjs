@@ -6,7 +6,7 @@
      工場     : assets/ui/icons/factory.png（メニューと同じ1色のドット絵アイコン）を
                 そのまま整数倍で拡大して使う。絵を二重に持たない。
      Claude君 : 画面左下のHUDに出ているアイコンと同じもの ——
-                game/scene/mascot.mjs の描画手順を移植して 1ドット=2px で描いている。
+                game/scene/mascot.mjs の描画手順を移植して 1ドット=3px で描いている。
                 （HUDのアイコンは canvas に描いて data URL 化したものでPNGファイルが
                   無いため、ファイルを流用するのではなく描画手順のほうを合わせている。
                   マスコットの形を変えたときは両方直すこと。）
@@ -52,9 +52,11 @@ const rect=(x,y,w,h,c)=>{ for(let j=0;j<h;j++) for(let i=0;i<w;i++) put(x+i,y+j,
 for(let y=0;y<S;y++) for(let x=0;x<S;x++) put(x,y,C.bg);
 
 /* --- 工場: メニューアイコンをそのまま拡大して背景に置く ---
-   煙突と のこぎり屋根 が Claude君 より上に出るよう、上へ寄せて配置する。 */
-const FAC_P = 5;                                // アイコン1ドット = 5px（16×16 → 80×80）
-const FAC_X = 14, FAC_Y = 4;                    // 置き始めの px
+   Claude君が右下に大きく立つので、工場は左上へ寄せる。
+   アイコンは煙突が左端にあるので、この置き方だと煙突・のこぎり屋根・窓1つが
+   Claude君に隠れずに残る（右下に置くと煙突しか見えなくなる）。 */
+const FAC_P = 4;                                // アイコン1ドット = 4px（16×16 → 64×64）
+const FAC_X = 2, FAC_Y = 2;                    // 置き始めの px
 {
   const ico = readPng(path.join(OUT, 'icons', 'factory.png'));
   for(let y=0;y<ico.h;y++) for(let x=0;x<ico.w;x++){
@@ -85,16 +87,15 @@ function drawMascot(ox,oy,pal,pose,P=1,plot=put){
   }
   const ey=topBase+4; px(x0+5,ey,EYE); px(x0+6,ey,EYE); px(x0+11,ey,EYE); px(x0+12,ey,EYE);
 }
-/* 工場の左手前に立たせる。1ドット=2px で、腕と脚を含めて 22×18 ドット = 44×36px。
-   3px(66×54px)にすると工場をほぼ覆ってしまい、背景の工場が読めなくなる。
-   工場が背景・Claude君が手前という関係が崩れない大きさに留めている。
+/* 工場の右手前に立たせる。1ドット=3px で、腕と脚を含めて 22×18 ドット = 66×54px
+   （タイルの約7割）。工場を左上へ寄せてあるので、この大きさでも工場は隠れない。
    一度べつの層に描いてから、まわり HALO px を下地で塗ってのせる。
    Claude君の頭は2つの山の間が谷になっていて、そこへ工場の明色が入り込むと
    「角が生えた」ように見える。下地を回すとその谷も下地色になり、
    小さいサイズでもシルエットが工場から分離する。 */
 const HALO = 3;
 const layer = new Map();
-drawMascot(-2, 38, PAL, 'work', 2, (x,y,c)=>{ if(c) layer.set(`${x},${y}`, c); });
+drawMascot(22, 14, PAL, 'work', 3, (x,y,c)=>{ if(c) layer.set(`${x},${y}`, c); });
 const pts = [...layer.keys()].map(k=>k.split(',').map(Number));
 // まわりを HALO px ぶん下地で塗る
 for(const [x,y] of pts)
