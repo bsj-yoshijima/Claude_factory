@@ -208,6 +208,22 @@
   .buys .b .e{font-size:clamp(26px,3.6vw,42px); line-height:1}
   .buys .b .t{font-weight:800; color:var(--ink); font-size:clamp(13px,1.6vw,18px)}
 
+  /* 目指すアウトカム — 3段。各段に「何で分かるか」を必ず添える */
+  .out{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:clamp(12px,1.8vw,22px);
+    margin-top:clamp(18px,3.6vh,40px)}
+  .out .o{background:var(--panel); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+    display:flex; flex-direction:column; box-shadow:0 12px 30px rgba(20,32,24,.12)}
+  .out .o .body{padding:clamp(18px,2.8vh,28px) clamp(16px,1.8vw,24px); flex:1;
+    display:flex; flex-direction:column; gap:8px}
+  .out .o .n{font-family:var(--mono); font-weight:800; color:var(--coral); font-size:clamp(13px,1.5vw,17px)}
+  .out .o .t{font-weight:800; color:var(--ink); font-size:clamp(16px,2.1vw,25px); line-height:1.3; text-wrap:balance}
+  .out .o .d{color:var(--ink-soft); font-size:clamp(12.5px,1.5vw,16.5px); line-height:1.5}
+  .out .o .m{border-top:1px solid var(--line); background:var(--panel-2);
+    padding:clamp(10px,1.6vh,15px) clamp(16px,1.8vw,24px);
+    font-family:var(--mono); font-size:clamp(11px,1.3vw,14.5px); color:var(--ink-soft); line-height:1.5}
+  .out .o .m b{display:block; color:var(--coral-dk); font-size:clamp(10px,1.15vw,12.5px);
+    letter-spacing:.12em; text-transform:uppercase; margin-bottom:3px}
+
   /* 印刷（PDF書き出し）— JSで1枚だけ表示している構造を、全枚数の縦並びに戻す */
   @media print{
     html,body{overflow:visible; height:auto; background:var(--ground)}
@@ -345,7 +361,41 @@
     <p class="cap1">誰が使いこなしているか / 使っていない人は誰か。1on1の入口になる</p>
   </section>
 
-  <!-- 10 ─────────────────────────── おしまい -->
+  <!-- 10 ─────────────────────────── 目指すアウトカム -->
+  <section class="slide">
+    <div class="eyebrow">09 — 目指すアウトカム</div>
+    <h2 style="word-break:keep-all">AI活用が、<br><span class="coral">続く・上手くなる・成果になる</span></h2>
+    <div class="out">
+      <div class="o">
+        <div class="body">
+          <div class="n">01</div>
+          <div class="t">使う人が増え、続く</div>
+          <div class="d">毎日開く理由ができる。触っていない人にも入口ができる</div>
+        </div>
+        <div class="m"><b>何で分かるか</b>稼働日数 / 継続して使っている人の割合</div>
+      </div>
+      <div class="o">
+        <div class="body">
+          <div class="n">02</div>
+          <div class="t">使い方が上手くなる</div>
+          <div class="d">上級者の使い方が見えるので、聞きに行ける。横に広がる</div>
+        </div>
+        <div class="m"><b>何で分かるか</b>Skill利用 / Agent起動 / 自作Agent / 委譲率</div>
+      </div>
+      <div class="o">
+        <div class="body">
+          <div class="n">03</div>
+          <div class="t">成果につながる</div>
+          <div class="d">同じ時間で出せる量が増える。少ない試行で到達できるようになる</div>
+        </div>
+        <div class="m"><b>何で分かるか</b>PR / コミット / 変更行 / 効率</div>
+      </div>
+    </div>
+    <p class="cap1" style="margin-top:clamp(14px,2.6vh,26px);text-align:left">
+      この3つは、どれも工場が自分で測れる。<b style="color:var(--ink)">入れて終わりではなく、効いたかどうかを同じ画面で確かめられる。</b></p>
+  </section>
+
+  <!-- 11 ─────────────────────────── おしまい -->
   <section class="slide closing">
     <div class="done-badge">✔ RUNNING — 実データで稼働中</div>
     <h1>働いた分が、<br><span class="coral">目に見えて積み上がる。</span></h1>
@@ -356,7 +406,7 @@
 
 <div class="hud">
   <button class="nav" id="prev" aria-label="前のスライド">‹</button>
-  <span class="counter" id="counter">1 / 10</span>
+  <span class="counter" id="counter">1 / 11</span>
   <button class="nav" id="next" aria-label="次のスライド">›</button>
 </div>
 
