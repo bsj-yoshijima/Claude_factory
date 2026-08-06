@@ -7,7 +7,9 @@ import { GU, GV, H, ISO, OFF_U, OFF_V, W, uvXY } from './iso.mjs';
 export const Lighting = {
   defineWindows(){
     this.winUp0=0; this.winUp1=248;                  // 床エッジからの立ち上げ(px)。ガラス全体を覆うよう広めに
-    this.windows=[{v0:0.050,v1:0.226},{v0:0.364,v1:0.555},{v0:0.697,v1:0.891}];  // 背景のガラス透過から実測した3枚の窓(左壁沿い v 範囲)。ISO を床タイル基準に更新した際に再計算済み
+    // 背景のガラス透過(alpha<128)から実測した3枚の窓の v 範囲。左壁は画面上で垂直なので x だけで v が決まる
+    // (v=(x/W-Bx)/vx)。ISO を対称化・中央揃えした際に再実測済み。奥→手前の順
+    this.windows=[{v0:0.069,v1:0.252},{v0:0.388,v1:0.579},{v0:0.720,v1:0.918}];
     for(const w of this.windows){
       const b0=uvXY(0,w.v0), b1=uvXY(0,w.v1);
       w.quad=[{x:b0.x,y:b0.y-this.winUp0},{x:b1.x,y:b1.y-this.winUp0},{x:b1.x,y:b1.y-this.winUp1},{x:b0.x,y:b0.y-this.winUp1}];

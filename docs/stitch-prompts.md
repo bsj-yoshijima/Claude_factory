@@ -59,10 +59,146 @@ Empty clear floor, same size as reference rooms, dark void margins in corners.
 > 既存の arabia / undersea / japan / china / diner / fantasy / scifi / cabin / dino /
 > haunted / pirate / circuit / dwarf / hell / tokyo / halloween も同じテンプレ系統。
 
-### サイズ検証
-- ダウンロード後 `assets/room-arabia.png`(基準)と床ダイヤの位置が一致していれば
-  グリッド較正(OFF_U=0.577, OFF_V=0.851)そのままで整合する。
-- 四隅に暗い余白が出ていること＝基準と同フットプリント。枠いっぱいになったら再生成。
+### サイズ検証（2026-08 更新: 基準は arabia ではなく ISO 定数）
+- 現在のグリッドは `game/scene/iso.mjs` の `ISO`（軸対称・画像中心揃え・OFF=0）が唯一の基準。
+  旧記載の「arabia 基準 + OFF_U=0.577/OFF_V=0.851」は廃止済みで、既存のテーマ部屋は現行グリッドとずれている。
+- 生成時は `docs/room-guide-1376x768.png`（規格の床ダイヤ 12×12・壁立ち上げを描いた下絵）を参照画像として渡す。
+  床は 12×12 マス（ゲームの論理マスと同一。旧背景の床絵は11列分しかないが旧デザインとして無視）。
+  床ダイヤの規定頂点（1376×768 px）: 奥(688,275) / 右(1137,499) / 手前(688,724) / 左(239,499)。
+  壁の垂直高さは左右統一 260px（上端は床エッジと平行。壁上頂点は 奥(688,15) / 右(1137,239) / 左(239,239)）。
+  奥・手前・壁上奥は画像中心 x=688 に乗り、左右の角は同じ y=499。1マスは厳密に 2:1。
+- ダウンロード後は `tools/preview/guide.html` で背景を重ねて床ダイヤが一致するか検収する
+  （ガイドの再生成・PNG書き出しも同ページ）。一覧でまとめて見るなら `tools/preview/rooms.html`。
+- 四隅に暗い余白が出ていること＝規格と同フットプリント。枠いっぱいになったら再生成。
+
+---
+
+## 1-B. 全背景を作り直す場合の発注方針（規格ファースト）
+
+既存背景を全部破棄して 0 から作る場合の手順。**狙いは「ガイドに合わせること」ではなく
+「全部屋が互いに同じ形であること」**。全部屋が同じ形なら、系統的なズレは `ISO` を一度だけ
+再較正すれば吸収できる。部屋ごとにバラバラだと何も吸収できない。だから指示は
+「毎回同じ1枚の型から描かせる」形にする。
+
+### 規格（変更しない。`game/scene/iso.mjs` の `ISO` が唯一の出どころ）
+
+`ISO = { Bx:0.5, By:0.3584, ux:0.3261, uy:0.2919, vx:-0.3261, vy:0.2919 }`（2026-08 に確定）
+
+1376×768 での規定頂点:
+床 奥(688,275) 右(1137,499) 手前(688,724) 左(239,499) ／ 壁上 奥(688,15) 右(1137,239) 左(239,239)
+→ 奥と手前は同じ x（=画像中心 688）、左と右は同じ y、壁高は左右とも 260px、左右マージンは各239px、
+1マスの送りは x:y = 2:1（厳密）。
+
+### 手順（この順に上から実行する）
+
+**0. 検収ツールを開けるようにする**
+
+```bash
+npm run dev
+```
+
+ブラウザで `http://localhost:4321/tools/preview/guide.html` を開く。
+ポート4321が使用中なら `PORT=4322 npm run dev` のように変えてよい（URLも合わせる）。
+一覧でまとめて見たいときは `http://localhost:4321/tools/preview/rooms.html`。
+
+**1. Stitch に渡す参照画像を用意する**
+
+`docs/room-shell-1376x768.png` を使う。**これは既にコミットされているので、作り直す必要はない**。
+壁2面と床を単色で塗った「部屋の殻」で、床の12×12の目地だけ入っている。
+
+> ⚠️ `docs/room-guide-1376x768.png` を Stitch に渡してはいけない。こちらは**検収用**で、
+> ピンク/金の線と座標ラベルが焼き込まれている。渡すとモデルがその線や日本語ごと
+> 部屋の中に描いてしまう。
+>
+> 規格を変えた場合だけ作り直す。guide.html の
+> **「⬇ Stitch用の殻だけ保存」**＝参照画像 / **「⬇ 検収用オーバーレイ保存」**＝検収用。
+
+**2. 1部屋目（ゴールデンルーム）を作る**
+
+下の「プロンプト」の `{{...}}` を埋めて、参照画像に `room-shell-1376x768.png` を添えて生成する。
+**ここだけは時間をかけて、手順4の検収に通るまで作り直す。**後続すべての基準になる。
+
+**3. 2部屋目以降はゴールデンルームを参照画像にする**
+
+殻ではなく**完成した1部屋目の画像**を渡し、「この部屋の形・カメラ・床サイズ・壁高はそのまま、
+素材と装飾だけテーマを変える」と指示する。テキストで幾何を指示するより桁違いに安定する。
+（狙いは「規格に合わせること」より「全部屋が互いに同じ形であること」。全部屋が同じ形なら
+系統的なズレは後から一度で吸収できるが、部屋ごとにバラバラだと何も吸収できない。）
+
+**4. 1枚ずつ検収する**
+
+`=s0` を付けた downloadUrl で原寸(1376×768)を取得し、`assets/rooms/room-<key>.png` として保存
+（`<key>` は下の一覧の key。既存を差し替えるだけならコード変更は不要）。
+guide.html の「下に重ねる背景」でその部屋を選び、次の3点を見る。
+
+- **ピンクの菱形**の4頂点が、絵の床の4隅と合っているか（合否の主判定）
+- **金の線**が壁の上端と合っているか
+- 四隅に暗い余白（void）が残っているか。枠いっぱいなら大きすぎるので再生成
+
+ズレが目に見える大きさなら再生成。数pxなら許容（そのまま採用してよい）。
+
+**5. 新しいテーマを追加した場合だけ、コードに登録する**
+
+既存テーマの差し替えでは不要。新規テーマを増やしたときは以下を触る。
+
+- `game/scene/main.mjs` の `this.load.image('room_...')` のリスト（末尾のループに key を追加）
+- `game/scene/catalog.mjs` の `ROOM_TEX`
+- `game/data/econ.mjs`（ショップの並び・家具・エージェント名）
+- サムネイル生成: `node tools/assets/make_theme_thumbs.mjs`（`assets/ui/icons/theme-<key>.png` を作る）
+
+**6.（必要になったときだけ）ISO の再較正**
+
+全部屋が「同じ方向へ同じだけ」ずれた場合に限り、`ISO` を一度だけ実測に合わせ直せば全部が揃う。
+ただし `ISO` を変えると製造機スプライトの1マス送りが合わなくなるので、
+その場合は `python3 tools/assets/refit_machines.py` で128枚を合わせ直し、`npm test` を通すこと。
+
+### プロンプト（型の塗り替えとして発注する）
+
+座標を数値で指示しても生成モデルは従えない。**「部屋を描いて」ではなく「この殻を塗り替えて」**
+という枠組みにするのが要点。寸法は px ではなく**タイル数と割合**で言う。
+
+```
+Repaint THIS EXACT room shell with a new theme. Output 1376x768.
+
+STRICT GEOMETRY — copy from the reference image, do not change:
+the room outline, the four corners of the floor diamond, the wall height,
+the camera angle. Every edge stays exactly where it is in the reference.
+Do NOT resize, rotate, re-center, crop, or zoom the room.
+Keep the four canvas corners as empty dark void margins.
+
+The floor diamond is left-right symmetric: its left and right vertices are at the
+SAME height, its back and front vertices are on the SAME vertical center line.
+Floor = exactly 12 x 12 isometric tiles, true 2:1 isometric.
+Floor spans 65% of image width and 59% of image height.
+Wall height = 34% of image height (about 58% of the floor diamond's height),
+measured straight up from the floor edge; the wall top edge runs parallel to the floor edge.
+Two walls only: LEFT wall with windows, RIGHT wall solid.
+
+CHANGE ONLY the surface materials and the decoration:
+FLOOR: {{FLOOR_MATERIAL}} laid diagonally along the iso grid, with only a faint flat
+{{FLOOR_MOTIF}} inlay. Completely clear and EMPTY — no furniture, no objects on the floor.
+
+THEME: {{THEME_BLOCK}}
+
+lo-fi 8-bit Famicom pixel art, chunky pixels, HIGH DETAIL dense wall decoration.
+IMPORTANT: no characters, no people, no floor objects, no text, no UI.
+```
+
+`{{FLOOR_MATERIAL}}` / `{{FLOOR_MOTIF}}` / `{{THEME_BLOCK}}` の埋め方は「1.」節と共通:
+
+- `{{FLOOR_MATERIAL}}` と `{{FLOOR_MOTIF}}` … 「成功済みテーマの差し替え値」表の
+  **FLOOR_MATERIAL / MOTIF 列**（`/` の左が MATERIAL、右が MOTIF）
+- `{{THEME_BLOCK}}` … 同じ表の「窓の外」「壁・装飾の要点」列をもとに、
+  `LEFT WALL:` / `WALLS:` / `WALL-MOUNTED DECOR ONLY:` / `Lighting:` / `Palette:` の**5行**で書く
+  （書式の詳細は「THEME_BLOCK の書式」小節）。**装飾はすべて壁掛け**にし、床には置かない
+
+表に無い新テーマを作るときも同じ5行の型で書き、うまくいったら表に1行足しておく。
+
+### やってはいけない指示
+
+- 「床の左角を (230,501) に置いて」— 座標指定は効かない。相対比とタイル数で言う
+- 参照画像を毎回変える — 形がバラける。型は固定、または直前のゴールデンルームで固定
+- 「壁を高く」「奥行きを深く」等の相対的な形容 — 型からの逸脱を誘発する
 
 ---
 
