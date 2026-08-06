@@ -33,8 +33,12 @@ Empty clear floor, same size as reference rooms, dark void margins in corners.
 
 ### THEME_BLOCK の書式（テーマごと）
 
-`LEFT WALL:`（窓の外の景色）/ `WALLS:`（壁の素材）/ `WALL-MOUNTED DECOR ONLY:`（壁掛けの小物を密に）
+`LEFT WALL:`（開口の形＋外の景色）/ `WALLS:`（壁の素材）/ `WALL-MOUNTED DECOR ONLY:`（壁掛けの小物を密に）
 / `Lighting:` / `Palette:` の5行で構成する。**装飾はすべて壁掛け**にし、床には置かない。
+
+`LEFT WALL:` は「窓」と書かない。**外が見える開口**として、その世界観に合う形を明示する
+（アーチ／丸窓／洞窟の裂け目／氷の割れ目／船体の破孔など）。位置だけが規格で、形は自由。
+木枠のガラス窓に寄せたくないので、必要なら `no frames, no glass` と書き添える。
 
 ### 成功済みテーマの差し替え値（key → FLOOR / THEME概要）
 
@@ -164,7 +168,10 @@ STRICT GEOMETRY — copy from the reference image, do not change:
 the room outline, the four corners of the floor diamond, the wall height,
 the camera angle. Every edge stays exactly where it is in the reference.
 Do NOT resize, rotate, re-center, crop, or zoom the room.
-Keep the four canvas corners as empty dark void margins.
+Keep the four canvas corners as empty dark void margins, and keep them COMPLETELY EMPTY:
+every piece of decoration must sit INSIDE the room, on one of the two walls. Nothing —
+no plant, no bracket, no shelf, no lantern — may hang outside the room outline or float
+in the dark margins.
 
 The floor diamond is left-right symmetric: its left and right vertices are at the
 SAME height, its back and front vertices are on the SAME vertical center line.
@@ -172,7 +179,21 @@ Floor = exactly 12 x 12 isometric tiles, true 2:1 isometric.
 Floor spans 65% of image width and 59% of image height.
 Wall height = 34% of image height (about 58% of the floor diamond's height),
 measured straight up from the floor edge; the wall top edge runs parallel to the floor edge.
-Two walls only: LEFT wall with windows, RIGHT wall solid.
+Two walls only: the LEFT wall opens to the outside, the RIGHT wall is solid.
+The LEFT wall has EXACTLY THREE openings that reveal the outside scenery —
+not two, not four, not five. Do not add, remove, merge or split any opening.
+
+ONLY THEIR POSITION IS FIXED. The three soft dark patches on the left wall of the
+reference image mark WHERE the openings go — keep those three positions and roughly
+that size, evenly spaced along the left wall.
+
+THE SHAPE IS YOURS TO MATCH THE THEME. These are openings, NOT literal windows:
+do NOT default to rectangular glass panes in wooden or metal frames. Give each opening
+the shape and framing that the theme would really use — an ogee or horseshoe arch,
+a round porthole, a ragged cave mouth, a crack in ice, a torn hull breach, a gap between
+tree trunks, a torii-framed view — whatever fits. Glass is optional; often there is
+no glass and no frame at all. What matters is only that the outside view is visible
+through all three.
 
 CHANGE ONLY the surface materials and the decoration:
 FLOOR: {{FLOOR_MATERIAL}} laid diagonally along the iso grid, with only a faint flat
@@ -194,9 +215,66 @@ IMPORTANT: no characters, no people, no floor objects, no text, no UI.
 
 表に無い新テーマを作るときも同じ5行の型で書き、うまくいったら表に1行足しておく。
 
+### 記入例: arabia（1部屋目・そのまま貼れる完成形）
+
+参照画像に `docs/room-shell-1376x768.png` を添えて、これをそのまま投げる。
+
+```
+Repaint THIS EXACT room shell with a new theme. Output 1376x768.
+
+STRICT GEOMETRY — copy from the reference image, do not change:
+the room outline, the four corners of the floor diamond, the wall height,
+the camera angle. Every edge stays exactly where it is in the reference.
+Do NOT resize, rotate, re-center, crop, or zoom the room.
+Keep the four canvas corners as empty dark void margins, and keep them COMPLETELY EMPTY:
+every piece of decoration must sit INSIDE the room, on one of the two walls. Nothing —
+no plant, no bracket, no shelf, no lantern — may hang outside the room outline or float
+in the dark margins.
+
+The floor diamond is left-right symmetric: its left and right vertices are at the
+SAME height, its back and front vertices are on the SAME vertical center line.
+Floor = exactly 12 x 12 isometric tiles, true 2:1 isometric.
+Floor spans 65% of image width and 59% of image height.
+Wall height = 34% of image height (about 58% of the floor diamond's height),
+measured straight up from the floor edge; the wall top edge runs parallel to the floor edge.
+Two walls only: the LEFT wall opens to the outside, the RIGHT wall is solid.
+The LEFT wall has EXACTLY THREE openings that reveal the outside scenery —
+not two, not four, not five. Do not add, remove, merge or split any opening.
+
+ONLY THEIR POSITION IS FIXED. The three soft dark patches on the left wall of the
+reference image mark WHERE the openings go — keep those three positions and roughly
+that size, evenly spaced along the left wall.
+
+THE SHAPE IS YOURS TO MATCH THE THEME. These are openings, NOT literal windows:
+do NOT default to rectangular glass panes in wooden or metal frames. Give each opening
+the shape and framing that the theme would really use — an ogee or horseshoe arch,
+a round porthole, a ragged cave mouth, a crack in ice, a torn hull breach, a gap between
+tree trunks, a torii-framed view — whatever fits. Glass is optional; often there is
+no glass and no frame at all. What matters is only that the outside view is visible
+through all three.
+
+CHANGE ONLY the surface materials and the decoration:
+FLOOR: pale cream marble slabs laid diagonally along the iso grid, with only a faint flat
+gold arabesque medallion inlay. Completely clear and EMPTY — no furniture, no objects on the floor.
+
+THEME:
+LEFT WALL: the three openings are tall ogee arches cut straight into the plaster — no frames, no glass — looking onto a violet Arabian night: crescent moon, scattered stars, silhouetted domes and minarets of a desert city.
+WALLS: carved purple-and-gold Moorish plaster with horseshoe arches, dense geometric fretwork and slender gilded columns.
+WALL-MOUNTED DECOR ONLY: pierced brass lanterns hung at several heights, a swagged purple silk curtain with gold tassels, arched niches holding gold coins and jewelled treasure, teardrop mirrors, a brass oil lamp on a wall shelf, strings of glass beads, a peacock perched on a wall ledge, a potted date palm on a wall bracket.
+Lighting: warm amber lantern glow from the left, deep violet shadows.
+Palette: royal purple, indigo, warm gold, brass, cream.
+
+lo-fi 8-bit Famicom pixel art, chunky pixels, HIGH DETAIL dense wall decoration.
+IMPORTANT: no characters, no people, no floor objects, no text, no UI.
+```
+
 ### やってはいけない指示
 
 - 「床の左角を (230,501) に置いて」— 座標指定は効かない。相対比とタイル数で言う
+- 枚数や位置を**文章だけ**で指示する — 開口は殻の絵に3つ描いてあるので「絵のとおりに」と言う方が効く
+  （arabia の1回目は文章だけで指示して4つになった）
+- 開口を「window」と呼ぶ — 木枠のガラス窓を描かれる。**opening**と呼び、形はテーマに合わせる。
+  殻の絵の開口はわざと上端をぼかしてある（硬い四角で描くと、その四角ごとコピーされる）
 - 参照画像を毎回変える — 形がバラける。型は固定、または直前のゴールデンルームで固定
 - 「壁を高く」「奥行きを深く」等の相対的な形容 — 型からの逸脱を誘発する
 

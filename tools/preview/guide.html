@@ -33,6 +33,8 @@
   <label>下に重ねる背景
     <select id="room"><option value="">（なし＝ガイドのみ）</option></select>
   </label>
+  <label>生成したての画像 <input type="file" id="pick" accept="image/*"></label>
+  <span id="picked" class="dim"></span>
   <label>背景の不透明度 <input type="range" id="imgA" min="0" max="100" value="60"></label>
   <label>ガイドの不透明度 <input type="range" id="cvA" min="10" max="100" value="100"></label>
   <button id="bFill" class="on">面を塗る（Stitch下絵用）</button>
@@ -42,10 +44,12 @@
   <button id="dl">⬇ 検収用オーバーレイ保存 (room-guide)</button>
 </header>
 <main>
-  <div class="stage">
+  <div class="stage" id="stage">
     <img id="under" alt="" hidden>
     <canvas id="cv" width="1376" height="768"></canvas>
   </div>
+  <p class="hint">生成したてのPNGは、上の「生成したての画像」から選ぶか、
+    <b>この枠に直接ドラッグ&ドロップ</b>しても重ねられる（1376×768 以外なら枠に合わせて伸ばして表示し、警告を出す）。</p>
   <p class="hint">
     実機 <code>game/scene/iso.mjs</code> の <code>ISO</code> 定数（軸対称・画像中心揃え・現行）から
     1376×768 の元画像座標に引いたガイド。<b>ピンク=床の規定ダイヤ(12×12マス=ゲームの論理マス)</b>、
@@ -66,6 +70,13 @@ const GU = 12, GV = 12, VMAX = 1;            // 床は 12×12 マス（ゲーム
 const IW = 1376, IH = 768;                   // Stitch 原寸
 // 壁高は左右統一 260px（factory-room 左壁の実測値。右壁の実測283だと奥の頂点が画面外 y=-8 に出るため260に統一）
 const WALL = 260;
+// 左壁の「外が見える開口」3つ。v範囲は game/scene/lighting.mjs の this.windows と同じ値
+// （採光がここを基準に落ちるので位置は固定）。縦は factory-room の透過ガラスの実測
+// （床エッジから 24〜245px 上）。奥→手前の順。
+// 形はテーマ任せなので、殻では「位置を示すゾーン」として上端をぼかして描く
+// （硬い四角で描くと、そのまま木枠のガラス窓としてコピーされる）。
+const WINDOWS = [{v0:0.069,v1:0.252},{v0:0.388,v1:0.579},{v0:0.720,v1:0.918}];
+const WIN_UP0 = 24, WIN_UP1 = 245;
 const P = (u,v) => ({ x:(ISO.Bx + u*ISO.ux + v*ISO.vx)*IW, y:(ISO.By + u*ISO.uy + v*ISO.vy)*IH });
 
 const show = { fill:true, label:true, game:false };
@@ -93,6 +104,21 @@ function draw(shellOnly) {
     g.fillStyle = '#cdbfa4';
     g.beginPath(); g.moveTo(back.x,back.y); g.lineTo(right.x,right.y);
     g.lineTo(front.x,front.y); g.lineTo(left.x,left.y); g.closePath(); g.fill();
+    // 左壁の開口3つ。「3つ・この位置」だけを絵で伝える(枚数と位置は文章より絵の方が効く)。
+    // 形を真似されないよう、上端に向かってフェードするゾーンとして塗る
+    for (const w of WINDOWS) {
+      const a=P(0,w.v0), b=P(0,w.v1);
+      const yBot=(a.y+b.y)/2-WIN_UP0, yTop=(a.y+b.y)/2-WIN_UP1;
+      const grd = g.createLinearGradient(0,yBot,0,yTop);
+      grd.addColorStop(0,   '#2a3548');
+      grd.addColorStop(0.62,'#2a3548');
+      grd.addColorStop(1,   'rgba(42,53,72,0)');   // 上端をぼかす＝硬い枠に見せない
+      g.fillStyle = grd;
+      g.beginPath();
+      g.moveTo(a.x, a.y-WIN_UP0); g.lineTo(b.x, b.y-WIN_UP0);
+      g.lineTo(b.x, b.y-WIN_UP1); g.lineTo(a.x, a.y-WIN_UP1);
+      g.closePath(); g.fill();
+    }
   }
 
   // 床のタイル目地（12×12）
@@ -108,6 +134,17 @@ function draw(shellOnly) {
   g.strokeStyle = '#ff5ec8'; g.lineWidth = 3;
   g.beginPath(); g.moveTo(back.x,back.y); g.lineTo(right.x,right.y);
   g.lineTo(front.x,front.y); g.lineTo(left.x,left.y); g.closePath(); g.stroke();
+
+  // 開口3つの想定位置（シアン細線）。検収では「3つあるか」「v位置が合っているか」だけを見る。
+  // 形はテーマ任せなので、枠の内側に収まっていなくてもよい
+  g.strokeStyle = 'rgba(110,230,255,.9)'; g.lineWidth = 1.5;
+  for (const w of WINDOWS) {
+    const a=P(0,w.v0), b=P(0,w.v1);
+    g.beginPath();
+    g.moveTo(a.x, a.y-WIN_UP0); g.lineTo(b.x, b.y-WIN_UP0);
+    g.lineTo(b.x, b.y-WIN_UP1); g.lineTo(a.x, a.y-WIN_UP1);
+    g.closePath(); g.stroke();
+  }
 
   // 壁の立ち上げ＋上端（金）＝残り3点。左右とも同じ壁高で、奥の頂点は1点に揃う
   g.strokeStyle = '#ffd08a'; g.lineWidth = 2;
@@ -167,6 +204,28 @@ sel.onchange = () => {
   under.style.opacity = document.getElementById('imgA').value/100;
 };
 document.getElementById('imgA').oninput = e => { under.style.opacity = e.target.value/100; };
+
+/* 生成したての画像を重ねる。ファイル選択でもドロップでも同じ経路 */
+const pickedEl = document.getElementById('picked');
+function useLocal(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  sel.value = '';                                    // 既存背景の選択は解除
+  under.src = URL.createObjectURL(file); under.hidden = false;
+  under.style.opacity = document.getElementById('imgA').value/100;
+  under.onload = () => {
+    const ok = under.naturalWidth===IW && under.naturalHeight===IH;
+    pickedEl.textContent = `${file.name} ${under.naturalWidth}×${under.naturalHeight}`
+      + (ok ? ' ✔ 原寸一致' : ` ⚠ 1376×768 ではない(伸ばして表示中。判定は目安)`);
+    pickedEl.style.color = ok ? '#9fe6d6' : '#ffb072';
+  };
+}
+document.getElementById('pick').onchange = e => useLocal(e.target.files[0]);
+const stage = document.getElementById('stage');
+for (const ev of ['dragenter','dragover','dragleave','drop']) {
+  stage.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation();
+    stage.style.outline = (ev==='dragenter'||ev==='dragover') ? '2px dashed var(--accent)' : ''; });
+}
+stage.addEventListener('drop', e => useLocal(e.dataTransfer.files[0]));
 document.getElementById('cvA').oninput  = e => { cv.style.opacity = e.target.value/100; };
 const bind = (id,key) => { const b=document.getElementById(id);
   b.onclick = () => { show[key]=!show[key]; b.classList.toggle('on',show[key]); draw(); }; };
