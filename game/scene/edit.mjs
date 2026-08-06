@@ -11,7 +11,9 @@ export const Edit = {
   /* ===== 編集モード（グリッド表示・ドラッグ移動・ゴミ箱で撤去） ===== */
   setupEdit(){
     // 床ダイヤ[0,1]²を綺麗な12×12に等分する線だけを表示(中心点は出さない)。オブジェクトは各マスの中央に入る。
-    this.editGrid=this.add.graphics().setDepth(-998).setVisible(false); this.editGrid.lineStyle(1,0x7fe6ff,0.42);
+    // 線は2px・不透明度0.6。1px/0.42 だと明るい床(大理石)や寒色の床(氷)で線が埋もれて
+    // マスの境目が読めない部屋があった。太さだけでは足りず、濃さの方が効く
+    this.editGrid=this.add.graphics().setDepth(-998).setVisible(false); this.editGrid.lineStyle(2,0x7fe6ff,0.6);
     const gl=(u0,v0,u1,v1)=>{ const a=uvXY(u0,v0),b=uvXY(u1,v1); this.editGrid.beginPath(); this.editGrid.moveTo(a.x,a.y); this.editGrid.lineTo(b.x,b.y); this.editGrid.strokePath(); };
     // 目地はマス境界(c/GU)に引く(13本) → 各マスの中心=設置点が四角のど真ん中になる
     for(let c=0;c<=GU;c++) gl(c/GU,0,c/GU,1);
