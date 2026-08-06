@@ -259,4 +259,5 @@ export const SERIES={
   ice:{n:'氷の城', price:6000, sky:'ice',floor:'wood', decos:[]},
   mushroom:{n:'森のキノコ', price:6000, sky:'mushroom',floor:'wood', decos:[]},
   onsen:{n:'和風温泉', price:6000, sky:'onsen',floor:'wood', decos:[]},
+  tech:{n:'テクノロジー', price:6000, sky:'tech',  floor:'wood',    decos:[]},
 };
