@@ -1122,6 +1122,29 @@ IMPORTANT: no characters, no people, no floor objects, no text, no UI.
 
 ---
 
+## 1-C. 製造機も同じ方式（型 → 1台目 → 以降は1台目を参照）
+
+製造機スプライトにも同じ「殻を塗り替える」方式を移してある。詳細は
+`docs/machine-sprite-prompt.md` の「0. 1マスモジュールの型（ゴールデン方式・現行）」。
+発注するのは**1マス分のモジュール1枚だけ**で、`tools/assets/cut_machines.py` が
+それを並べて 2〜5マス機を作る。
+
+| | 部屋背景 | 製造機 |
+|---|---|---|
+| 型を作る | `tools/assets/make_room_shell.py` | `tools/assets/make_machine_shell.py` |
+| Stitch に渡す殻 | `docs/room-shell-1376x768.png` | `docs/mach-shell-1024.png` |
+| 検収下絵（渡さない） | `docs/room-guide-1376x768.png` | `docs/mach-guide-1024.png` |
+| 1台目（ゴールデン） | `docs/room-golden-1376x768.png`（pirate） | `docs/mach-golden-1024.png`（pirate） |
+| 検収 | `tools/preview/guide.html` に重ねる | `tools/assets/check_machine_module.py` |
+| 一覧で見る | `tools/preview/rooms.html` | `tools/preview/machines.html` |
+| 背景 | 暗い void | マゼンタ #FF00FF（切り抜き前提） |
+
+型の絵だけでは幾何が崩れるテーマがある（実測で 30枚中3枚）。その場合は殻ではなく
+**合格済みモジュールを土台にして再スキン**すると通る。部屋の「2部屋目以降はゴールデン
+ルームを参照画像にする」と同じ話で、テキストより桁違いに効く。
+
+---
+
 ## 2. オブジェクト(小物)テンプレート（prop_<key>_*.png）
 
 1テーマにつき **4種** をまとめて1枚のシートで出す → マゼンタ抜き → 個別スライス。
