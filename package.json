@@ -10,7 +10,7 @@
     "db:down": "docker compose down",
     "db:reset": "docker compose down -v && docker compose up -d",
     "db:psql": "docker exec -it claude-factory-db psql -U factory -d factory",
-    "test": "node test/test_craft.mjs && node test/test_machines.mjs && node test/test_server.mjs"
+    "test": "node test/test_craft.mjs && node test/test_machines.mjs && node test/test_hats.mjs && node test/test_server.mjs"
   },
   "dependencies": {
     "pg": "^8.13.1"
