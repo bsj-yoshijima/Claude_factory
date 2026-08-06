@@ -14,7 +14,7 @@ import { DOTP, HAT_BASE_Y, HAT_CX, HAT_W_DOT, PRESETS, makeMascot, mascotIcons }
 
 export class Main extends Phaser.Scene {
   preload(){
-    this.load.image('bg_room','assets/rooms/factory-room.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
+    this.load.image('bg_room','assets/rooms/room-factory.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
     this.load.image('room_arabia','assets/rooms/room-arabia.png');   // Stitch製 テーマ部屋(壁/床/窓 焼き込み)
     this.load.image('room_undersea','assets/rooms/room-undersea.png');
     this.load.image('room_japan','assets/rooms/room-japan.png');

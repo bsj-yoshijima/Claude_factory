@@ -68,15 +68,21 @@
 const ISO = { Bx:0.5, By:0.3584, ux:0.3261, uy:0.2919, vx:-0.3261, vy:0.2919 };
 const GU = 12, GV = 12, VMAX = 1;            // 床は 12×12 マス（ゲームの論理マスと同じ。絵の床の11列は旧デザインで無視）
 const IW = 1376, IH = 768;                   // Stitch 原寸
-// 壁高は左右統一 260px（factory-room 左壁の実測値。右壁の実測283だと奥の頂点が画面外 y=-8 に出るため260に統一）
+// 壁高は左右統一 260px（room-factory 左壁の実測値。右壁の実測283だと奥の頂点が画面外 y=-8 に出るため260に統一）
 const WALL = 260;
 // 左壁の「外が見える開口」3つ。v範囲は game/scene/lighting.mjs の this.windows と同じ値
-// （採光がここを基準に落ちるので位置は固定）。縦は factory-room の透過ガラスの実測
+// （採光がここを基準に落ちるので位置は固定）。縦は room-factory の透過ガラスの実測
 // （床エッジから 24〜245px 上）。奥→手前の順。
 // 形はテーマ任せなので、殻では「位置を示すゾーン」として上端をぼかして描く
 // （硬い四角で描くと、そのまま木枠のガラス窓としてコピーされる）。
 const WINDOWS = [{v0:0.069,v1:0.252},{v0:0.388,v1:0.579},{v0:0.720,v1:0.918}];
 const WIN_UP0 = 24, WIN_UP1 = 245;
+// 床は板(スラブ)として厚みを持つ。規定ダイヤは「上面」で、側面はその下に出る。
+// 25px は既存32枚の実測(21〜37px)の下寄り。手前角 y=724 なので画像下端まで収まる。
+// 壁の上端も薄い天面を持つ(既存の絵に合わせて10px)。
+const SLAB = 25, WALL_CAP = 10;
+// 四隅の余白の色。実機キャンバスの backgroundColor(main.mjs) と同値にして継ぎ目を消す
+const VOID = '#0c1014';
 const P = (u,v) => ({ x:(ISO.Bx + u*ISO.ux + v*ISO.vx)*IW, y:(ISO.By + u*ISO.uy + v*ISO.vy)*IH });
 
 const show = { fill:true, label:true, game:false };
@@ -91,8 +97,9 @@ function draw(shellOnly) {
   const up = p => ({x:p.x, y:p.y-WALL});
 
   if (show.fill || shellOnly) {
-    // 四隅は暗いボイド（「dark void margins」の指示と対応）
-    g.fillStyle = '#120e1c'; g.fillRect(0,0,IW,IH);
+    // 四隅の余白。色は実機キャンバスの backgroundColor と同値(#0c1014)にしてある。
+    // ここを揃えておくと、盤面の外周で継ぎ目が出ない＆余白の均一さを機械で検査できる
+    g.fillStyle = VOID; g.fillRect(0,0,IW,IH);
     // 壁面（左壁 u=0 / 右壁=奥 v=0）
     g.fillStyle = '#3a3352';
     g.beginPath(); g.moveTo(back.x,back.y); g.lineTo(left.x,left.y);
@@ -100,7 +107,39 @@ function draw(shellOnly) {
     g.fillStyle = '#453d60';
     g.beginPath(); g.moveTo(back.x,back.y); g.lineTo(right.x,right.y);
     g.lineTo(up(right).x,up(right).y); g.lineTo(up(back).x,up(back).y); g.closePath(); g.fill();
-    // 床ダイヤ
+    // 壁の天面（薄い帯）。壁厚は室外側へ出る: 左壁は -u 方向、右壁は -v 方向
+    const nrm = (dx,dy,t)=>{ const L=Math.hypot(dx,dy); return {x:dx/L*t, y:dy/L*t}; };
+    const oL = nrm(-ISO.ux*IW, -ISO.uy*IH, WALL_CAP);   // 左壁の外向き
+    const oR = nrm(-ISO.vx*IW, -ISO.vy*IH, WALL_CAP);   // 右壁の外向き
+    const cap = (p,q,o,col)=>{ g.fillStyle=col; g.beginPath();
+      g.moveTo(p.x,p.y); g.lineTo(q.x,q.y);
+      g.lineTo(q.x+o.x,q.y+o.y); g.lineTo(p.x+o.x,p.y+o.y); g.closePath(); g.fill(); };
+    cap(up(back), up(left),  oL, '#6d6390');
+    cap(up(back), up(right), oR, '#7a6f9e');
+    // 奥の角の天面。2枚の帯は外向きが違うのでこの隅がくさび状に空く。留めて埋める
+    g.fillStyle = '#736896'; g.beginPath();
+    g.moveTo(up(back).x, up(back).y);
+    g.lineTo(up(back).x+oL.x, up(back).y+oL.y);
+    g.lineTo(up(back).x+oL.x+oR.x, up(back).y+oL.y+oR.y);
+    g.lineTo(up(back).x+oR.x, up(back).y+oR.y);
+    g.closePath(); g.fill();
+    // 壁の端の切り口（左端・右端）。ここを描かないと壁が紙のように終わって見える
+    cap(left,  up(left),  oL, '#524a75');
+    cap(right, up(right), oR, '#5e5486');
+    // 床スラブの側面（手前の2辺の下に出る）。規定ダイヤは上面なので、厚みはこの下側だけ
+    const dn = p => ({x:p.x, y:p.y+SLAB});
+    // 左右の角では壁の厚みぶんスラブも外へ続く。ここを埋めないと壁の真下が空いて浮いて見える
+    const foot = (p,o,col)=>{ g.fillStyle=col; g.beginPath();
+      g.moveTo(p.x,p.y); g.lineTo(p.x+o.x,p.y+o.y);
+      g.lineTo(p.x+o.x,p.y+o.y+SLAB); g.lineTo(p.x,p.y+SLAB); g.closePath(); g.fill(); };
+    foot(left,  oL, '#9c8a6e');
+    foot(right, oR, '#8a7960');
+    const side = (p,q,col)=>{ g.fillStyle=col; g.beginPath();
+      g.moveTo(p.x,p.y); g.lineTo(q.x,q.y);
+      g.lineTo(dn(q).x,dn(q).y); g.lineTo(dn(p).x,dn(p).y); g.closePath(); g.fill(); };
+    side(left, front,  '#9c8a6e');
+    side(front, right, '#8a7960');
+    // 床ダイヤ＝上面
     g.fillStyle = '#cdbfa4';
     g.beginPath(); g.moveTo(back.x,back.y); g.lineTo(right.x,right.y);
     g.lineTo(front.x,front.y); g.lineTo(left.x,left.y); g.closePath(); g.fill();
@@ -134,6 +173,13 @@ function draw(shellOnly) {
   g.strokeStyle = '#ff5ec8'; g.lineWidth = 3;
   g.beginPath(); g.moveTo(back.x,back.y); g.lineTo(right.x,right.y);
   g.lineTo(front.x,front.y); g.lineTo(left.x,left.y); g.closePath(); g.stroke();
+
+  // 床スラブの下端（ピンクの破線）。ピンクの実線=上面、破線=側面の下端の目安
+  g.save();
+  g.strokeStyle = 'rgba(255,94,200,.45)'; g.lineWidth = 2; g.setLineDash([8,6]);
+  g.beginPath();
+  g.moveTo(left.x, left.y+SLAB); g.lineTo(front.x, front.y+SLAB); g.lineTo(right.x, right.y+SLAB);
+  g.stroke(); g.restore();
 
   // 開口3つの想定位置（シアン細線）。検収では「3つあるか」「v位置が合っているか」だけを見る。
   // 形はテーマ任せなので、枠の内側に収まっていなくてもよい
@@ -190,7 +236,7 @@ function draw(shellOnly) {
 }
 
 /* 背景一覧（assets/rooms 直下） */
-const KEYS = ['factory-room','room-arabia','room-beehive','room-cabin','room-carnival','room-china',
+const KEYS = ['room-factory','room-arabia','room-beehive','room-cabin','room-carnival','room-china',
  'room-christmas','room-circuit','room-circus','room-desert','room-diner','room-dino','room-dwarf',
  'room-egypt','room-fantasy','room-halloween','room-haunted','room-hell','room-ice','room-japan',
  'room-jungle','room-mushroom','room-onsen','room-pirate','room-retrofuture','room-scifi','room-space',
