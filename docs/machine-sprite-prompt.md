@@ -1,5 +1,197 @@
 # 製造機スプライトの Stitch 依頼テンプレ
 
+**現行は「1マスモジュールの型を塗り替える」方式**（下の「0.」節）。部屋背景の
+ゴールデンルーム方式（`docs/stitch-prompts.md` の 1-B）と同じ考え方を製造機に移したもの。
+以降の「4台シート」「種シートから再スキン」の節は**旧方式**で、経緯と文言の教訓として残す。
+
+---
+
+## 0. 1マスモジュールの型（ゴールデン方式・現行）
+
+### なぜ型なのか
+
+製造機は「同じ機械の長さ違い」を 2/3/4/5 マスぶん用意する。生成AIに4台描かせると
+**必ずマスの送りがバラつく**（長い台ほど詰める。実測 ±13〜57%）ので、いま `cut_machines.py` は
+**1マスモジュール1枚だけを正とし、それを N 個並べて N マス機を作る**。
+つまり発注すべきものは最初から**1マス機1枚**だけで、そこには次の3つしか要らない。
+
+1. 接地する菱形（＝1マス。厳密に 2:1）
+2. その上に立つ低い箱（手前左の長側面 ＋ 手前右の端面）
+3. 天面の中央のホッパー（素材アイコンが乗る場所）
+
+これは文章で言うより**絵で渡した方が早い**。だから部屋と同じく「殻」を1枚用意して、
+**「これを塗り替えて」**と発注する。部屋の殻との対応（床ダイヤ→天面／壁の内側の面→側面／
+壁の開口→ホッパーと点検窓）は `tools/assets/make_machine_shell.py` の冒頭に書いてある。
+
+### 規格（`tools/assets/make_machine_shell.py` の定数が唯一の出どころ）
+
+菱形の幅を 1 としたときの比で持つ。px では持たない。
+
+| 値 | 比 | 由来 |
+|---|---|---|
+| 接地菱形 高さ/幅 | **0.500**（厳密な 2:1） | `game/scene/iso.mjs` の `ISO` |
+| 側面の高さ / 菱形幅 | **0.346** | 採用済みモジュール32枚の実測（全枚一致） |
+| 総高（接地〜最上端）/ 菱形幅 | **0.846**（実物は 0.91 まで） | 同上。ホッパーの頭は天面の奥角とほぼ同じ高さ |
+| ホッパーの口の径 / 菱形幅 | **0.44** | 同上（実測 0.42〜0.52） |
+
+菱形の比が 0.5 から多少ずれても `cut_machines.py` が縦を潰して直すが、**0.60 を超えたら
+アイソメ角そのものが違う**ので不採用。
+
+### 手順
+
+**0. 型を用意する（すでにコミット済み。規格を変えたときだけ作り直す）**
+
+```bash
+python3 tools/assets/make_machine_shell.py     # docs/mach-shell-1024.png と docs/mach-guide-1024.png
+```
+
+- `docs/mach-shell-1024.png` … **Stitch に渡す殻**。3面を単色で塗り、ホッパーと点検窓を
+  「境界をぼかしたゾーン」として置いただけの絵。線は1本も引いていない。
+- `docs/mach-guide-1024.png` … **検収用**。菱形・接地線・ホッパー位置の線が焼き込んである。
+  **これを Stitch に渡してはいけない**（線ごと描き込まれる。部屋の guide と同じ事故）。
+
+**1. 1台目（ゴールデンモジュール）を作る**
+
+下の「プロンプト」の `{{...}}` を埋め、参照画像に `docs/mach-shell-1024.png` を添えて生成する。
+**ここだけは検収に通るまで作り直す。**後続すべての基準になる。
+
+> Stitch MCP は `generate_screen_from_text` に画像を添えられない。参照画像を使う発注は
+> **Stitch に画像をアップロードしたスクリーンを `edit_screens` の土台にする**
+> （プロンプト側では `{{DATA:IMAGE:IMAGE_n}}` に解決される）。`edit_screens` は土台を
+> 上書きせず新スクリーンを作るので、殻のスクリーンを何度でも塗り替えられる。
+
+**2. 2台目以降はゴールデンモジュールを参照画像にする**
+
+殻ではなく**合格した1台目の絵**を渡し、「形・カメラ・箱の高さ・ホッパーの位置はそのまま、
+素材と装飾だけテーマを変える」と指示する（`generate_variants` で
+`creativeRange:'REFINE'` / `aspects:['COLOR_SCHEME','IMAGES']`。`LAYOUT` は変更対象に入れない）。
+狙いは「規格に合わせること」より**「全テーマが互いに同じ形であること」**。全部同じ形なら
+系統的なズレは `make_machine_shell.py` の定数を一度直せば吸収できる。
+
+**3. 1枚ずつ検収する**
+
+`=s0` を付けた downloadUrl で原寸を取得し、`assets/mach-sheets/_module_<theme>.png` に保存。
+
+> ⚠️ `.gitignore` の `_*` で **モジュール原画は git に入らない**（既存32枚も手元にしか無い）。
+> 部屋のゴールデンルームは `docs/room-golden-1376x768.png` としてコミットしてあるので、
+> **1台目のゴールデンモジュールだけは `docs/mach-golden-1024.png` にも複製してコミットする**。
+> これが無いと、後続テーマの参照画像を失って型が再現できなくなる。
+
+```bash
+python3 tools/assets/check_machine_module.py assets/mach-sheets/_module_<theme>.png
+```
+
+数字（菱形の比／垂れ下がり／横はみ出し／総高／ホッパー中心）で合否が出る。
+**必ず一緒に書き出される2枚を目で見る**（`preview/mach-check/`）。
+
+- `<name>-check.png` … 検出点を重ねた絵。ピンク＝実測の接地菱形／黄＝厳密2:1／シアン＝ホッパー中心。
+  ピンクが絵の底辺に乗っていなければ検出ミスなので、数字を信じてはいけない。
+- `<name>-tiled.png` … 2/3/5マスに並べた絵。**これが最終形**。継ぎ目が目立つ・端の飾りが
+  毎マス繰り返される・隣とぶつかる、はここで分かる。
+
+垂れ下がりは 0.005〜0.008 は角の推定誤差で必ず出る（＝「無い」状態）。本当に垂れていると
+0.016 以上に跳ねる。採用済み32枚のうち circus / dino / space / undersea はこれで引っかかる。
+
+**4. 取り込む**
+
+```bash
+python3 tools/assets/cut_machines.py     # mach-<theme>-s2..s5.png と mach-fit.json を作る
+npm test
+```
+
+`_module_<theme>.png` があるテーマは、同名の4台シート `<theme>.png` があっても無視される。
+
+**5. 新しいテーマを増やしたときだけコードに登録する**（既存の差し替えでは不要）
+
+### プロンプト（型の塗り替えとして発注する）
+
+座標を数値で指示しても生成モデルは従えない。**「機械を描いて」ではなく「この殻を塗り替えて」**
+という枠組みにするのが要点。`{{BODY}}` `{{INTAKE}}` `{{WINDOW}}` `{{DECOR}}` `{{PALETTE}}` を埋める。
+**em dash（—）は使わない**（Stitch API が `Request contains an invalid argument.` を返す）。
+
+```
+REPAINT THIS EXACT SHELL. The image you are editing is the master shell for one machine tile.
+Paint your theme directly on top of it, like colouring in a line drawing. It is the single
+source of truth for the shape: the ground diamond, the height of the box, the two visible
+faces, the camera angle. NONE of them move. Output a square image.
+
+BACKGROUND: solid pure MAGENTA (#FF00FF) everywhere around the machine, exactly as in the
+shell. The magenta is cut away later, so nothing may touch it except the machine itself.
+NO floor, NO ground plane, NO cast shadow, NO border, NO frame, NO grid lines.
+
+WHAT THIS IS: ONE TILE of an INDUSTRIAL PROCESSING MACHINE that manufactures things.
+It is NOT a bench, NOT a counter, NOT a table, NOT an altar, NOT a bath, NOT furniture.
+It is a machine: riveted plating, panel seams, an inspection window, a loading intake.
+
+THIS TILE IS A REPEATING MODULE. The finished machines are built by placing 2, 3, 4 or 5 copies
+of this exact tile side by side along the diagonal, each one step down-and-right. Therefore
+EVERYTHING you paint repeats on every tile. Do NOT paint anything that should appear only once:
+no chimney at one end, no motor at one end, no end cap on the long side face, no asymmetric
+machinery. The design must still read correctly when it repeats.
+
+STRICT GEOMETRY, copy from the shell, do not change:
+- The ground diamond: the lowest point of the whole image is its FRONT corner, on the vertical
+  center line. Left and right corners sit at exactly the same height. True 2:1 isometric.
+- The box: exactly as tall as in the shell, a LOW box, about one third as tall as the diamond
+  is wide. Do not make it taller. Do not make it a cube.
+- Exactly TWO faces are visible below the top plate: the LONG SIDE facing lower-LEFT and the
+  SHORT END facing lower-RIGHT. No face is parallel to the image plane.
+- No horizontal lines anywhere in the structure. Every edge is vertical or at a 2:1 slope.
+Do NOT resize, rotate, re-center, crop or zoom the machine.
+
+THE BOTTOM EDGE IS ONE CLEAN STRAIGHT LINE ON THE GROUND DIAMOND. No legs, no feet, no chute,
+no skirt, no drips, no shadow and no protrusion of any kind dips below it.
+NOTHING STICKS OUT SIDEWAYS past the ground diamond, or the tiles collide when repeated.
+
+THE INTAKE. The soft dark ellipse on the top plate marks WHERE the intake goes: centred on the
+tile, about 0.44 of the tile width across, a 2:1 foreshortened ELLIPSE, dark and EMPTY inside.
+Keep that position and that size. ONLY THE SHAPE IS YOURS: a raised collar, a funnel, a rimmed
+plate, a ring, whatever the theme would really use, but its mouth stays on that ellipse and its
+top must not rise above the BACK corner of the top plate.
+Design it as: {{INTAKE}}
+
+THE INSPECTION WINDOW. The soft dark patch on the long side face marks WHERE it goes. Keep that
+position. Its shape is yours to match the theme, and it sits FLUSH in the face.
+Design it as: {{WINDOW}}
+
+NOTHING IS ATTACHED TO THE SIDE FACES OR THE END FACES. They carry only SHALLOW RELIEF: panel
+seams, rows of small rivets, a slightly recessed panel. No gauges, no pipes, no belts, no valve
+handles, no hoses, no crates, no bumpers, no output chute sticking out of a face.
+
+CHANGE ONLY the surface materials and the decoration:
+- BODY: {{BODY}}
+- TOP PLATE: the same material family as the body, flat, with the intake set into it.
+- DECORATION on the BACK half of the top plate, behind the intake, never covering it, never
+  extending sideways past the ends of the base, never rising above the intake: {{DECOR}}
+
+NO WRITING OF ANY KIND ANYWHERE. No text, no labels, no letters, no numbers, no runes, no
+glyphs, no hieroglyphs, no sigils, no inscriptions, not in any real or invented language.
+For surface detail use notches, studs, bolt heads, grooves, rivets or chevrons instead.
+
+STYLE: VERY chunky lo-fi 8-bit Famicom pixel art, extreme high contrast, thick clean black
+outlines, flat colors, no gradients, no anti-aliasing. Palette: {{PALETTE}}.
+```
+
+### `{{...}}` の埋め方
+
+- `{{INTAKE}}` / `{{DECOR}}` … 下の「差し替え例」表の `<SPOT_DESIGN>` / `<THEME_DESIGN>` 列を
+  そのまま流用できる。ただし**装飾は1マスぶん**なので、6つ並べず**2〜3個**に絞る（毎マス繰り返る）。
+- `{{WINDOW}}` … `glowing amber light behind an iron-framed arch` のように**面一の窓**として書く。
+- 語彙の禁則は旧方式と同じ。`runes`/`glyphs` は文字を呼ぶ、`well`/`basin`/`sunk into`/`stainless`
+  は流し台を呼ぶ、`bench`/`counter`/`workbench` は正面図を呼ぶ（下の「これまでの失敗と対処」）。
+
+### やってはいけない指示
+
+- 1マスなのに「長い機械」を説明する。長さの話は一切書かない（並べるのはこちら側の仕事）
+- 端の飾り（煙突・モーター・排出シュート）を入れる。**毎マス繰り返されて櫛になる**
+- 「装飾を密に」と足す。1マスに盛ると並べた時に潰れる。密度は素材の描き込みで出す
+- 参照画像を毎回変える。型は殻か、合格した1台目で固定する
+- 検収用の `mach-guide-*.png` を渡す（線ごと描き込まれる）
+
+---
+
+## 旧方式: 4台シート（`assets/mach-sheets/<theme>.png`）
+
 `<THEME>` `<THEME_DESIGN>` `<SPOT_DESIGN>` `<PALETTE>` を差し替えて `generate_screen_from_text` に投げる。
 
 **必ず1テーマ1枚**（`assets/mach-sheets/<theme>.png`）。2枚に分けると生成が別々になり、
@@ -60,7 +252,9 @@
 
 ## 受け取ったシートの合否
 
-取り込む前に必ず見る。詳しくは `python3 tools/assets/cut_machines.py` のログと、検出点を重ねた画像。
+1マスモジュールは `python3 tools/assets/check_machine_module.py <png>` で機械的に出す（「0.」節）。
+以下は4台シートを目で見るときの基準。取り込む前に必ず見る。
+詳しくは `python3 tools/assets/cut_machines.py` のログと、検出点を重ねた画像。
 
 - **不採用**（作り直しを依頼する）
   - プロンプト文やラベルが画像に焼き込まれている（回転寿司で発生）

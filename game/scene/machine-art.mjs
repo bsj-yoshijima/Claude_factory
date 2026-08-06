@@ -32,6 +32,16 @@ export const MachineArt = {
     const ext=(dir==='v') ? [i===0, true, i===n-1, true] : [true, i===n-1, true, i===0];
     for(let k=0;k<4;k++){ if(!ext[k]) continue; const p=q[k], r=q[(k+1)%4];
       g.beginPath(); g.moveTo(p.x,p.y); g.lineTo(r.x,r.y); g.strokePath(); } },
+  /* 凸多角形を縦の帯 [xa,xb] で切る(Sutherland-Hodgman)。土台を自分の帯の中に閉じ込めるのに使う */
+  _clipX(pts, xa, xb){
+    const cut=(pl, keep, edge)=>{ const out=[];
+      for(let i=0;i<pl.length;i++){ const p=pl[i], q=pl[(i+1)%pl.length];
+        const kp=keep(p), kq=keep(q);
+        if(kp) out.push(p);
+        if(kp!==kq && q.x!==p.x){ const t=(edge-p.x)/(q.x-p.x); out.push({x:edge, y:p.y+(q.y-p.y)*t}); } }
+      return out; };
+    const l=cut(pts, p=>p.x>=xa, xa);
+    return l.length ? cut(l, p=>p.x<=xb, xb) : l; },
   _makeObjs(e){ const {c,r}=e.cell; const p=cellXY(c,r); const u=(c+0.5)/GU, v=(r+0.5)/GV;
     const tint=this.tintByLight(u,v); const objs=[]; let main=null; e._lit=null;
     if(e.kind==='machine'){
@@ -86,12 +96,25 @@ export const MachineArt = {
   _machFootColor(key, sx, ih, fallback){
     this._footCol = this._footCol || {};
     if(key in this._footCol) return this._footCol[key];
+    // 拾いたいのは「機械の裾の色」。土台とその2pxの縁取りは絵の輪郭から数px食み出すので、
+    // ここが機械と違う色だと、マスの角に黒や明るい三角が飛び出して「絵が抜けた」ように見える。
+    //   ・1列だけ見ない … 列 sx(投入口0番の列)は絵の奥側で、長い機械では絵の下端から遠い。
+    //     旧実装は下端から40pxで打ち切っていたので 4/5マス機では何も拾えず fallback(暗い縁色)だった。
+    //   ・最下端そのものを拾わない … そこは必ず太い黒の輪郭線。
+    // 幅方向に何点かサンプルし、輪郭でない色の中央値(明るさ順)を採る。
     let col=fallback;
-    for(let y=ih-1; y>=Math.max(0,ih-40); y--){
-      if(this.textures.getPixelAlpha(sx,y,key)>200){
-        const c=this.textures.getPixel(sx,y,key);
-        if(c) col=(c.red<<16)|(c.green<<8)|c.blue;
-        break; } }
+    const src=this.textures.get(key).getSourceImage(), iw=src.width;
+    const cand=[];
+    for(let k=1;k<=9;k++){
+      const x=Math.min(iw-1, Math.round(iw*k/10));
+      let bottom=-1;
+      for(let y=ih-1; y>=0; y--){ if(this.textures.getPixelAlpha(x,y,key)>200){ bottom=y; break; } }
+      if(bottom<2) continue;
+      for(let y=bottom-1; y>=0 && y>bottom-6; y--){
+        const c=this.textures.getPixel(x,y,key); if(!c) continue;
+        if(Math.max(c.red,c.green,c.blue)<50) continue;              // 輪郭線は飛ばす
+        cand.push([c.red+c.green+c.blue, (c.red<<16)|(c.green<<8)|c.blue]); break; } }
+    if(cand.length){ cand.sort((a,b)=>a[0]-b[0]); col=cand[cand.length>>1][1]; }
     this._footCol[key]=col; return col; }
   /* 製造機は複数マスを一直線に占有するので、深度を1つしか持たせるとマスごとの前後関係が壊れる
      (手前のマスに立ったキャラが機械の裏へ回る)。絵を「1マスぶんの縦帯」に切り、帯 i をマス i の深度で描く。 */,
@@ -169,12 +192,15 @@ export const MachineArt = {
       cells.forEach((q,i)=>{
         // 絵の本体の奥行はゲームの1マスより浅いことがあり、占有マスの手前側に床が残る。
         // そこに後ろのキャラが覗くので、マスごとの土台で塞いでから帯を重ねる。
-        const qd=quads[i].map(shrink);
-        const bg=this.add.graphics().setDepth(dep[i]-0.3); objs.push(bg);
-        bg.fillStyle(foot,1); bg.fillPoints(qd,true);
-        bg.lineStyle(2,foot,1); this._strokeOuter(bg,qd,i,n,e.dir);
         const x0 = asc ? (i===0?0:cut[i-1]) : (i===n-1?0:cut[i]);
         const x1 = asc ? (i===n-1?iw:cut[i]) : (i===0?iw:cut[i-1]);
+        // 土台は「自分の帯の中」だけに描く。マスの菱形は帯より横に広いので、そのまま塗ると
+        // 隣のマスの帯(depth が小さい = 先に描かれる)の上に単色が乗り、絵の中に灰色や黒の
+        // 三角が出る(絵が抜けたように見える)。帯で切っておけば、はみ出した分は必ず自分の絵の下。
+        const qd=this._clipX(quads[i].map(shrink), L+x0, L+x1);
+        const bg=this.add.graphics().setDepth(dep[i]-0.3); objs.push(bg);
+        if(qd.length>2){ bg.fillStyle(foot,1); bg.fillPoints(qd,true);
+          bg.lineStyle(1,foot,1); bg.strokePoints(qd,true); }
         const im=this.add.image(imx, imy, key).setOrigin(0.5,1).setDepth(dep[i]).setTint(tint);
         im.setCrop(x0, 0, Math.max(0,x1-x0), ih);   // 位置は変えず、自分の帯だけを見せる
         objs.push(im); e._lit.push(im); this.lit.push({sp:im,u,v});
