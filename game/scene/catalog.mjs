@@ -18,7 +18,7 @@ export const PART_PAL = {
 export const PART_SKIN_BY_THEME = {
   japan:'wood', onsen:'wood', cabin:'wood', sushi:'wood', western:'wood', pirate:'wood', jungle:'wood', mushroom:'wood',
   undersea:'aqua', ice:'aqua', beehive:'brass', steampunk:'brass', dwarf:'brass', hell:'brass', egypt:'brass', china:'brass', arabia:'brass',
-  scifi:'neon', space:'neon', circuit:'neon', tokyo:'neon', retrofuture:'neon', haunted:'neon',
+  scifi:'neon', space:'neon', circuit:'neon', tokyo:'neon', retrofuture:'neon', haunted:'neon', tech:'neon',
   circus:'candy', carnival:'candy', christmas:'candy', halloween:'candy', diner:'candy', fantasy:'candy', desert:'candy', dino:'candy',
 };
 // 製造機の見た目(セル比)。inset=マス境界からの余白 / height=筐体の高さ / slot=スロット穴の大きさ
@@ -70,7 +70,7 @@ export function recipeFor(slots, id){
 export const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_japan', china:'room_china',
   diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino',
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
-  retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen' };
+  retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen', tech:'room_tech' };
 // Stitch製 装飾プロップ(部屋画像と同じアイソメ視点で生成)。
 //   汎用12種 + テーマ別の「名物」6種×5テーマ + テーマ別の「基本家具」7種×テーマ
 // 基本家具は全テーマ共通のスロット(chair/table/sofa/shelf/rug/lamp/plant)で、材質と色だけテーマで差し替える。
