@@ -1,6 +1,6 @@
 /* 共通のUI部品 — 同じ見た目のものは同じ関数から出す。 */
 import { MACH, RAR, machVariant } from '../data/econ.mjs';
-import { MAT } from '../data/craft.mjs';
+import { MAT, SECRET_G } from '../data/craft.mjs';
 import { PROD_PRICE } from '../data/rules.mjs';
 import { G } from '../state.mjs';
 
@@ -49,12 +49,19 @@ export const machIcon=(variant)=>
      isNew : NEW バッジ
      miss  : 未発見（❓ で伏せる）
      key   : morphInto 用の data-key（並びが変わる一覧で使う） */
+/* 製品の絵。シークレット(UMA)だけドット絵アイコンを持つ。
+   assets/ui/secrets/<id>.png が無い/読めないときは onerror で絵文字に戻る。 */
+export const prodArt=(p)=> (p && p.g===SECRET_G && p.id!=='blob')
+  ? `<img class="pimg" src="assets/ui/secrets/${p.id}.png" alt="${p.n}"
+       onerror="this.replaceWith(document.createTextNode('${p.e}'))">`
+  : (p?p.e:'');
+
 export function prodCard(p,{n=null,rows=[],isNew=false,miss=false,key=null}={}){
   const col=RAR[p.r].c, k=key?` data-key="${key}"`:'';
   if(miss) return `<div class="pcard miss"${k}><div class="e">❓</div><div class="nm">？？？</div>
       <div class="rr" style="color:${col}">${RAR[p.r].n}</div></div>`;
   return `<div class="pcard"${k} style="border-color:${col}">${isNew?'<span class="new">NEW</span>':''}
-      <div class="e">${p.e}</div><div class="nm">${p.n}</div>
+      <div class="e">${prodArt(p)}</div><div class="nm">${p.n}</div>
       <div class="rr" style="color:${col}">${RAR[p.r].n}</div>
       ${n!=null?`<div class="qn">${n}</div>`:''}${rows.join('')}</div>`;
 }

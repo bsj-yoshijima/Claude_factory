@@ -245,6 +245,10 @@
   .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:7px}
   .pcard{position:relative;background:#10171b;border:1px solid #243036;border-radius:9px;padding:8px 4px;text-align:center}
   .pcard .e{font-size:28px;line-height:1.1}
+  /* シークレット(UMA)のドット絵アイコン。等倍ドットで出す(assets/ui/secrets/) */
+  .pimg{width:34px;height:34px;image-rendering:pixelated;vertical-align:middle}
+  .rp .pimg{width:26px;height:26px}
+  .e.sil .pimg{filter:brightness(0) saturate(0);opacity:.5}
   .pcard .nm{font-size:10px;color:#eafff4;margin-top:2px}
   .pcard .rr{font-size:9px;margin-top:1px}
   .pcard .qn{font-size:9px;color:#7fe6ff}

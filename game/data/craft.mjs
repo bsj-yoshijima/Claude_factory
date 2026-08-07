@@ -171,11 +171,16 @@ export const PRODS = [
   {id:'magic',   g:'life',e:'🪄',n:'魔法の絨毯',    r:5,m:['cloth','cotton','dye','feather','thread'],w:20}, // ★
   {id:'doll',    g:'life',e:'🪆',n:'からくり人形',  r:4,m:['cloth','dye','paper','thread','wood'],w:80},     // ★🧵🎨📄🪢🪵
   {id:'hina',    g:'life',e:'🎎',n:'ひな人形',      r:5,m:['cloth','dye','paper','thread','wood'],w:20},     // ★
-  // ── ✨ シークレット（ジャンルを跨いだ特定の組み合わせでのみ出る）──
-  {id:'ghost',   g:SECRET_G,e:'👻',n:'おばけ',      r:3,m:[]},
-  {id:'cat',     g:SECRET_G,e:'🐈',n:'ふしぎな猫',  r:4,m:[]},
-  {id:'alien',   g:SECRET_G,e:'👽',n:'エイリアン',  r:5,m:[]},
-  {id:'dragon',  g:SECRET_G,e:'🐉',n:'ドラゴン',    r:5,m:[]},
+  // ── ✨ シークレット（ジャンルを跨いだ特定の組み合わせでのみ出る）── 題材はUMA/未確認生物
+  //    アイコンは assets/ui/secrets/<id>.png（無ければ e の絵文字で出る）
+  {id:'ghost',    g:SECRET_G,e:'👻',n:'ゴースト',            r:3,m:[]},
+  {id:'cat',      g:SECRET_G,e:'🐈',n:'猫',                  r:3,m:[]},
+  {id:'nessie',   g:SECRET_G,e:'🦕',n:'ネッシー',            r:4,m:[]},
+  {id:'yeti',     g:SECRET_G,e:'🦍',n:'イエティ',            r:4,m:[]},
+  {id:'mothman',  g:SECRET_G,e:'🦋',n:'モスマン',            r:4,m:[]},
+  {id:'skyfish',  g:SECRET_G,e:'🐟',n:'スカイフィッシュ',    r:5,m:[]},
+  {id:'flatwoods',g:SECRET_G,e:'👾',n:'フラットウッズ',    r:5,m:[]},
+  {id:'alien',    g:SECRET_G,e:'👽',n:'宇宙人',              r:5,m:[]},
   // レシピに無い組み合わせのときだけ出る。組み合わせを探す動機になる「ハズレ枠」
   {id:'blob',    g:SECRET_G,e:'🪨',n:'謎のカタマリ',r:1,m:[]},
 ];
@@ -200,10 +205,16 @@ export const RECIPES = PRODS.reduce((r,p)=>{
    ここに書いた組み合わせだけ p の確率でシークレット製品、外れは 🪨 謎のカタマリ。
    ここに無いジャンル跨ぎは必ず 🪨（＝跨ぎは基本ハズレ、という体験を保つ）。 */
 export const SECRETS = {
-  'cotton,milk,thread'  : {pid:'cat',    p:0.12},   // 🥛牛乳 + ☁️綿 + 🪢糸
-  'cloth,noodle'        : {pid:'ghost',  p:0.10},   // 🍥麺 + 🧵布
-  'egg,glass,semic'     : {pid:'alien',  p:0.06},   // 🥚卵 + 🪟ガラス + 💾半導体
-  'iron,leather,meat'   : {pid:'dragon', p:0.04},   // 🥩肉 + 🔩鉄 + 👝皮
+  // すべて 5素材ちょうど・確率 1%。5マス機を建てて、ジャンルを跨いだ5つを揃えたときだけ
+  // 1%で当たる（外れは🪨カタマリ）。レシピ表には1つ作るまで節ごと出ない（recipes.mjs）。
+  'cloth,cotton,feather,noodle,paper'  : {pid:'ghost',     p:0.01},  // 🍥麺 🧵布 ☁️綿 🪶羽毛 📄紙
+  'cotton,feather,meat,milk,thread'    : {pid:'cat',       p:0.01},  // 🥛牛乳 ☁️綿 🪢糸 🥩肉 🪶羽毛
+  'dye,glass,lens,oil,paper'           : {pid:'nessie',    p:0.01},  // 🔍レンズ 📄紙 🎨染料 🪟ガラス 🛢️石油
+  'cloth,cotton,leather,meat,wood'     : {pid:'yeti',      p:0.01},  // ☁️綿 👝皮 🥩肉 🪵木材 🧵布
+  'batt,cloth,dye,feather,wire'        : {pid:'mothman',   p:0.01},  // 🔋電池 🪶羽毛 🧵布 🔌銅線 🎨染料
+  'feather,lens,noodle,plastic,semic'  : {pid:'skyfish',   p:0.01},  // 🔍レンズ 🍥麺 💾半導体 🪶羽毛 🧴プラ
+  'alum,dye,glass,magnet,plastic'      : {pid:'flatwoods', p:0.01},  // 🥫アルミ 🪟ガラス 🎨染料 🧲磁石 🧴プラ
+  'batt,egg,glass,magnet,semic'        : {pid:'alien',     p:0.01},  // 🥚卵 🪟ガラス 💾半導体 🔋電池 🧲磁石
 };
 
 /* レシピ値の3通りの書き方を [{p:製品, w:重み}] に正規化する。

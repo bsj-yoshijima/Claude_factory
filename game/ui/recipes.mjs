@@ -3,7 +3,7 @@ import { RAR } from '../data/econ.mjs';
 import { GENRES, MAT, PRODS, SECRETS, SECRET_G, UNKNOWN_PRODUCT } from '../data/craft.mjs';
 import { craftState } from '../state.mjs';
 import { openDialog } from './dialog.mjs';
-import { uic } from './parts.mjs';
+import { uic, prodArt } from './parts.mjs';
 
 function secretMatsOf(pid){
   const k=Object.keys(SECRETS).find(k=>SECRETS[k].pid===pid);
@@ -12,9 +12,9 @@ function secretMatsOf(pid){
 function recipeRow(p,mats){
   const chips=mats.map(x=>MAT[x]?`<span title="${MAT[x].n}">${MAT[x].e}</span>`:'').join('<i>＋</i>');
   const out=(craftState().collection[p.id]||0)
-    ? `<span class="rp"><span class="e">${p.e}</span><span class="nm">${p.n}</span>
+    ? `<span class="rp"><span class="e">${prodArt(p)}</span><span class="nm">${p.n}</span>
          <span class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</span></span>`
-    : `<span class="rp"><span class="e sil" title="まだ作っていない製品">${p.e}</span>
+    : `<span class="rp"><span class="e sil" title="まだ作っていない製品">${prodArt(p)}</span>
          <span class="nm dim">？？？</span></span>`;
   return `<div class="rrow" data-key="${p.id}"><span class="rms">${chips}</span><i class="ra">→</i>${out}</div>`;
 }
