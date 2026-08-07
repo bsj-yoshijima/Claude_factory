@@ -5,7 +5,7 @@
      scene/lighting.mjs     採光と内装
      scene/edit.mjs         レイアウト編集
    UI(game/app.mjs ほか)へは window.__* 経由でしか触らない。 */
-import { DECOR, DEMO, KINDS, MACH_ART, MACH_SIZES, PROP_NAMES, SKINS, isFlatProp, machSize, matArt } from './catalog.mjs';
+import { DECOR, DEMO, KINDS, MACH_ART, MACH_SIZES, MAT_TEX, PROP_NAMES, SKINS, isFlatProp, machSize, matArt } from './catalog.mjs';
 import { Edit } from './edit.mjs';
 import { CELL, GU, GV, H, K, W, cellXY, uvXY } from './iso.mjs';
 import { Lighting } from './lighting.mjs';
@@ -36,6 +36,7 @@ export class Main extends Phaser.Scene {
       let ready={}; try{ ready=JSON.parse(data)||{}; }catch(_){}
       for(const s of SKINS) if(s.id!=='none' && ready[s.id]) this.load.image('hat_'+s.id, `assets/hats/hat-${s.id}.png`);
     });
+    for(const t of MAT_TEX) this.load.image(t.key, t.file);   // 投入口に載せる素材のドット絵(16×16)。全32枚あるので被り物のような「あるものだけ読む」判定は要らない
     for(const d of DECOR) this.load.image('dec_'+d, `assets/objects/obj_${d}.png`);
     // 製造機スプライト(Stitch製)。命名規約 mach_<theme>_s<N>。無いテーマは normal → 手続き描画 の順にフォールバック
     for(const th of MACH_ART) for(const n of MACH_SIZES) this.load.image(`mach_${th}_s${n}`, `assets/machines/mach-${th}-s${n}.png`);

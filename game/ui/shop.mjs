@@ -5,7 +5,7 @@ import { NET, applyFactory } from '../net.mjs';
 import { G, availN, machState, ownedN } from '../state.mjs';
 import { hatReady } from './agents.mjs';
 import { openDialog, toast } from './dialog.mjs';
-import { itemRow, machIcon, themeIcon, uic, updateBadge, yen } from './parts.mjs';
+import { itemRow, machIcon, matIcon, themeIcon, uic, updateBadge, yen } from './parts.mjs';
 
 async function apiBuy(kind,id,okMsg){
   const r=await NET.call('POST','/api/shop/buy',{kind,id});
@@ -23,7 +23,7 @@ function levelUp(id){ const e=(G.layout||[]).find(x=>x.id===id&&x.kind==='machin
 // 素材スロットの要約（ショップ一覧用）。何が作れるかは伏せ、素材と稼働状態だけ出す
 function slotSummary(e){ const mats=[...new Set((e.slots||[]).filter(Boolean))].sort();
   if(!mats.length) return '素材未設定';
-  const icons=mats.map(m=>(MAT[m]||{}).e||'?').join('');
+  const icons=mats.map(m=>MAT[m]?matIcon(m):'?').join('');
   // ここは 11px の1行なので、24×24 の歯車を並べると行が倍の高さになる。文字だけにする
   return `${icons}${machState(e.id).running?' ・ 製造中':''}`; }
 function buyDeco(t){ if(G.money<DECO[t].price)return;

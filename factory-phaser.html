@@ -128,6 +128,9 @@
   /* UI機能のドット絵アイコン（16×16・assets/ui/icons）。文字と並べるので少し下げる。
      lg は整数2倍の32px（#craft のロゴなど文字より大きく出す場所用） */
   .uic{width:16px;height:16px;image-rendering:pixelated;vertical-align:-3px}
+  /* 製品のアイコンは 32×32 が原寸（図鑑カード 28px・レシピ右 22px の枠に出る）。
+     原材料の .uic を2倍に伸ばしたものではないので、クラスを分けて 1/2 縮小を防ぐ。 */
+  .pic{width:32px;height:32px;image-rendering:pixelated;vertical-align:middle}
   /* 💰だけは金額のすぐ後ろに添える単位なので、他のアイコンと扱いを分ける。
      高さは数字の半分(0.5em)。px で固定すると、13px の行でも 19px の見出しでも
      同じ大きさになって片方で不釣り合いになるため em で追従させる。
@@ -212,6 +215,9 @@
   .mrow .mslots{align-items:center;gap:5px}
   .mrow .mslot{width:40px;height:40px;border-radius:7px;border-width:1.5px}
   .mrow .mslot .e{font-size:19px}
+  /* 製造機のマスに入る原材料は 32×32 版（.pic）を原寸で出す。
+     .mrow の小さいマスもそのまま 32px（枠が40px あるので収まる）。 */
+  .mslot .e{display:flex;align-items:center;justify-content:center}
   .mrow .mslot .x{top:-3px;right:1px;font-size:10px}
   .mrow .dbtn{margin-left:auto;padding:6px 11px;font-size:11px;white-space:nowrap}
   /* 進捗はバーと数値だけを1行に */
@@ -245,10 +251,6 @@
   .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:7px}
   .pcard{position:relative;background:#10171b;border:1px solid #243036;border-radius:9px;padding:8px 4px;text-align:center}
   .pcard .e{font-size:28px;line-height:1.1}
-  /* シークレット(UMA)のドット絵アイコン。等倍ドットで出す(assets/ui/secrets/) */
-  .pimg{width:34px;height:34px;image-rendering:pixelated;vertical-align:middle}
-  .rp .pimg{width:26px;height:26px}
-  .e.sil .pimg{filter:brightness(0) saturate(0);opacity:.5}
   .pcard .nm{font-size:10px;color:#eafff4;margin-top:2px}
   .pcard .rr{font-size:9px;margin-top:1px}
   .pcard .qn{font-size:9px;color:#7fe6ff}
@@ -264,7 +266,7 @@
   .rms i{font-style:normal;font-size:9px;color:#5d7078;padding:0 1px}
   .rrow .ra{font-style:normal;font-size:11px;color:#5d7078;margin-left:auto;padding-left:4px}
   .rp{display:flex;align-items:center;gap:5px}
-  .rp .e{font-size:22px;line-height:1}
+  .rp .e{font-size:22px;line-height:1;display:flex;align-items:center}
   /* 未製造は輪郭だけ。色も名前もレア度も伏せる（作る前に狙い目が分かってしまわないように） */
   .rp .e.sil{filter:brightness(0) saturate(0);opacity:.5}
   .rp .nm{font-size:10px;color:#eafff4}

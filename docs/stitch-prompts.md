@@ -1362,3 +1362,83 @@ Consistent chunky pixel style across all 4 pieces. Only the hats/UI-free belt pi
 ### 実装メモ（並行準備）
 - 現状は手続き描画(接続に応じてアーム＋トレッド＋ライン色)。**スプライト方式へ移行**する場合: 接続マスク→ピース種別(直線=2対向/コーナー=2隣接/T=3/十字=4/端=1)＋反転を選び、`belt-<skin>-*` を配置。skin は G に保存して全ベルト差し替え。
 - belt_seg=default straight, belt_corner=default corner。まず default で方式を通し、その後スキンを足す。
+
+---
+
+## 5. アイテムアイコン テンプレート（mat-<id>.png / prod-<id>.png / genre-<id>.png）
+
+原材料32・製品113・ジャンル3 の**148枚**。もとは craft.mjs の絵文字（🥛🌾🥣…）で、
+盤面と部屋がドット絵なのにアイコンだけフォント任せだったのを置き換えた（経緯は
+`docs/task-mat-prod-icons.md`、前例は `tools/assets/make_menu_icons.mjs` の冒頭）。
+
+### 規格
+
+**グリッドの1辺 = 実際に出る px** に合わせる。半端な倍率でも 1/2 でも濁るので、
+大きさを変えたいときは表示倍率ではなくグリッドごと描き直す（make_menu_icons.mjs 冒頭と同じ）。
+
+| 種別 | グリッド | 根拠（factory-phaser.html の実測） |
+|---|---|---|
+| 原材料 `mat-<id>` | **16×16** | レシピ左 `.rms` 15px / 材料チップ `.mchip` 14px / 製造機のマス `.mslot .e` 19〜24px |
+| 製品 `prod-<id>` | **32×32** | 図鑑カード `.pcard .e` 28px / レシピ右 `.rp .e` 22px |
+| ジャンル `genre-<id>` | **16×16** | 見出しの文字（10〜12px）に混ぜる |
+
+- 製品を 16×16 で作って 2倍に伸ばしてはいけない（情報量が足りない）。逆に 32×32 を
+  16px で出すのも禁止（1ドット飛びに間引かれて濁る）。CSS のクラスを分けてある
+  （原材料・ジャンル = `.uic` 16px / `.uic.lg` 32px、製品 = `.pic` 32px）。
+- 切り出しは `--size=16` / `--size=32` で指定する。
+- **正面向き**。部屋背景はアイソメだが、16px ではアイソメだと何も読めない。
+- 画風の固定句は背景と同じ（`lo-fi 8-bit Famicom pixel art, chunky pixels, thick clean
+  black outlines, flat colours, high contrast` ＋ `simple 2-tone shading`）。
+- ジャンルで色相を寄せる: 食品=暖色 / 機械=金属＋アクセント1色 / 生活品=自然色。
+
+### プロンプト（`{{GENRE}}` と 4個ぶんの品名を差し替える。それ以外は固定）
+
+```
+Sprite sheet of exactly 4 separate {{GENRE}} game item icons, FRONT VIEW (flat, straight-on,
+no isometric angle, no perspective), lo-fi 8-bit Famicom pixel art, VERY chunky pixels,
+thick clean black outlines, flat colours, high contrast, simple 2-tone shading.
+
+The 4 items, left to right:
+(1) {{NAME}} — {{形・色の列挙}}
+(2) ... (3) ... (4) ...
+
+STRICTLY NO PINK and NO MAGENTA anywhere in the artwork.
+Arrange them in ONE single horizontal row, evenly spaced, wide clear gaps between them,
+all the same size, each roughly filling its own square cell, centred on the same horizontal line.
+Each item must stay readable when shrunk to a tiny 16x16 icon: ONE simple bold silhouette
+per item, big shapes only, NO thin lines, NO tiny details, NO gradients.
+Background: solid pure MAGENTA (#FF00FF) flat fill everywhere around and between the items.
+ABSOLUTELY NO TEXT ANYWHERE: no captions, no names, no labels, no numbers. NO shadows,
+NO ground plane, NO UI, NO frame, NO border, NO characters.
+```
+
+品名は **大文字の品名 + em dash + 形・色の列挙**（被り物テンプレと同じ書き方）。
+「(1) 品名」の並びは、あとで生成物を探す鍵にもなる（下記）。
+
+### つまずいた所（次に作る人へ）
+
+- **絵にピンク／マゼンタを使わせない。** 抜きと区別が付かない。ピンクの糸を頼んだら
+  糸だけそっくり消えた。いちご・クリーム・ドレス等は「DEEP RED」「WHITE」と指定する。
+- **背景は #FF00FF にならない。** 実測 (254,15,253) 前後にばらつくうえ、シートによっては
+  (198,54,141) のくすんだローズになる。`cut_icon_sheet.py` は**外周1ドットの最頻色**を
+  そのシートの背景として学習する。決め打ちの比率判定だけだと列が丸ごと残る。
+- **NO TEXT と書いてもラベル文字を描くことがある。** 本体と縦に重なる塊だけ残して落とす。
+- **「横1列」と書いても積むことがある。** 3個＋下に1個 になった列があった。横方向の谷が
+  n個に割れないときは、塊を近い順に併合して n 組にし、左→右・同列は上→下 の順で拾う。
+- **MCP がタイムアウトしても生成は成功している。** 投げっぱなしにして、あとで
+  `list_screens` の `title` を `(1) 品名` で grep して `screenshot.downloadUrl` を拾う方が速い
+  （`=s0` を付けて原寸取得）。並列は6本まで。
+
+### 切り出し（tools/assets/cut_icon_sheet.py）
+
+```
+python3 tools/assets/cut_icon_sheet.py           <sheet.png> assets/ui/icons mat-  milk flour egg butter
+python3 tools/assets/cut_icon_sheet.py --size=32 <sheet.png> assets/ui/icons prod- tkg pretzel shake pancake
+```
+
+マゼンタ抜き → 列ごとに切り出し → bbox クロップ → 長辺を --size へ LANCZOS 縮小（α premultiply）。
+NEAREST は使わない（生成物のドットは格子に乗っておらず、1ドットが 15.5px だったりして輪郭が欠ける）。
+
+### 検収（tools/preview/icons.html）
+
+1x/2x/4x と「実際の枠に混ぜた行」を並べる（製品の節は 1x が 32px）。**合否は 1x だけ**。`?g=food` `?ids=milk,egg` で絞れる。

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """シークレット(UMA)のアイコンを Stitch の生成物から作る。
 
-    python3 tools/assets/cut_secrets.py <raw/*.png ...> [--out assets/ui/secrets] [--size 128]
+    python3 tools/assets/cut_secrets.py <raw/*.png ...> [--out assets/ui/icons] [--size 32]
+
+出力は製品アイコンと同じ土俵（assets/ui/icons/prod-<id>.png・32x32）に置く。
+UIは parts.mjs の prodIcon() 1本で出しているので、シークレットだけ別系統にはしない。
 
 やること: マゼンタ背景を縁から flood fill で抜く → 中身の外接矩形で切る →
-正方キャンバスに収めて長辺 size へ NEAREST 縮小 → PNG8(α2値)。
-図鑑では 34px で出すので、原寸 1024px のままだと1枚1MB近い無駄になる。
-NEAREST なのはドット絵の輪郭を保つため（LANCZOS だと縁がにじんで黒線が灰色になる）。
+正方キャンバスに収めて size へ縮小 → α2値化 → PNG8。
+1024px から 32px は 32分の1なので、点で間引く NEAREST では絵が消える。
+ここは LANCZOS で潰してから α を2値に戻す（縁のにじみは切り捨てる）。
 """
 import argparse
 import os
@@ -59,14 +62,13 @@ def make(src, out_dir, size):
     s = max(im.size)
     sq = Image.new('RGBA', (s, s), (0, 0, 0, 0))
     sq.paste(im, ((s - im.width) // 2, (s - im.height) // 2))
-    k = max(1, round(s / size))                     # 整数分の1で間引く（ドットが崩れない）
-    sq = sq.resize((max(1, s // k), max(1, s // k)), Image.NEAREST)
+    sq = sq.resize((size, size), Image.LANCZOS)
     q = sq.convert('RGBA')
     alpha = q.getchannel('A').point(lambda v: 255 if v > 128 else 0)
     q.putalpha(alpha)
     q = q.quantize(colors=64, method=Image.FASTOCTREE)   # RGBA はこれか libimagequant のみ
     name = os.path.splitext(os.path.basename(src))[0]
-    path = os.path.join(out_dir, name + '.png')
+    path = os.path.join(out_dir, f'prod-{name}.png')
     q.save(path, optimize=True)
     print(f'{path}  {q.size[0]}x{q.size[1]}  {os.path.getsize(path)//1024}KB')
     return path
@@ -75,8 +77,8 @@ def make(src, out_dir, size):
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('src', nargs='+')
-    ap.add_argument('--out', default=os.path.join(ROOT, 'assets', 'ui', 'secrets'))
-    ap.add_argument('--size', type=int, default=128)
+    ap.add_argument('--out', default=os.path.join(ROOT, 'assets', 'ui', 'icons'))
+    ap.add_argument('--size', type=int, default=32)
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     for f in a.src:

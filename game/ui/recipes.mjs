@@ -3,18 +3,18 @@ import { RAR } from '../data/econ.mjs';
 import { GENRES, MAT, PRODS, SECRETS, SECRET_G, UNKNOWN_PRODUCT } from '../data/craft.mjs';
 import { craftState } from '../state.mjs';
 import { openDialog } from './dialog.mjs';
-import { uic, prodArt } from './parts.mjs';
+import { matIcon, prodIcon, genreIcon, uic } from './parts.mjs';
 
 function secretMatsOf(pid){
   const k=Object.keys(SECRETS).find(k=>SECRETS[k].pid===pid);
   return k?k.split(','):[];
 }
 function recipeRow(p,mats){
-  const chips=mats.map(x=>MAT[x]?`<span title="${MAT[x].n}">${MAT[x].e}</span>`:'').join('<i>＋</i>');
+  const chips=mats.map(x=>MAT[x]?`<span title="${MAT[x].n}">${matIcon(x)}</span>`:'').join('<i>＋</i>');
   const out=(craftState().collection[p.id]||0)
-    ? `<span class="rp"><span class="e">${prodArt(p)}</span><span class="nm">${p.n}</span>
+    ? `<span class="rp"><span class="e">${prodIcon(p)}</span><span class="nm">${p.n}</span>
          <span class="rr" style="color:${RAR[p.r].c}">${RAR[p.r].n}</span></span>`
-    : `<span class="rp"><span class="e sil" title="まだ作っていない製品">${prodArt(p)}</span>
+    : `<span class="rp"><span class="e sil" title="まだ作っていない製品">${prodIcon(p)}</span>
          <span class="nm dim">？？？</span></span>`;
   return `<div class="rrow" data-key="${p.id}"><span class="rms">${chips}</span><i class="ra">→</i>${out}</div>`;
 }
@@ -30,7 +30,7 @@ function recipeBody(){
   const c=craftState();
   const sec=(head,rows)=>`<div class="rsec">${head}</div><div class="rlist">`
     +recipeSorted(rows).map(x=>recipeRow(x.p,x.mats)).join('')+'</div>';
-  let body=GENRES.map(g=>sec(`${g.e} ${g.n}`, recipeRowsOf(g.id,p=>p.m))).join('');
+  let body=GENRES.map(g=>sec(`${genreIcon(g.id)} ${g.n}`, recipeRowsOf(g.id,p=>p.m))).join('');
   /* シークレットは1つでも作るまで節ごと出さない。出したあとも中身は「作った物」だけで、
      未発見のシークレットは行ごと存在しない（残り何個かを悟らせないため）。 */
   const found=recipeRowsOf(SECRET_G,p=>secretMatsOf(p.id)).filter(x=>c.collection[x.p.id]);
