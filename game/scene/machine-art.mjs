@@ -1,6 +1,6 @@
 /* 製造機の見た目 — 占有マスの形・スプライトの切り出し・手続き描画。
    Scene のメソッドとして書かれているので this の意味を変えないようミックスインで渡す。 */
-import { MACH_DRAW, MACH_GEO, PART_PAL, PART_SKIN_BY_THEME, RUG_DEPTH, isFlatProp, machSize, matArt, propSpan, recipeFor } from './catalog.mjs';
+import { MACH_DRAW, MACH_GEO, PART_PAL, PART_SKIN_BY_THEME, RUG_DEPTH, isFlatProp, machSize, matArt, matTexKey, propSpan, recipeFor } from './catalog.mjs';
 import { CELL, GU, GV, cellXY, uvXY } from './iso.mjs';
 
 
@@ -247,8 +247,15 @@ export const MachineArt = {
         cg.fillStyle(m?m.c:0x0d1116, m?0.85:0.6); cg.fillPoints(poly,true);
         cg.lineStyle(1.5, m?sk.glow:sk.edge, m?0.9:0.7); cg.strokePoints(poly,true);
       }
-      if(m){ const t=this.add.text(ctr.x,ctr.y-CELL*0.08,m.e,{fontSize:Math.round(CELL*0.5)+'px'}).setOrigin(0.5,0.5).setDepth(dep[idx]+0.2);
-             objs.push(t); e._slotObjs.push(t); }
+      if(m){
+        /* ドット絵を原寸で置く。setScale で伸ばさないこと（pixelArt:true = NEAREST なので濁る）。
+           テクスチャが無い素材（上流だけが知っている追加素材）は絵文字のまま出す。 */
+        const key=matTexKey(mat);
+        const t=this.textures.exists(key)
+          ? this.add.image(ctr.x,ctr.y-CELL*0.08,key)
+          : this.add.text(ctr.x,ctr.y-CELL*0.08,m.e,{fontSize:Math.round(CELL*0.5)+'px'});
+        t.setOrigin(0.5,0.5).setDepth(dep[idx]+0.2);
+        objs.push(t); e._slotObjs.push(t); }
     });
 
     /* 稼働バッジ(筐体の上)。素材未設定なら出さない。

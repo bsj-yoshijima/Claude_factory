@@ -1,6 +1,7 @@
 /* 見た目のカタログ — 製造機/素材/プロップ/部屋/スキンの対応表。
    「何をどのテクスチャで描くか」だけを持ち、ゲームのルールは持たない。 */
 import { SKIN } from '../data/econ.mjs';
+import { MATS } from '../data/craft.mjs';
 
 /* ===== 製造機のスキン =====
    スキンは「テクスチャの命名規約 + パレット」の2段。
@@ -50,6 +51,14 @@ const MAT_ART = {
   tomato:{e:'🍅', c:0xd9483f}, meat:  {e:'🥩', c:0xc05a5a}, veg:   {e:'🥬', c:0x6aa84f},
 };
 const MAT_G_C = { food:0xe8d9b0, mech:0x9fb6c8, life:0xd9c39a };   // ジャンル既定色
+/* 投入口に載せる素材のドット絵。盤面は Phaser なので <img> が使えず、
+   preload で登録したテクスチャしか描けない。キーの作り方をここに一本化して
+   main.mjs(登録) と machine-art.mjs(描画) がずれないようにする。
+   1マスは 27.8×13.9px、絵文字は CELL*0.5≒14px だったので 16×16 版を原寸で置く
+   （32×32 版は製造機ダイアログのマス用。盤面で縮めるとドットが濁る）。
+   盤面に出るのは素材だけ（製品は描いていない）ので32枚で足りる。 */
+export const matTexKey = (id)=>'mat_'+id;
+export const MAT_TEX = MATS.map(m=>({ key:matTexKey(m.id), file:`assets/ui/icons/mat-${m.id}.png` }));
 /* 素材id → {e,c}。上流が知っている素材なら MAT_ART に無くても描ける（= HTML だけで追加できる）。
    どちらも知らない素材は null（setSlot が弾く）。 */
 export function matArt(id){
