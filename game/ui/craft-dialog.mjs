@@ -7,7 +7,7 @@ import { NET, applyFactory } from '../net.mjs';
 import { craftState, machState, machines, machinesSorted, runningCount, snapLayout } from '../state.mjs';
 import { openCollection } from './collection.mjs';
 import { openDialog, toast } from './dialog.mjs';
-import { prodCard, rarChips, uic, updateBadge, yen } from './parts.mjs';
+import { genreIcon, matIcon, prodCard, rarChips, uic, updateBadge, yen } from './parts.mjs';
 
 export let _craftPick=null;                       // {mid, idx} = いま原材料を選んでいるマス
 /* 選択の解除は他モジュール(app の設置直後)からも起きる。
@@ -24,13 +24,13 @@ export function machRow(m){
     const on=_craftPick&&_craftPick.mid===m.id&&_craftPick.idx===i;
     return `<div class="mslot ${mt?'set':''} ${on?'pick':''}" data-cslot="${i}" data-cmid="${m.id}"
       title="${i+1}マス目${mt?`: ${mt.n}`:''} — クリックで原材料を選ぶ">
-      <span class="e">${mt?mt.e:'＋'}</span>
+      <span class="e">${mt?matIcon(mt.id,true):'＋'}</span>
       ${mt?`<span class="x" data-cclear="${i}" data-cmid="${m.id}" title="外す">✕</span>`:''}</div>`; }).join('');
   // ピッカーはジャンルごとの見出し + その下に原材料（タブで切り替えない。跨いだセットもできる）
   const picker = (_craftPick&&_craftPick.mid===m.id) ? `<div class="mpick">
-    ${GENRES.map(g=>`<div class="pgroup"><div class="ghead">${g.e} ${g.n}</div><div class="grow">
+    ${GENRES.map(g=>`<div class="pgroup"><div class="ghead">${genreIcon(g.id)} ${g.n}</div><div class="grow">
       ${matsOfGenre(g.id).map(x=>`<span class="mchip ${m.slots[_craftPick.idx]===x.id?'on':''}"
-        data-cmat="${x.id}" data-cmid="${m.id}" title="${x.n}">${x.e}<small>${x.n}</small></span>`).join('')}
+        data-cmat="${x.id}" data-cmid="${m.id}" title="${x.n}">${matIcon(x.id)}<small>${x.n}</small></span>`).join('')}
       </div></div>`).join('')}</div>` : '';
   return `<div class="mrow ${st.running?'run':''}" data-key="mach:${m.id}" title="${machTitle(m)}（${m.size}マス / 必要 ${need}WP）">
     <div class="mslots">${slots}

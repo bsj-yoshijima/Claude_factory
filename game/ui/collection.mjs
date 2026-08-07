@@ -3,7 +3,7 @@ import { GENRE, GENRES, PRODS, SECRET_G } from '../data/craft.mjs';
 import { WP_PER_SLOT } from '../data/rules.mjs';
 import { craftState } from '../state.mjs';
 import { openDialog } from './dialog.mjs';
-import { matRow, prodCard, uic } from './parts.mjs';
+import { genreIcon, matRow, prodCard, uic } from './parts.mjs';
 
 let _collectionGenre='food';     // 図鑑のジャンル切り替え（GENRES + ✨シークレット）
 // 図鑑のタブ＝製品のジャンル。GENRES に足せば自動で増える
@@ -19,7 +19,7 @@ function collectionTabs(){
   const c=craftState();
   return collectionGenres().map(g=>{ const list=prodsOfGenre(g.id);
     const own=list.filter(p=>c.collection[p.id]).length;
-    return {id:g.id,label:`${g.e} ${g.n} ${own}/${list.length}`}; });
+    return {id:g.id,label:`${genreIcon(g.id)} ${g.n} ${own}/${list.length}`}; });
 }
 // 全ジャンル通しての達成度は見出しの脇に出す（タブがジャンル別の件数で埋まっているぶん）
 function collectionSubtitle(){
@@ -36,7 +36,7 @@ function collectionBody(){
       <div class="rowline" style="font-size:11px;color:#9fb0c0">${_collectionGenre===SECRET_G
         ? `シークレットは<b style="color:#ffd27a">ジャンルを跨いだ原材料</b>の特定の組み合わせでのみ、ごく低確率で出る。
            跨いだ組み合わせのほとんどは 🪨 謎のカタマリ。`
-        : `同じ ${GENRE[_collectionGenre]?GENRE[_collectionGenre].e+GENRE[_collectionGenre].n:''} ジャンルの原材料の組み合わせを変えて未発見の製品を探そう。
+        : `同じ ${GENRE[_collectionGenre]?genreIcon(_collectionGenre)+GENRE[_collectionGenre].n:''} ジャンルの原材料の組み合わせを変えて未発見の製品を探そう。
            発見済みカードの下に出る絵文字が<b style="color:#eafff4">その製品を作れる唯一の組み合わせ</b>。
            同じ組み合わせから複数の製品が出ることはあるので、上位レア度は何度も試して狙う。
            1製品 = マス数 × ${WP_PER_SLOT}WP。レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。`}</div>`;
