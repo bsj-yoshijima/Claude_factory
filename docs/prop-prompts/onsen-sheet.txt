@@ -1,0 +1,90 @@
+# 添付する殻: docs/prop-shell-sheet7-1579x1161.png
+# 出力サイズ: 1579x1161
+# 部屋の画像は添付しない(添えるとカメラが崩れる。--room で付けられるが非推奨)
+
+REPAINT THIS EXACT SHEET. The image you are editing is a master shell for SEVEN objects.
+Each object sits inside its own CYAN RECTANGLE. Paint your theme directly on top of it, like
+colouring in a line drawing.
+
+THE DRAWINGS IN THE SHELL ARE PLACEHOLDERS, NOT THE FINAL DESIGN. They show you the size and
+the posture. You may change the design to suit the theme: a stool instead of a backed chair,
+a paper lantern instead of a shaded lamp, a chest of drawers instead of open shelves.
+What you may NOT change is the FOOTPRINT: how much floor the object covers. If the footprint
+grows, the object will not fit its tile on the game board.
+Output 1579x1161.
+
+THE CYAN RECTANGLES ARE THE FRAME OF THE JOB. There are seven of them and they never move.
+- Repaint the object INSIDE each rectangle. One object per rectangle. Never move an object to
+  another rectangle, never swap two of them, never leave one empty, never add an eighth.
+- NOTHING crosses a cyan line. If a design does not fit, make it smaller, not wider.
+- Each object STANDS ON THE BOTTOM EDGE of its own rectangle: its lowest point touches that
+  line. It is CENTRED left to right in its rectangle.
+- DO NOT REPAINT THE CYAN LINES. Leave them exactly the cyan they already are (#00E5FF).
+  They are registration marks that a script uses to cut the sheet apart, and it finds them by
+  that exact colour. Never use that cyan anywhere else in the image.
+- The magenta OUTSIDE the rectangles stays completely empty.
+- Inside each rectangle there is a cyan DIAMOND on the floor. THAT DIAMOND IS THE RULE:
+  the object stands on it and its footprint matches it. Not wider, not deeper. The object may
+  cover part of it, that is fine, but its feet must land on that diamond and nowhere else.
+  It is the same registration cyan: do not repaint it, do not shade it, do not extend it.
+
+THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW. This applies to all seven objects.
+These are game objects seen from the same overhead isometric camera as the room they will
+stand in. They are NOT catalogue illustrations, NOT product shots, NOT side views, NOT
+elevations.
+- True 2:1 isometric: every horizontal edge on the ground travels 2 pixels across for exactly
+  1 pixel down.
+- Exactly TWO vertical faces of any box are visible: one facing lower-left, one facing
+  lower-right. Never one flat face facing the viewer.
+
+YOU MUST SEE THE TOP FACES. For each object, these faces are visible:
+1 a CHAIR: the top of the seat, the top of every leg, the top of the backrest.
+2 a SHELF: the top of the cabinet, the top edge of every shelf board.
+3 a FLOOR LAMP: the top of the base, the top of the shade.
+4 a POTTED PLANT: the rim of the pot, the top of the foliage.
+5 a low TABLE: the top of the table, the top of every leg.
+6 a two seat SOFA: the top of the seat cushions, the top of the backrest, the top of both armrests.
+7 a flat RUG: the whole rug is the floor plane itself, seen from above.
+If any face of any object is parallel to the image plane, that drawing is wrong.
+
+THE SEVEN OBJECTS, in the order they appear on the sheet:
+top row, left to right:     a CHAIR, a SHELF, a FLOOR LAMP, a POTTED PLANT
+bottom row, left to right:  a low TABLE, a two seat SOFA, a flat RUG
+
+1 one CHAIR for one person. The shell shows four legs, a seat plate,
+and a backrest on the far side. A theme may shape it differently (a stool, a bench, a zaisu)
+as long as it still reads as one seat and its feet stay on the diamond.
+2 a free standing SHELF or cabinet. The shell shows a shallow upright box with
+TWO dark openings on its front face. Those dark zones mark WHERE the openings go. ONLY THE
+SHAPE IS YOURS: open shelves, sliding doors, niches, whatever the theme would use. Keep them
+dark and mostly empty. The box stays shallow: its footprint is the diamond, not deeper.
+3 a FLOOR LAMP. The shell shows a small base, a thin upright stem and a shade on
+top. A theme may shape it differently (a paper lantern, a candle stand, a torch) as long as
+the base stays on the diamond and the light is at the top. The light may glow, but paint the glow ON the shade, never as a haze
+out in the magenta.
+4 a POTTED PLANT. The shell shows a pot, a short stem and a mass of foliage above
+it. The pot sits on the diamond and the foliage may overhang it. Keep the pot clearly visible
+below the foliage.
+5 a low TABLE, twice as long as it is deep, with four legs and a top plate. The
+long axis runs down-and-left, and the four feet stay on the diamond. It is LOW, about half
+the height of a chair. Do not turn it into a desk or a counter.
+6 a two seat SOFA. The shell shows a seat, a backrest running along the LONG
+side, and an armrest at each END of the long axis. A theme may shape it differently, but it seats two, the
+backrest is lower than a chair's, and the feet stay on the diamond.
+7 a flat RUG lying on the floor. It has NO height and NO thickness: it is
+the floor plane itself, seen at the same isometric angle. Paint the weave, the border and the pattern. NO
+fringe lifting off the ground, NO folds, NO objects on top of it.
+
+BACKGROUND: solid pure MAGENTA (#FF00FF) everywhere around every object, exactly as in the
+sheet. The magenta is cut away later, so nothing may touch it except the objects themselves.
+NO floor, NO ground plane, NO cast shadow, NO border, NO frame of your own, NO grid, NO text.
+
+STYLE: VERY chunky lo-fi 8-bit Famicom pixel art, extreme high contrast, thick clean black
+outlines, flat colors, no gradients, no anti-aliasing. Each one is shown about 50 pixels tall
+in the game, so keep them BOLD: few large shapes, strong silhouette. No fine filigree, no thin
+hatching.
+
+THEME: a Japanese hot spring bath house. All seven are one matching set, same workshop, same hand.
+Materials: wet stone, hinoki cypress, indigo dyed cloth, bamboo.
+Palette: wet charcoal stone, pale hinoki cream, deep indigo, autumn maple red and orange, soft steam white.
+Keep the theme in the MATERIAL and the ORNAMENT, not in the shape.

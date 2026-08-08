@@ -1129,15 +1129,31 @@ IMPORTANT: no characters, no people, no floor objects, no text, no UI.
 発注するのは**1マス分のモジュール1枚だけ**で、`tools/assets/cut_machines.py` が
 それを並べて 2〜5マス機を作る。
 
-| | 部屋背景 | 製造機 |
-|---|---|---|
-| 型を作る | `tools/assets/make_room_shell.py` | `tools/assets/make_machine_shell.py` |
-| Stitch に渡す殻 | `docs/room-shell-1376x768.png` | `docs/mach-shell-1024.png` |
-| 検収下絵（渡さない） | `docs/room-guide-1376x768.png` | `docs/mach-guide-1024.png` |
-| 1台目（ゴールデン） | `docs/room-golden-1376x768.png`（pirate） | `docs/mach-golden-1024.png`（pirate） |
-| 検収 | `tools/preview/guide.html` に重ねる | `tools/assets/check_machine_module.py` |
-| 一覧で見る | `tools/preview/rooms.html` | `tools/preview/machines.html` |
-| 背景 | 暗い void | マゼンタ #FF00FF（切り抜き前提） |
+## 1-D. 装飾品も同じ方式（シアンの枠で仕切った7種シート1枚）
+
+装飾品スプライトも「殻を塗り替える」方式。詳細は `docs/prop-sprite-prompt.md`、
+発注文そのものは `docs/prop-prompts/`（31テーマぶん生成済み）。
+
+部屋・製造機と違うのは2点。**セルをシアンの枠で仕切る**ことと、**殻の形はプレースホルダ**
+であること。枠は焼き込みが「どこがどのセルか」を機械的に知るための目印で、生成物は殻と同じ
+寸法では返らないため、殻の座標から推測すると別の物を切り出す（実際に失敗した）。
+形は自由でよく、**足元の大きさ（接地菱形）だけが絶対**。ここが広がると盤面のマスに収まらない。
+
+全テーマ共通で作るのは chair / shelf / lamp / plant（1×1）と table / sofa / rug（1×2）の7種で、
+1テーマ1枚。名物・一点物は物ごとに特徴も大きさも違うので、カスタムの殻で1体ずつ発注する。
+
+| | 部屋背景 | 製造機 | 装飾品 |
+|---|---|---|---|
+| 型を作る | `tools/preview/guide.html` | `tools/assets/make_machine_shell.py` | `tools/preview/props.html` の「🧱 殻」 |
+| Stitch に渡す殻 | `docs/room-shell-1376x768.png` | `docs/mach-shell-1024.png` | `docs/prop-shell-sheet7-1579x1161.png` ほか |
+| 発注文 | 同ファイル内 | `docs/machine-sprite-prompt.md` | `docs/prop-prompts/<theme>-sheet.txt` |
+| 検収 | `tools/preview/guide.html` に重ねる | `tools/assets/check_machine_module.py` | `tools/preview/props.html` ＋ 焼き込みの `_contact-*.png` |
+| 焼き込み | なし（そのまま使う） | `tools/assets/cut_machines.py` | `tools/assets/cut_prop_sheet.mjs` |
+| 発注回数 | 1テーマ1枚 | 1テーマ1枚 | 1テーマ1枚（共通7種）＋ 名物を随時 |
+| 背景 | 暗い void | マゼンタ #FF00FF | マゼンタ #FF00FF ＋ 目印のシアン #00E5FF |
+
+> 部屋の絵をテーマの参照として2枚目に添えるのは**やらない**。カメラが崩れ、枠が塗りつぶしに
+> 化けて大きさが 20% ぶれた（実測）。経緯と再挑戦用の文面は `docs/prop-sprite-prompt.md`。
 
 型の絵だけでは幾何が崩れるテーマがある（実測で 30枚中3枚）。その場合は殻ではなく
 **合格済みモジュールを土台にして再スキン**すると通る。部屋の「2部屋目以降はゴールデン
@@ -1145,7 +1161,13 @@ IMPORTANT: no characters, no people, no floor objects, no text, no UI.
 
 ---
 
-## 2. オブジェクト(小物)テンプレート（prop_<key>_*.png）
+## 2. オブジェクト(小物)テンプレート（prop_<key>_*.png）★旧方式
+
+> **現行は `docs/prop-sprite-prompt.md`（上の 1-D）。** この節はシート方式の記録として残す。
+> シートで発注すると1枚の中での相対サイズしか揃わず、**マスに対する大きさと接地位置が決まらない**。
+> 既存290体がこの方式で、生成後に「高さだけ揃える」後処理をかけた結果、
+> 焼いた画像の高さは 42/60/84px の3種・幅は 14〜116px と成り行きになり、
+> 盤面での大きさが 0.2〜1.5倍にばらついた。
 
 1テーマにつき **4種** をまとめて1枚のシートで出す → マゼンタ抜き → 個別スライス。
 `{{THEME}}` と `{{FOUR_ITEMS}}` を差し替える。

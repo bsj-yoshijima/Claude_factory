@@ -1,0 +1,239 @@
+#!/usr/bin/env node
+/* 生成された装飾品シートを、絵に残ったシアンの枠を基準に1体ずつ切り出して焼き込む。
+
+     node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR]
+
+   例: node tools/assets/cut_prop_sheet.mjs ~/Downloads/jpn.png docs/prop-shell-sheet7-1579x1161.json jpn
+
+なぜ枠を基準にするか:
+  生成物は殻と同じ寸法では返らず（1579x1161 で頼んでも別サイズで返る）、並びも少し動く。
+  殻の座標を拡縮して当てにいくと**別の物を切り出す**（ソファの位置から机が出た）。
+  枠は絵に残るので、それを見つければ推測が要らない。
+    枠の幅   → 1マスの大きさ
+    枠の下辺 → 接地線
+    枠の中心 → 横の中心
+  枠の内側の菱形も同じシアンなので、シアンを落とせば枠ごと一緒に消える。
+
+出力:
+  <out>/prop_<prefix>_<slot>.png      … 実寸の透過PNG
+  <out>/prop-fit-<prefix>.json        … { "<prefix>_<slot>": {cx, by, px} } 接地点(画像に対する比)
+  <out>/_contact-<prefix>.png         … 切り出した全体を並べた検収用の1枚
+                                        （数値だけで判断して中身が別物だった失敗があるので必ず目で見る）
+*/
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+/* スロットが床のいくつ分を占めるか。殻がこの形で描かれているので、焼き込みも同じ形で記録し、
+   ゲーム側はコマ数の表(catalog.mjs の FURN_SPAN)ではなくこの値を使う。
+   表の方は旧290体むけの値で、たとえば lamp は 2コマ(1×2)になっている。新しい絵は 1×1 で
+   描いてあるので、表に従うと 1×2 ブロックの中心へ置かれて半マスずれる。 */
+const SHAPE = { chair:[1,1], shelf:[1,1], lamp:[1,1], plant:[1,1],
+                table:[1,2], sofa:[1,2], rug:[1,2] };
+/* 枠・菱形(シアン)と背景(マゼンタ)の判定。
+   厳しめ(isMark/isMag)は「どこに枠があるか」を探すため。
+   落とすときは緩め(killMark/killMag)を使う。線の縁にはマゼンタとシアンの中間色が
+   1〜2px出ていて、厳しい判定だとそれが物として残り、切り抜きの縁にシアンのノイズになる。
+   この2色は「絵に使うな」とプロンプトで禁じてあるので、緩く落として構わない。 */
+const isMark = (c)=> c[1]>110 && c[2]>140 && c[1]-c[0]>55 && c[2]-c[0]>55;
+const isMag  = (c)=> c[0]>170 && c[1]<110 && c[2]>170 && c[0]-c[1]>60 && c[2]-c[1]>60;
+const killMark=(c)=> c[2]>90 && c[1]-c[0]>18 && c[2]-c[0]>18;              // 青緑に寄った画素
+const killMag =(c)=> c[0]>120 && c[2]>120 && c[0]-c[1]>45 && c[2]-c[1]>45; // 赤紫に寄った画素
+const isBg = (c)=> killMark(c) || killMag(c);
+
+function readPNG(file){
+  const b = fs.readFileSync(file);
+  let off=8,w=0,h=0,bd=0,ct=0; const idat=[];
+  while(off<b.length){
+    const len=b.readUInt32BE(off), type=b.toString('ascii',off+4,off+8);
+    const d=b.subarray(off+8,off+8+len);
+    if(type==='IHDR'){w=d.readUInt32BE(0);h=d.readUInt32BE(4);bd=d[8];ct=d[9];}
+    else if(type==='IDAT') idat.push(d); else if(type==='IEND') break;
+    off+=12+len;
+  }
+  if(bd!==8||(ct!==6&&ct!==2)) throw new Error(`未対応のPNG bd=${bd} ct=${ct}`);
+  const ch=ct===6?4:3, raw=zlib.inflateSync(Buffer.concat(idat));
+  const stride=w*ch, out=Buffer.alloc(h*stride); let p=0;
+  for(let y=0;y<h;y++){
+    const ft=raw[p++]; const line=raw.subarray(p,p+stride); p+=stride;
+    const cur=out.subarray(y*stride,(y+1)*stride), prev=y?out.subarray((y-1)*stride,y*stride):null;
+    for(let i=0;i<stride;i++){
+      const a=i>=ch?cur[i-ch]:0, up=prev?prev[i]:0, ul=(prev&&i>=ch)?prev[i-ch]:0;
+      let v=line[i];
+      if(ft===1)v+=a; else if(ft===2)v+=up; else if(ft===3)v+=(a+up)>>1;
+      else if(ft===4){const pa=Math.abs(up-ul),pb=Math.abs(a-ul),pc=Math.abs(a+up-2*ul);
+        v+=(pa<=pb&&pa<=pc)?a:(pb<=pc?up:ul);}
+      cur[i]=v&255;
+    }
+  }
+  return {w,h,ch,px:out};
+}
+const CRC=(()=>{const t=[...Array(256)].map((_,n)=>{let c=n;for(let k=0;k<8;k++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0;});
+  return (buf)=>{let c=0xffffffff;for(const b of buf)c=t[(c^b)&255]^(c>>>8);return (c^0xffffffff)>>>0;};})();
+function writePNG(file,w,h,rgba){
+  const raw=Buffer.alloc(h*(w*4+1));
+  for(let y=0;y<h;y++){ raw[y*(w*4+1)]=0; rgba.copy(raw,y*(w*4+1)+1,y*w*4,(y+1)*w*4); }
+  const chunk=(type,data)=>{const len=Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td=Buffer.concat([Buffer.from(type,'ascii'),data]);
+    const cr=Buffer.alloc(4); cr.writeUInt32BE(CRC(td)); return Buffer.concat([len,td,cr]);};
+  const ihdr=Buffer.alloc(13); ihdr.writeUInt32BE(w,0); ihdr.writeUInt32BE(h,4); ihdr[8]=8; ihdr[9]=6;
+  fs.writeFileSync(file, Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),
+    chunk('IHDR',ihdr), chunk('IDAT',zlib.deflateSync(raw,{level:9})), chunk('IEND',Buffer.alloc(0))]));
+}
+
+const args = process.argv.slice(2);
+const [sheetFile, cellsFile, prefix] = args;
+if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR]'); process.exit(1); }
+const oi = args.indexOf('--out');
+const outDir = oi>=0 ? args[oi+1] : path.join(ROOT,'assets','props');
+fs.mkdirSync(outDir, { recursive:true });
+
+const sh = readPNG(sheetFile);
+const spec = JSON.parse(fs.readFileSync(cellsFile,'utf8'));
+const get=(x,y)=>{const i=(y*sh.w+x)*sh.ch; return [sh.px[i],sh.px[i+1],sh.px[i+2]];};
+
+/* シアンの連結成分を拾う。枠と菱形の見分けは次のブロックでやる */
+const seen=new Uint8Array(sh.w*sh.h), comps=[];
+for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++){
+  const k=y*sh.w+x; if(seen[k]) continue;
+  if(!isMark(get(x,y))){ seen[k]=1; continue; }
+  const q=[k]; seen[k]=1; let n=0,x0=x,x1=x,y0=y,y1=y;
+  while(q.length){
+    const c=q.pop(), cy=(c/sh.w)|0, cx=c%sh.w; n++;
+    if(cx<x0)x0=cx; if(cx>x1)x1=cx; if(cy<y0)y0=cy; if(cy>y1)y1=cy;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=cx+dx, ny=cy+dy;
+      if(nx<0||ny<0||nx>=sh.w||ny>=sh.h) continue;
+      const nk=ny*sh.w+nx; if(seen[nk]) continue;
+      seen[nk]=1; if(isMark(get(nx,ny))) q.push(nk);
+    }
+  }
+  const bw=x1-x0+1, bh=y1-y0+1;
+  if(bw<40||bh<40) continue;
+  comps.push({n,x0,x1,y0,y1,bw,bh, fill:n/(bw*bh)});
+}
+/* 枠と菱形の見分け方。「輪郭は占有率が低い」では駄目だった: 菱形が物に隠れて欠けると
+   占有率が下がり、枠と区別できなくなる（実測で枠が6個のはずが9個になった）。
+   確実なのは包含関係。菱形は必ずどれかの枠の内側にあるので、
+   「他のかたまりの外接矩形に収まっているものは枠ではない」で落とせる。 */
+const big = comps.slice().sort((a,b)=>(b.bw*b.bh)-(a.bw*a.bh));
+const frames = [];
+for(const c of big){
+  const inside = frames.some(f => c.x0>=f.x0-2 && c.x1<=f.x1+2 && c.y0>=f.y0-2 && c.y1<=f.y1+2);
+  if(!inside) frames.push(c);
+}
+frames.sort((a,b)=>
+  (a.y1 > b.y1 + a.bh*0.5 ? 1 : b.y1 > a.y1 + b.bh*0.5 ? -1 : a.x0 - b.x0));
+const names = spec.cells.map(c=>c.k);
+console.log(`シアンの塊 ${comps.length}個 → 枠 ${frames.length}個 (期待 ${names.length})`);
+if(frames.length !== names.length) console.log('⚠ 枠の数が合いません。生成をやり直すか、枠が塗り替えられていないか確認してください');
+
+const fit={}, rows=[], crops=[];
+for(const [i,fr] of frames.entries()){
+  const slot = names[i] || `cell${i}`;
+  const cell = spec.cells[i];
+  const gameW = cell ? cell.w/spec.scale : 64;          // その枠がゲーム内で何pxになるか
+  const s = gameW / fr.bw;                              // 枠の幅を合わせる倍率
+
+  /* 枠の内側だけを見る。線の太さぶん内へ寄せる */
+  const lw = Math.max(2, Math.round(fr.bw*0.06));
+  const ix0=fr.x0+lw, ix1=fr.x1-lw, iy0=fr.y0+lw, iy1=fr.y1-lw;
+  let x0=ix1, x1=ix0, y0=iy1, y1=iy0, any=false;
+  for(let y=iy0;y<=iy1;y++) for(let x=ix0;x<=ix1;x++){
+    const c=get(x,y); if(isBg(c)) continue;
+    any=true; if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+  }
+  if(!any){ console.log(`  ${slot}: 中身が空 → スキップ`); continue; }
+  const bw=x1-x0+1, bh=y1-y0+1;
+  const ow=Math.max(1,Math.round(bw*s)), oh=Math.max(1,Math.round(bh*s));
+  const out=Buffer.alloc(ow*oh*4);
+  for(let oy=0;oy<oh;oy++) for(let ox=0;ox<ow;ox++){
+    let r=0,g=0,b=0,a=0,tot=0;
+    for(let y=Math.floor(y0+oy/s); y<Math.min(y1+1, Math.ceil(y0+(oy+1)/s)); y++)
+      for(let x=Math.floor(x0+ox/s); x<Math.min(x1+1, Math.ceil(x0+(ox+1)/s)); x++){
+        const c=get(x,y); tot++;
+        if(isBg(c)) continue;
+        r+=c[0]; g+=c[1]; b+=c[2]; a++;
+      }
+    const o=(oy*ow+ox)*4;
+    if(!a || a/tot < 0.5){ out[o+3]=0; continue; }
+    out[o]=Math.round(r/a); out[o+1]=Math.round(g/a); out[o+2]=Math.round(b/a); out[o+3]=255;
+  }
+  /* 仕上げに孤立した数pxの点を落とす。枠線の縁の中間色が縮小で1画素だけ生き残ることがある
+     （実測: 椅子の右端に1px）。本体から離れた3px以下の塊は、この大きさでは意味を持たない。 */
+  let specks=0;
+  {
+    const seen=new Uint8Array(ow*oh), lumps=[];
+    for(let y=0;y<oh;y++) for(let x=0;x<ow;x++){
+      const k=y*ow+x; if(seen[k]) continue;
+      if(out[k*4+3]<128){ seen[k]=1; continue; }
+      const q=[k]; seen[k]=1; const px=[];
+      while(q.length){
+        const c=q.pop(), cy=(c/ow)|0, cx=c%ow; px.push(c);
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]){
+          const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=ow||ny>=oh) continue;
+          const nk=ny*ow+nx; if(seen[nk]) continue;
+          seen[nk]=1; if(out[nk*4+3]>=128) q.push(nk);
+        }
+      }
+      lumps.push(px);
+    }
+    for(const px of lumps){
+      if(px.length > 3) continue;
+      for(const k of px) out[k*4+3]=0;
+      specks += px.length;
+    }
+  }
+  writePNG(path.join(outDir, `prop_${prefix}_${slot}.png`), ow, oh, out);
+  crops.push({slot, ow, oh, out});
+
+  const r4=(v)=>Math.round(v*10000)/10000;
+  /* 接地線は枠の下辺そのものではない。殻はキャンバスを線幅ぶん広げてあるので、
+     菱形の手前角は下辺より少し上にある。その比 gy を殻の JSON が持っている。 */
+  const gy = cell && cell.gy ? cell.gy : 1;
+  const cxFrame=(fr.x0+fr.x1+1)/2, byFrame=fr.y0 + fr.bh*gy;   // 枠の中心x / 接地線
+  fit[`${prefix}_${slot}`] = { cx:r4((cxFrame-x0)*s/ow), by:r4((byFrame-y0)*s/oh),
+    px:[ow,oh], shape:SHAPE[slot] || [1,1] };
+  /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
+     捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
+  /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と
+     数えて全件が「切れている」になるので、判定を緩めたうえで線から数px離す。 */
+  let spill=0;
+  const dead=Math.max(4, Math.round(lw*0.8)), band=dead+Math.max(6, lw*2);
+  for(let y=Math.max(0,fr.y0-band); y<=Math.min(sh.h-1,fr.y1+band); y++)
+    for(let x=Math.max(0,fr.x0-band); x<=Math.min(sh.w-1,fr.x1+band); x++){
+      if(x>=fr.x0-dead && x<=fr.x1+dead && y>=fr.y0-dead && y<=fr.y1+dead) continue;
+      // 隣の枠の中は数えない。枠が太い(セルが塗りつぶしになった)ときに帯が隣のセルへ
+      // 届いて、隣の物を「はみ出し」と誤検知した
+      if(frames.some(o=>o!==fr && x>=o.x0 && x<=o.x1 && y>=o.y0 && y<=o.y1)) continue;
+      const c=get(x,y); if(!isBg(c)) spill++;
+    }
+  /* 枠に対する物の入り方。1.00 を超えていたら線を越えている */
+  const wOver=bw/(fr.bw-2*lw), below=(y1-(byFrame-1))*s;
+  rows.push(`  ${(prefix+'_'+slot).padEnd(12)} ${String(ow).padStart(3)}x${String(oh).padStart(3)}px`
+    + `  枠に対する幅 ${wOver.toFixed(2)}` + (wOver>1 ? ' ⚠はみ出し' : '')
+    + `  枠外へ捨てた画素 ${spill>50 ? spill+' ⚠切れている' : spill}`
+    + (specks ? `  孤立点 ${specks}px を除去` : ''));
+}
+fs.writeFileSync(path.join(outDir, `prop-fit-${prefix}.json`), JSON.stringify(fit,null,0)+'\n');
+
+/* 検収用のコンタクトシート。数値だけで判断しないための一枚 */
+if(crops.length){
+  const pad=6, H=Math.max(...crops.map(c=>c.oh))+pad*2;
+  const W=crops.reduce((a,c)=>a+c.ow+pad,pad);
+  const cs=Buffer.alloc(W*H*4);
+  let cx=pad;
+  for(const c of crops){
+    const top=H-pad-c.oh;
+    for(let y=0;y<c.oh;y++) for(let x=0;x<c.ow;x++){
+      const s4=(y*c.ow+x)*4, d4=((top+y)*W+(cx+x))*4;
+      cs[d4]=c.out[s4]; cs[d4+1]=c.out[s4+1]; cs[d4+2]=c.out[s4+2]; cs[d4+3]=c.out[s4+3];
+    }
+    cx += c.ow+pad;
+  }
+  writePNG(path.join(outDir, `_contact-${prefix}.png`), W, H, cs);
+}
+console.log(rows.join('\n'));
+console.log(`${crops.length}体 → ${path.relative(ROOT,outDir)}  検収は _contact-${prefix}.png を見ること`);
