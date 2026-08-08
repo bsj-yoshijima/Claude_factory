@@ -65,7 +65,7 @@ node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/prop-shell-custom-1x2-
 ```
 for t in $(node tools/assets/prop_prompt.mjs --list | awk '{print $2}'); do
   node tools/assets/prop_prompt.mjs $t --sheet      --out docs/prop-prompts
-  node tools/assets/prop_prompt.mjs $t --sheet --room --out docs/prop-prompts   # -room 版は手で改名
+  node tools/assets/prop_prompt.mjs $t --sheet --room --out docs/prop-prompts
   for s in 1x1 1x2 2x2; do
     node tools/assets/prop_prompt.mjs $t --custom $s --out docs/prop-prompts
   done
@@ -73,3 +73,7 @@ done
 ```
 
 殻の画像そのものは `tools/preview/props.html` の「🧱 殻」から作る（Python は要らない）。
+
+**新しい殻を作るときは縦横比に注意。** 生成側が返すキャンバスは決まった比のものしかなく
+（1376x768 / 1200x896 / 1024x1024 / 896x1200）、外れた比で頼むと近い比へ丸めて描き直され、
+そのぶん割り付けが変わる。2×2 の殻がこれで1割潰れた（→ `docs/prop-sprite-prompt.md`）。

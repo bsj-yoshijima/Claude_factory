@@ -17,8 +17,11 @@ THE CYAN RECTANGLES ARE THE FRAME OF THE JOB. There are seven of them and they n
 - Repaint the object INSIDE each rectangle. One object per rectangle. Never move an object to
   another rectangle, never swap two of them, never leave one empty, never add an eighth.
 - NOTHING crosses a cyan line. If a design does not fit, make it smaller, not wider.
-- Each object STANDS ON THE BOTTOM EDGE of its own rectangle: its lowest point touches that
+- Each object STANDS ON THE BOTTOM EDGE of its own rectangle: its lowest point TOUCHES that
   line. It is CENTRED left to right in its rectangle.
+- DO NOT CENTRE AN OBJECT VERTICALLY and DO NOT FLOAT IT. There must be NO magenta gap between
+  the lowest point of an object and the bottom line of its rectangle. Empty space belongs
+  ABOVE the object, never below it.
 - DO NOT REPAINT THE CYAN LINES. Leave them exactly the cyan they already are (#00E5FF).
   They are registration marks that a script uses to cut the sheet apart, and it finds them by
   that exact colour. Never use that cyan anywhere else in the image.
@@ -27,6 +30,9 @@ THE CYAN RECTANGLES ARE THE FRAME OF THE JOB. There are seven of them and they n
   the object stands on it and its footprint matches it. Not wider, not deeper. The object may
   cover part of it, that is fine, but its feet must land on that diamond and nowhere else.
   It is the same registration cyan: do not repaint it, do not shade it, do not extend it.
+  EACH DIAMOND KEEPS ITS EXACT SIZE, SHAPE AND POSITION. Do not enlarge it, do not stretch it,
+  do not redraw it wider than it already is. An object standing at the BACK of its diamond,
+  with floor showing in front of it, is WRONG: it will hover above its tile in the game.
 
 THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW. This applies to all seven objects.
 These are game objects seen from the same overhead isometric camera as the room they will

@@ -20,47 +20,37 @@ import path from 'node:path';
 /* スロット。size は殻の発注サイズ、shell は添付する殻のファイル名。
    top は「必ず見えていなければならない上面」。正面図で描かれると成立しないものを具体名で挙げる。 */
 const SLOTS = {
-  chair: { size:'512x703', shell:'prop-shell-chair-512x703.png',
-    top:'the top of the seat, the top of every leg, the top of the backrest',
+  chair: { top:'the top of the seat, the top of every leg, the top of the backrest',
     what:`WHAT THIS IS: one CHAIR for one person. The shell shows four legs, a seat plate,
 and a backrest on the far side. A theme may shape it differently (a stool, a bench, a zaisu)
 as long as it still reads as one seat and its feet stay on the diamond.` },
-  shelf: { size:'512x729', shell:'prop-shell-shelf-512x729.png',
-    top:'the top of the cabinet, the top edge of every shelf board',
+  shelf: { top:'the top of the cabinet, the top edge of every shelf board',
     what:`WHAT THIS IS: a free standing SHELF or cabinet. The shell shows a shallow upright box with
 TWO dark openings on its front face. Those dark zones mark WHERE the openings go. ONLY THE
 SHAPE IS YOURS: open shelves, sliding doors, niches, whatever the theme would use. Keep them
 dark and mostly empty. The box stays shallow: its footprint is the diamond, not deeper.` },
-  lamp: { size:'512x988', shell:'prop-shell-lamp-512x988.png',
-    top:'the top of the base, the top of the shade',
+  lamp: { top:'the top of the base, the top of the shade',
     what:`WHAT THIS IS: a FLOOR LAMP. The shell shows a small base, a thin upright stem and a shade on
 top. A theme may shape it differently (a paper lantern, a candle stand, a torch) as long as
 the base stays on the diamond and the light is at the top. The light may glow, but paint the glow ON the shade, never as a haze
 out in the magenta.` },
-  plant: { size:'512x806', shell:'prop-shell-plant-512x806.png',
-    top:'the rim of the pot, the top of the foliage',
+  plant: { top:'the rim of the pot, the top of the foliage',
     what:`WHAT THIS IS: a POTTED PLANT. The shell shows a pot, a short stem and a mass of foliage above
 it. The pot sits on the diamond and the foliage may overhang it. Keep the pot clearly visible
 below the foliage.` },
-  table: { size:'768x572', shell:'prop-shell-table-768x572.png',
-    top:'the top of the table, the top of every leg',
+  table: { top:'the top of the table, the top of every leg',
     what:`WHAT THIS IS: a low TABLE, twice as long as it is deep, with four legs and a top plate. The
 long axis runs down-and-left, and the four feet stay on the diamond. It is LOW, about half
 the height of a chair. Do not turn it into a desk or a counter.` },
-  sofa: { size:'768x752', shell:'prop-shell-sofa-768x752.png',
-    top:'the top of the seat cushions, the top of the backrest, the top of both armrests',
+  sofa: { top:'the top of the seat cushions, the top of the backrest, the top of both armrests',
     what:`WHAT THIS IS: a two seat SOFA. The shell shows a seat, a backrest running along the LONG
 side, and an armrest at each END of the long axis. A theme may shape it differently, but it seats two, the
 backrest is lower than a chair's, and the feet stay on the diamond.` },
-  rug: { size:'768x407', shell:'prop-shell-rug-768x407.png',
-    top:'the whole rug is the floor plane itself, seen from above',
+  rug: { top:'the whole rug is the floor plane itself, seen from above',
     what:`WHAT THIS IS: a flat RUG lying on the floor. It has NO height and NO thickness: it is
 the floor plane itself, seen at the same isometric angle. Paint the weave, the border and the pattern. NO
 fringe lifting off the ground, NO folds, NO objects on top of it.` },
   // 名物は形が決まらないので枠と接地面だけの殻を使う。幅の要る物は 1x2 を選ぶ
-  landmark: { size:'768x937', shell:'prop-shell-free-1x2-768x937.png',
-    top:'the top of its base and the top of its tallest part',
-    what:null },   // テーマごとに組み立てる
 };
 
 /* テーマ。palette は部屋のプロンプトと同値（色が食い違わないようにする）。
@@ -161,46 +151,9 @@ const THEMES = {
     pal:'deep pine green, warm red, cream, honey timber, gold, snow white.'},
 };
 
-const build = (themeKey, slotKey) => {
-  const t = THEMES[themeKey], s = SLOTS[slotKey];
-  if(!t) throw new Error(`未知のテーマ: ${themeKey}`);
-  if(!s) throw new Error(`未知のスロット: ${slotKey}`);
-  const what = s.what || `WHAT THIS IS: ${t.landmark}, the signature object of this theme. The shell gives you only the
-floor tile and the empty space above it, so the shape is yours, but it must stand on that
-diamond and obey every geometry rule above.`;
-  return `REPAINT THIS EXACT SHELL. The image you are editing is a master shell showing ONE object
-standing on ONE floor tile. Paint your theme directly on top of it, like colouring in a line
-drawing. The shell is the single source of truth for the shape, the height, the footprint and
-the camera. NONE of them move. Output ${s.size}.
-
-THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW.
-This is a game object seen from the same overhead isometric camera as the room it will stand
-in. It is NOT a catalogue illustration, NOT a product shot, NOT a side view, NOT an elevation.
-- True 2:1 isometric: every horizontal edge on the ground travels 2 pixels across for exactly
-  1 pixel down. Measure it against the pale diamond in the shell.
-- You MUST SEE THE TOP FACES: ${s.top}. If a face of the object is parallel to the image
-  plane, the drawing is wrong.
-- Exactly TWO vertical faces of any box are visible: one facing lower-left, one facing
-  lower-right. Never one flat face facing the viewer.
-- The pale diamond is the floor tile. The LOWEST point of the object sits on its FRONT corner.
-  Nothing crosses the left or right corners of that diamond.
-
-${what}
-
-BACKGROUND: solid pure MAGENTA (#FF00FF) everywhere around the object, exactly as in the
-shell. The magenta is cut away later, so nothing may touch it except the object itself.
-NO floor, NO ground plane, NO cast shadow, NO border, NO frame, NO grid lines, NO text.
-
-STYLE: VERY chunky lo-fi 8-bit Famicom pixel art, extreme high contrast, thick clean black
-outlines, flat colors, no gradients, no anti-aliasing. It is shown about 50 pixels tall in the
-game, so keep it BOLD: few large shapes, strong silhouette. No fine filigree, no thin hatching.
-
-THEME: ${t.name}.
-Materials: ${t.mat}.
-Palette: ${t.pal}
-Keep the theme in the MATERIAL and the ORNAMENT, not in the shape.
-`;
-};
+/* 単体スロット版(chair だけ・sofa だけ…)は廃止した。専用の殻を8枚保守する必要があり、
+   7点シートに統合した時点で殻ごと消したため、参照先が無い prompt を吐いていた。
+   いま作れるのは --sheet(共通7種) と --custom(名物1体) の2つ。 */
 
 /* シート版。8体を1枚に並べた殻(docs/prop-shell-sheet7-1519x1127.png)に対して発注する。
    1体版と同じ強さのカメラ規則を、8体すべてに効かせるのが要点。 */
@@ -236,8 +189,11 @@ THE CYAN RECTANGLES ARE THE FRAME OF THE JOB. There are seven of them and they n
 - Repaint the object INSIDE each rectangle. One object per rectangle. Never move an object to
   another rectangle, never swap two of them, never leave one empty, never add an eighth.
 - NOTHING crosses a cyan line. If a design does not fit, make it smaller, not wider.
-- Each object STANDS ON THE BOTTOM EDGE of its own rectangle: its lowest point touches that
+- Each object STANDS ON THE BOTTOM EDGE of its own rectangle: its lowest point TOUCHES that
   line. It is CENTRED left to right in its rectangle.
+- DO NOT CENTRE AN OBJECT VERTICALLY and DO NOT FLOAT IT. There must be NO magenta gap between
+  the lowest point of an object and the bottom line of its rectangle. Empty space belongs
+  ABOVE the object, never below it.
 - DO NOT REPAINT THE CYAN LINES. Leave them exactly the cyan they already are (#00E5FF).
   They are registration marks that a script uses to cut the sheet apart, and it finds them by
   that exact colour. Never use that cyan anywhere else in the image.
@@ -246,6 +202,9 @@ THE CYAN RECTANGLES ARE THE FRAME OF THE JOB. There are seven of them and they n
   the object stands on it and its footprint matches it. Not wider, not deeper. The object may
   cover part of it, that is fine, but its feet must land on that diamond and nowhere else.
   It is the same registration cyan: do not repaint it, do not shade it, do not extend it.
+  EACH DIAMOND KEEPS ITS EXACT SIZE, SHAPE AND POSITION. Do not enlarge it, do not stretch it,
+  do not redraw it wider than it already is. An object standing at the BACK of its diamond,
+  with floor showing in front of it, is WRONG: it will hover above its tile in the game.
 
 THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW. This applies to all seven objects.
 These are game objects seen from the same overhead isometric camera as the room they will
@@ -416,19 +375,15 @@ REPAINT THE FIRST IMAGE.`);
   const head = noRoom
     ? `# 添付する殻: docs/prop-shell-sheet7-1519x1127.png\n# 出力サイズ: 1519x1127\n# 部屋の画像は添付しない(添えるとカメラが崩れる。--room で付けられるが非推奨)\n\n`
     : `# 添付1枚目(塗り替える殻): docs/prop-shell-sheet7-1519x1127.png\n# 添付2枚目(テーマの参照): assets/rooms/room-${ROOM[theme]||theme}.png\n# 出力サイズ: 1519x1127\n\n`;
-  if(outDir){ const f = path.join(outDir, `${theme}-sheet.txt`); fs.writeFileSync(f, head+text); console.log(f); }
+  /* --room 版は別名で出す。同じ名前に書いていたので、再生成のループを回すと
+     標準版が部屋参照版で上書きされていた(実際に踏んだ)。 */
+  if(outDir){ const f = path.join(outDir, `${theme}-sheet${noRoom?'':'-room'}.txt`); fs.writeFileSync(f, head+text); console.log(f); }
   else console.log(text);
   process.exit(0);
 }
-const slots = (args[1] && !args[1].startsWith('--')) ? [args[1]] : Object.keys(SLOTS);
-for(const k of slots){
-  const text = build(theme, k);
-  if(outDir){
-    const f = path.join(outDir, `${theme}-${k}.txt`);
-    fs.writeFileSync(f, `# 添付する殻: docs/${SLOTS[k].shell}\n# 出力サイズ: ${SLOTS[k].size}\n\n${text}`);
-    console.log(`${f}  (殻 docs/${SLOTS[k].shell})`);
-  } else {
-    console.log(`\n===== ${theme} / ${k}  殻: docs/${SLOTS[k].shell}  出力: ${SLOTS[k].size} =====\n`);
-    console.log(text);
-  }
-}
+console.log(`使い方:
+  node tools/assets/prop_prompt.mjs <theme> --sheet             共通7種を1枚で発注
+  node tools/assets/prop_prompt.mjs <theme> --custom 1x1|1x2|2x2  名物を1体で発注
+  node tools/assets/prop_prompt.mjs --list                      テーマ一覧
+生成済みの本文は docs/prop-prompts/ にある。`);
+process.exit(1);
