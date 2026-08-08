@@ -44,16 +44,26 @@ export const Edit = {
         if(window.__openMachine) window.__openMachine(m.id); return; }
       if(!this.editMode) return; if(over&&over.length) return;
       const sel=window.__editSel; if(!sel) return;
-      const opt=(sel.kind==='machine')?{variant:sel.variant,dir:this.placeDir||'u'}:null;
+      const opt=(sel.kind==='machine'||sel.kind==='prop')?{variant:sel.variant,dir:this.placeDir||'u'}:null;
       if(!this.canPlace(sel.kind,c,r,opt)){ if(window.__toast) window.__toast(
         sel.kind==='machine' ? `そこには置けません（${machSize(sel.variant)}マスぶんの空きが必要）` : 'そこには置けません'); return; }
       this._placedPtr=true; if(window.__editPlaceAt) window.__editPlaceAt(c,r); });
-    // 設置前の向き切替(Rキー)。製造機を選んでいるときだけ効く
+    // 設置前の向き切替(Rキー)。製造機と装飾品に効く
     this.input.keyboard.on('keydown-R',()=>{ if(!this.editMode) return;
       if(this.moveId){   // 移動モード中は掴んでいる製造機そのものを回す
         if(!this.rotateMachine(this.moveId)){ if(window.__toast) window.__toast('回した先に空きがありません'); return; }
         if(window.__layoutChanged) window.__layoutChanged();
         this._drawHover(this.input.activePointer); return; }
+      /* 設置済みの装飾品の上でRを押したらその物を回す。装飾品には設定パネルが無いので、
+         これが回転の入口になる(製造機はパネルの「移動」→R)。 */
+      const po=this.input.activePointer;
+      if(po){ const uv=screenToIso(po.x,po.y);
+        const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
+        const at=this.entryAtCell(c,r);
+        if(at && at.kind==='prop'){
+          if(!this.rotateProp(at.id)){ if(window.__toast) window.__toast('回した先に空きがありません'); return; }
+          if(window.__layoutChanged) window.__layoutChanged();
+          this._drawHover(po); return; } }
       this.placeDir=(this.placeDir==='v')?'u':'v';
       if(window.__toast) window.__toast('向き: '+(this.placeDir==='v'?'↙ 手前方向':'↘ 奥方向')); });
     // 移動のキャンセル(Escキー)
@@ -66,7 +76,16 @@ export const Edit = {
       if(window.__openMachine) window.__openMachine(t.id); });
     // 製造機のドラッグ開始。絵が複数(筐体graphics＋素材の文字など)あるので掴んだ時点の座標を控える
     this.input.on('dragstart',(po,obj)=>{ if(!this.editMode||!obj||!obj._e) return; const e=obj._e;
-      if(e.kind!=='machine'||this.moveId) return;   // 移動モード中はドラッグしない
+      if(this.moveId) return;                       // 移動モード中はドラッグしない
+      if(e.kind!=='machine'){
+        /* 装飾品も掴んだ時点の「絵の原点」と「マスの中心」を控える。
+           落とし先は原点の移動量をマス中心に足して求める。
+           絵の原点から直に逆算してはいけない: 新規格の絵は原点がマス中心ではなく
+           接地菱形の手前角なので、半マス手前のマスに落ちる。 */
+        const p0=cellXY(e.cell.c,e.cell.r);
+        this._pdrag={ id:e.id, ax:obj.x, ay:obj.y, cx:p0.x, cy:p0.y };
+        return;
+      }
       const p=cellXY(e.cell.c,e.cell.r);
       // 起点は「押した位置」。dragstart は最初に動かした時点で飛ぶので po.x を使うとその分ずれる
       const x0=(po.downX!=null)?po.downX:po.x, y0=(po.downY!=null)?po.downY:po.y;
@@ -81,7 +100,15 @@ export const Edit = {
         const uv=screenToIso(d.px+ddx, d.py+ddy);
         d.c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1); d.r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
         this._drawHover(po); return; }
-      obj.x=dx; obj.y=dy; });
+      obj.x=dx; obj.y=dy;
+      // 装飾品も落とし先をプレビューする(複数マスの物は占有ぶん全部光る)
+      const d=this._pdrag;
+      if(d && d.id===e.id){
+        const uv=screenToIso(d.cx+(obj.x-d.ax), d.cy+(obj.y-d.ay));
+        d.c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1);
+        d.r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
+        this._drawHover(po);
+      } });
     this.input.on('dragend',(po,obj)=>{ if(!this.editMode||!obj._e)return; const e=obj._e;
       if(e.kind==='machine'){ const d=this._mdrag; this._mdrag=null;
         if(!d||d.id!==e.id){ this._snapBack(e); return; }
@@ -93,7 +120,10 @@ export const Edit = {
         if(window.__layoutChanged)window.__layoutChanged(); this._drawHover(po); return; }
       if(Phaser.Geom.Rectangle.Contains(this._trashRect,po.x,po.y)){
         this.removeItem(e.id); if(window.__layoutChanged)window.__layoutChanged(); return; }
-      const uv=screenToIso(obj.x,obj.y); let c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
+      // マス中心を「絵の原点が動いたぶん」だけ運んだ点から落とし先を決める(dragstart 参照)
+      const d=this._pdrag; this._pdrag=null;
+      const at=(d&&d.id===e.id) ? {x:d.cx+(obj.x-d.ax), y:d.cy+(obj.y-d.ay)} : {x:obj.x, y:obj.y};
+      const uv=screenToIso(at.x,at.y); let c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       if(!this.moveItem(e.id,c,r)) this._snapBack(e);
       if(window.__layoutChanged)window.__layoutChanged(); });
   }
@@ -117,6 +147,15 @@ export const Edit = {
     g.clear(); g.setVisible(true);
     g.fillStyle(0x7fe6ff,0.10);   // 設置済みマスをうっすら塗る(=各オブジェクトが入っている四角)
     for(const e of this.placed) for(const q of this.cellsOf(e)){ this._diamond(g,q.c,q.r); g.fillPath(); }
+    // ドラッグ中の装飾品は落とし先の占有マスをプレビュー(1×2 なら2マスとも光る)
+    const pd=this.moveId?null:this._pdrag;
+    if(pd && pd.c!=null){
+      const pe=this.placed.find(x=>x.id===pd.id);
+      if(pe){ const ok=this.canPlace(pe.kind,pd.c,pd.r,{variant:pe.variant,dir:pe.dir,ignoreId:pe.id});
+        this._paintCells(this.cellsOf({kind:pe.kind,variant:pe.variant,dir:pe.dir,cell:{c:pd.c,r:pd.r}}),
+          ok?0x33ffcc:0xe0674e);
+        return; }
+    }
     // 移動モード中/ドラッグ中は掴んでいる製造機のサイズ・向きぶんをプレビュー(自分の占有は無視して判定)
     const d=this.moveId?null:this._mdrag, mvId=this.moveId||(d&&d.id);
     const mv=mvId && this.placed.find(x=>x.id===mvId);
@@ -130,10 +169,11 @@ export const Edit = {
     const sel=window.__editSel;
     if(sel && po){ const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV),0,GV-1);
-      const opt=(sel.kind==='machine')?{variant:sel.variant,dir:this.placeDir||'u'}:null;
+      const opt=(sel.kind==='machine'||sel.kind==='prop')?{variant:sel.variant,dir:this.placeDir||'u'}:null;
       const ok=this.canPlace(sel.kind,c,r,opt);
-      // 製造機は占有する全マスをプレビュー(Rキーで向き切替)
-      const cells=(sel.kind==='machine') ? this.cellsOf({kind:'machine',variant:sel.variant,dir:this.placeDir||'u',cell:{c,r}}) : [{c,r}];
+      // 製造機と装飾品は占有する全マスをプレビュー(Rキーで向き切替)
+      const cells=(sel.kind==='machine'||sel.kind==='prop')
+        ? this.cellsOf({kind:sel.kind,variant:sel.variant,dir:this.placeDir||'u',cell:{c,r}}) : [{c,r}];
       this._paintCells(cells, ok?0x33ffcc:0xe0674e); }
   },
   /* プレビューのマス塗り(置ける=緑/置けない=赤)。設置プレビューと移動プレビューで共用 */

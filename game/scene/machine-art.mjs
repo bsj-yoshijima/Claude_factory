@@ -1,12 +1,26 @@
 /* 製造機の見た目 — 占有マスの形・スプライトの切り出し・手続き描画。
    Scene のメソッドとして書かれているので this の意味を変えないようミックスインで渡す。 */
-import { MACH_DRAW, MACH_GEO, PART_PAL, PART_SKIN_BY_THEME, RUG_DEPTH, isFlatProp, machSize, matArt, matTexKey, propSpan, recipeFor } from './catalog.mjs';
-import { CELL, GU, GV, cellXY, uvXY } from './iso.mjs';
+import { MACH_DRAW, MACH_GEO, PART_PAL, PART_SKIN_BY_THEME, PROP_FIT, RUG_DEPTH, isFlatProp, machSize, matArt, matTexKey, propShape, propSpan, recipeFor } from './catalog.mjs';
+import { CELL, GU, GV, blockIso, cellXY, uvXY } from './iso.mjs';
 
 
 
 export const MachineArt = {
-  cellsOf(e){ if(e.kind!=='machine') return [e.cell];
+  /* 装飾品が床のいくつ分を占めるか [列,行]。dir==='v' で 90度回した形になる。
+     新規格(焼き込み済み)の絵だけが複数マスを占める。旧290体は今までどおり1マス:
+     占有を後から広げると、保存済みのレイアウトが2マス目で衝突して復元できなくなる。 */
+  propBlock(e){
+    if(e.kind!=='prop') return [1,1];
+    const f=this.propFit()[e.variant];
+    if(!f||!f.baked||!f.shape) return [1,1];
+    const [n,m]=f.shape;
+    return (e.dir==='v') ? [m,n] : [n,m];
+  },
+  cellsOf(e){
+    if(e.kind==='prop'){ const [n,m]=this.propBlock(e), out=[];
+      for(let i=0;i<n;i++) for(let j=0;j<m;j++) out.push({c:e.cell.c+i, r:e.cell.r+j});
+      return out; }
+    if(e.kind!=='machine') return [e.cell];
     const n=machSize(e.variant), du=(e.dir==='v')?0:1, dv=(e.dir==='v')?1:0, out=[];
     for(let i=0;i<n;i++) out.push({c:e.cell.c+du*i, r:e.cell.r+dv*i});
     return out; },
@@ -52,12 +66,17 @@ export const MachineArt = {
       const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.1,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.05,img.displayWidth*0.5).setAlpha(0.5);
       objs.push(sh,img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
     } else if(e.kind==='prop'){
-      // ラグは床に寝かせる平物: 影なし・マス中心に置く(足元基準だと奥にズレて浮いて見える)・常に最背面
+      const img=this.propImage(e);
       const flat=isFlatProp(e.variant);
-      const img=this.add.image(p.x,p.y,'prop_'+e.variant).setOrigin(0.5,flat?0.5:1).setDepth(flat?RUG_DEPTH:p.y);
-      img.setScale(1.35*Math.sqrt(propSpan(e.variant))*CELL/img.height).setTint(tint);
+      img.setTint(tint);
       if(!flat){
-        const sh=this.add.image(p.x+CELL*0.2,p.y+CELL*0.09,'shadow').setDepth(p.y-0.5).setRotation(0.5).setDisplaySize(img.displayWidth*1.0,img.displayWidth*0.46).setAlpha(0.5);
+        // 影は絵ではなく接地菱形に合わせる。絵の幅に合わせると、傘が横へ張り出した
+        // ランプのように「足元より絵が広い」物で影だけ大きくなる。位置も絵の原点(菱形の
+        // 手前角)ではなく菱形の中心に置く
+        const [n,m]=propShape(e.variant), b=blockIso(c,r,n,m);
+        const sh=this.add.image((b.back.x+b.front.x)/2+CELL*0.2,(b.back.y+b.front.y)/2+CELL*0.09,'shadow')
+          .setDepth(img.depth-0.5).setRotation(0.5)
+          .setDisplaySize(b.w*PROP_FIT.foot,b.w*PROP_FIT.foot*0.46).setAlpha(0.5);
         objs.push(sh);
       }
       objs.push(img); main=img; e._lit=img; this.lit.push({sp:img,u,v});
@@ -81,7 +100,60 @@ export const MachineArt = {
     return this._machFit; },
   hatFit(){ if(this._hatFit) return this._hatFit;
     try{ this._hatFit=JSON.parse(this.cache.text.get('hatfit')||'{}'); }catch(_){ this._hatFit={}; }
-    return this._hatFit; }
+    return this._hatFit; },
+  /* 絵から実測した装飾品の足元(cx=中心x, by=接地の高さ, bw=足元の幅, w/left=bbox。すべて画像に対する比) */
+  propFit(){ if(this._propFit) return this._propFit;
+    try{ this._propFit=JSON.parse(this.cache.text.get('propfit')||'{}'); }catch(_){ this._propFit={}; }
+    return this._propFit; }
+  /* ---- 装飾品の1枚。「足元の中心を、占有ブロックの接地菱形の手前角に合わせる」だけで
+       大きさも位置も決まる(catalog.mjs の PROP_FIT)。手前角は菱形の中心 x でもあるので、
+       絵は必ずマスの中央に立つ。傘のように上が張り出す物は maxW で頭打ちにする。
+       実測(prop-fit.json)が無い個体は、旧来の「絵の高さ基準・bboxの下端をマス中心へ」に落とす。 ---- */,
+  propImage(e){
+    const {c,r}=e.cell, flat=isFlatProp(e.variant), f=this.propFit()[e.variant];
+    const img=this.add.image(0,0,'prop_'+e.variant);
+    /* 新規格(殻から作った絵)。焼き込み(tools/assets/cut_prop_sheet.mjs)の時点で
+       1マスの大きさに合わせてあるので、ゲーム側は倍率をいじらない。接地点(cx,by)を
+       ブロックの「菱形の中心x・手前角のy」に合わせるだけ。推測が一切入らない。 */
+    if(f && f.baked){
+      // 形は焼き込み時に記録したものを使う。コマ数の表(FURN_SPAN)は旧290体むけの値で、
+      // 例えば lamp は 2コマ(1×2)。新しい絵は 1×1 なので、表に従うと半マスずれる
+      const [n,m]=this.propBlock(e), b=blockIso(c,r,n,m);
+      const cx=(b.back.x+b.front.x)/2, v=(e.dir==='v');
+      /* v向きは絵を左右反転する。アイソメでは水平反転が90度回した向きに相当する
+         (製造機も同じ手を使っている)。反転すると原点も鏡になるので cx を裏返す。 */
+      img.setOrigin(v?1-f.cx:f.cx, f.by).setPosition(cx, b.front.y)
+         .setDepth(flat?RUG_DEPTH:b.front.y).setScale(1).setFlipX(v);
+      return img;
+    }
+    if(!f){   // 旧規格のフォールバック(絵はあるが未測定)
+      const p=cellXY(c,r);
+      img.setOrigin(0.5,flat?0.5:1).setPosition(p.x,p.y).setDepth(flat?RUG_DEPTH:p.y)
+         .setScale(1.35*Math.sqrt(propSpan(e.variant))*CELL/img.height);
+      return img;
+    }
+    const [n,m]=propShape(e.variant), b=blockIso(c,r,n,m);
+    if(flat){   // ラグは床に寝かせる平物。絵の全幅を菱形の幅に合わせ、菱形の中心へ置く
+      const cx=(b.back.x+b.front.x)/2, cy=(b.back.y+b.front.y)/2;
+      img.setOrigin(f.left+f.w/2, f.by-f.h/2).setPosition(cx,cy).setDepth(RUG_DEPTH)
+         .setScale(b.w/(f.w*img.width));
+      return img;
+    }
+    const s=Math.min(PROP_FIT.foot*b.w/(f.bw*img.width),     // 足元をマスに合わせる(基準)
+                     PROP_FIT.maxW*b.w/(f.w*img.width),      // 横の張り出しの上限
+                     PROP_FIT.maxH*b.w/(f.h*img.height));    // 高さの上限
+    /* 原点を「足元の中心・接地の高さ」に置くと、絵のどこが描かれていようが接地点で位置が決まる。
+       置き先は「自分の接地菱形の中心を、マスの菱形の中心に重ねる」。
+       原点は自分の菱形の"手前角"(最下点)なので、菱形の中心から手前角までの距離だけ下げる:
+       菱形は2:1なので 幅 fw の菱形の中心〜手前角は fw/4。
+       手前角どうしを合わせてはいけない。それが正しいのは足元がマスいっぱい(foot=1.0)の時だけで、
+       foot=0.50 だと 1×1 で7px・2×2 で14px、物が手前へずれる。 */
+    const fw=f.bw*img.width*s;
+    img.setOrigin(f.cx, f.by)
+       .setPosition((b.back.x+b.front.x)/2, (b.back.y+b.front.y)/2 + fw/4)
+       .setDepth((b.back.y+b.front.y)/2 + fw/4).setScale(s);
+    return img;
+  }
   /* 左右反転した製造機テクスチャ(v向き用)。帯の切り出し(setCrop)は「反転したときの切り出し位置」が
      WebGL と Canvas で食い違うので、flipX せず反転済みテクスチャを焼いて素直に切る。 */,
   _machFlipTex(key){ const fk=key+'__fx';

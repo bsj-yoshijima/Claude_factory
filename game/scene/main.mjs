@@ -27,6 +27,7 @@ export class Main extends Phaser.Scene {
     for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen','tech']) this.load.image('room_'+n, `assets/rooms/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/props/prop_${n}.png`);
     this.load.text('machfit','assets/machines/mach-fit.json');   // 投入口のアンカー。素材アイコンを絵の口に乗せる
+    this.load.text('propfit','assets/props/prop-fit.json');   // 装飾品ごとの足元(中心・幅・接地の高さ)。絵から実測: tools/assets/measure_props.mjs
     this.load.text('hatfit','assets/hats/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)＋下げ量(dy=ドット)。非対称な飾りでも頭の中心で被る(load.json は中身が壊れるとローダーごと落ちるので text 読み)
     /* 被り物は「用意できているテーマだけ」読む。どれが用意済みかの正は hat-fit.json のキー。
        SKINS 全部(32種)を投機的に読むと、絵が無いぶんだけ 404 がコンソールに並んで
@@ -122,6 +123,16 @@ export class Main extends Phaser.Scene {
   /* 仮の entry を作って占有マスを判定する(設置前チェック用) */
   canPlace(kind,c,r,opt){ opt=opt||{};
     if(kind==='prop' && isFlatProp(opt.variant)) return this.isRugFree(c,r);   // ラグは家具の上にも敷ける
+    if(kind==='prop'){
+      // 新規格の装飾品は複数マスを占める。旧290体は propBlock が [1,1] を返すので今までどおり
+      const probe={kind:'prop', variant:opt.variant, dir:opt.dir||'u', cell:{c,r}};
+      const skipP=opt.ignoreId||null;
+      for(const q of this.cellsOf(probe)){
+        if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) return false;
+        const at=this.entryAtCell(q.c,q.r); if(at && at.id!==skipP) return false;
+      }
+      return true;
+    }
     if(kind!=='machine') return this.isFree(c,r);
     const probe={kind:'machine', variant:opt.variant||'s1', dir:opt.dir||'u', cell:{c,r}};
     const skip=opt.ignoreId||null;
@@ -131,7 +142,12 @@ export class Main extends Phaser.Scene {
     }
     return true; }
   /* 位置未指定のときの落とし先(その向き・サイズで収まる空き) */
-  autoCell(kind,opt){ if(kind!=='machine') return this.freeCell();
+  autoCell(kind,opt){
+    if(kind==='prop'){   // 新規格は複数マスを占めるので、空きマスではなく置ける場所を探す
+      for(let r=0;r<GV;r++) for(let c=0;c<GU;c++)
+        if(this.canPlace('prop',c,r,{variant:opt&&opt.variant,dir:opt&&opt.dir})) return {c,r};
+      return null; }
+    if(kind!=='machine') return this.freeCell();
     for(const dir of [opt&&opt.dir||'u','u','v'])
       for(let r=1;r<GV-1;r++) for(let c=1;c<GU-1;c++)
         if(this.canPlace('machine',c,r,{variant:opt&&opt.variant,dir})){ if(opt) opt.dir=dir; return {c,r,dir}; }
@@ -141,7 +157,8 @@ export class Main extends Phaser.Scene {
     if(KINDS.indexOf(kind)<0) return null;
     if(kind==='deco' && !this.textures.exists('dec_'+variant)) return null;
     if(kind==='machine') variant = 's'+machSize(variant);
-    let dir = (kind==='machine') ? (extra.dir==='v'?'v':'u') : undefined;
+    // 装飾品も向きを持つ(新規格の複数マスの物を回すため)。旧290体は形が [1,1] なので影響しない
+    let dir = (kind==='machine'||kind==='prop') ? (extra.dir==='v'?'v':'u') : undefined;
     // ラグは平物。家具の占有(occ)を無視して敷けるが、ラグ同士(rugOcc)は重ねない
     const flat = kind==='prop' && isFlatProp(variant);
     let cell=extra.cell||null;
@@ -174,6 +191,14 @@ export class Main extends Phaser.Scene {
   moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
     if(!this.canPlace(e.kind,c,r,{variant:e.variant,dir:e.dir,ignoreId:id})) return false;
     this._detach(e); e.cell={c,r}; this._makeObjs(e); this._syncOcc();
+    if(this.editMode) this._enableDrag(e); return true; }
+  /* 装飾品を90°回転。1×2 の物は占有マスも入れ替わる。絵は左右反転で向きが変わる
+     (アイソメでは水平反転が90度回転に相当。machine-art.mjs の propImage 参照)。
+     1×1 の物は形が変わらないので、絵の反転だけが効く。 */
+  rotateProp(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='prop'); if(!e) return false;
+    const nd=(e.dir==='v')?'u':'v';
+    if(!this.canPlace('prop',e.cell.c,e.cell.r,{variant:e.variant,dir:nd,ignoreId:id})) return false;
+    this._detach(e); e.dir=nd; this._makeObjs(e); this._syncOcc();
     if(this.editMode) this._enableDrag(e); return true; }
   /* 製造機を90°回転(u軸⇔v軸)。回した先が空いていなければ何もしない */
   rotateMachine(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return false;

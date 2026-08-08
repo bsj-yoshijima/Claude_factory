@@ -28,6 +28,14 @@ const ISO_DET = ISO.ux*ISO.vy - ISO.vx*ISO.uy;
 export function screenToIso(sx,sy){ const nx=sx/W-ISO.Bx, ny=sy/H-ISO.By;
   return { u:(nx*ISO.vy - ISO.vx*ny)/ISO_DET, v:(ISO.ux*ny - nx*ISO.uy)/ISO_DET }; }
 export function uvXY(u,v){ return { x:(ISO.Bx+u*ISO.ux+v*ISO.vx)*W, y:(ISO.By+u*ISO.uy+v*ISO.vy)*H }; }
+// 1マスの接地菱形の幅(55.65px)。マス送りの CELL(31.1px) とは別物で、
+// 「絵がマスに収まっているか」の基準はこちら。装飾品の大きさはこの幅の比で決める。
+export const CELL_W = Math.abs(ISO.ux*W/GU) + Math.abs(ISO.vx*W/GV);
+// n×m マスのブロックの接地菱形。手前角(front)は絵の下端を合わせる点で、
+// 菱形の左右の中点でもある(菱形は上下対称なので front.x が中心 x)。
+export function blockIso(c,r,n,m){
+  return { back:uvXY(c/GU,r/GV), right:uvXY((c+n)/GU,r/GV),
+    front:uvXY((c+n)/GU,(r+m)/GV), left:uvXY(c/GU,(r+m)/GV), w:(n+m)*CELL_W/2 }; }
 const AU={x:ISO.ux*W/GU, y:ISO.uy*H/GU};   // 1セル u方向 の画面ベクトル
 const AV={x:ISO.vx*W/GV, y:ISO.vy*H/GV};   // 1セル v方向 の画面ベクトル
 export const K = (c,r)=> c+','+r;
