@@ -30,13 +30,12 @@ export const Edit = {
        盤面ではなく右下に固定する(物の上に出すと家具に重なって読めない)。
        ゴミ箱が左下なので、左右で場所が分かれる。右端から左へ伸ばす。 */
     this.pickGfx=this.add.graphics().setDepth(-1).setVisible(false);
-    this.pickTipText=this.add.text(-11,0,'',{fontSize:'13px',color:'#ffd8ff'}).setOrigin(1,0.5);
-    this.pickTipBg=this.add.rectangle(0,0,10,34,0x3a123a,0.88).setStrokeStyle(2,0xff00ff).setOrigin(1,0.5);
+    this.pickTipText=this.add.text(-11,0,'',{fontSize:'13px',color:'#ccf7ff'}).setOrigin(1,0.5);
+    this.pickTipBg=this.add.rectangle(0,0,10,34,0x0d2c33,0.88).setStrokeStyle(2,0x00e5ff).setOrigin(1,0.5);
     this.pickTip=this.add.container(W-14,H-52,[this.pickTipBg,this.pickTipText]).setDepth(8600).setVisible(false);
     // 床クリック: 製造機の上なら設定パネル、空きマスならパレットで選択中のアイテムを設置
     this.input.on('pointerdown',(po,over)=>{
       if(this.selectMode) return;   // 収納の選択中は設置も移動もしない
-      this._tap=null;
       const uv=screenToIso(po.x,po.y);
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       // 移動モード中は設定パネルも新規設置も抑止。床クリック=移動先の確定
@@ -47,15 +46,16 @@ export const Edit = {
       /* 通常モードの製造機クリックは素材パネル(素材設定がコア機能なので)。
          編集モード中は「選択」だけにする。編集中にパネルが出ると、並べ替えの最中に
          別の作業のダイアログが割り込むことになる。 */
+      /* 選択は「押した時点」で切り替える。離した時点にすると、別の物を選んだまま
+         また別の物をドラッグでき、光っている物と動かしている物が食い違う。 */
       if(m){ this._placedPtr=true;
-        // ドラッグと取り違えないよう、指を離した時点(ほぼ動いていなければ)に確定する
-        if(this.editMode){ this._tap={id:m.id, x:po.x, y:po.y}; return; }
+        if(this.editMode){ this._pick(m.id); return; }
         if(window.__openMachine) window.__openMachine(m.id); return; }
       if(!this.editMode) return;
       /* 装飾品も編集中はクリックで選べる。拾うのは「絵」だけで、床のマスからは引かない:
          ラグは家具の上にも敷けるので、マスで拾うとラグを重ねて置けなくなる。 */
       const pr=(hit&&hit.kind==='prop')?hit:null;
-      if(pr){ this._placedPtr=true; this._tap={id:pr.id, x:po.x, y:po.y}; return; }
+      if(pr){ this._placedPtr=true; this._pick(pr.id); return; }
       this._clearPick();                       // 何も無い床をクリック=選択を解除
       if(over&&over.length) return;
       const sel=window.__editSel; if(!sel) return;
@@ -99,15 +99,10 @@ export const Edit = {
     this.input.keyboard.on('keydown-ESC',()=>{
       if(this.moveId){ this.cancelMove(); if(window.__toast) window.__toast('移動をやめました'); return; }
       if(this.pickId) this._clearPick(); });
-    /* クリック(ほぼ動いていない)なら選択。ドラッグしたときは選ばない。
-       通常モードの製造機は pointerdown の時点でパネルを開いているので、ここへは来ない。 */
-    this.input.on('pointerup',(po)=>{ const t=this._tap; this._tap=null;
-      if(!t||this.moveId) return;
-      if(Math.hypot(po.x-t.x, po.y-t.y)>DRAG_SLOP) return;
-      this._pick(t.id); });
     // 製造機のドラッグ開始。絵が複数(筐体graphics＋素材の文字など)あるので掴んだ時点の座標を控える
     this.input.on('dragstart',(po,obj)=>{ if(!this.editMode||!obj||!obj._e) return; const e=obj._e;
       if(this.moveId) return;                       // 移動モード中はドラッグしない
+      this._pick(e.id);                             // 掴んだ物を選択中にする(押した時点と同じ)
       if(e.kind!=='machine'){
         /* 装飾品も掴んだ時点の「絵の原点」と「マスの中心」を控える。
            落とし先は原点の移動量をマス中心に足して求める。
@@ -193,8 +188,8 @@ export const Edit = {
     if(!e){ this._clearPick(); return; }                 // 撤去・編集終了などで居なくなった
     g.clear(); g.setVisible(true);
     for(const q of this.cellsOf(e)){ if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) continue;
-      g.fillStyle(0xff00ff,0.22); this._diamond(g,q.c,q.r); g.fillPath();
-      g.lineStyle(2,0xff00ff,0.95); this._diamond(g,q.c,q.r); g.strokePath(); }
+      g.fillStyle(0x00e5ff,0.22); this._diamond(g,q.c,q.r); g.fillPath();
+      g.lineStyle(2,0x00e5ff,0.95); this._diamond(g,q.c,q.r); g.strokePath(); }
     const rot=this._canRotate(e);
     this.pickTipText.setText(rot ? '選択中 ・ R:回転 ・ Esc:解除' : '選択中 ・ この物は回せません ・ Esc:解除');
     // Rectangle は width への代入では形が変わらない(geom を持っている)。setSize を使う
@@ -249,7 +244,6 @@ export const Edit = {
     this._clearPick();
     if(!this.editMode){ this.setSelectMode(false);
       this.cancelMove();   // 編集を抜けたら移動モードも解除(元の位置のまま)
-      this._tap=null;
       if(this._mdrag){ const dg=this.placed.find(x=>x.id===this._mdrag.id); this._mdrag=null; if(dg) this._snapBack(dg); } }
     this.trash.setVisible(this.editMode && !this.selectMode);
     if(this.hoverGfx){ this.hoverGfx.clear(); this.hoverGfx.setVisible(false); }

@@ -615,6 +615,23 @@ console.log('\n[17] 編集中はクリックで選択（設定パネルは開か
   ok(s.cellsOf(ent(pr)).length===2, '1×2 なので占有は2マス');
   s.propFit=fit0;
 
+  /* 選択は「押した時点」で切り替わる。離した時点にしていたら、Aを選んだままBをドラッグでき、
+     光っている物と動かしている物が食い違った。 */
+  s.toggleEdit(true); s._clearPick();
+  const mA=s.addPlaced('machine','s2',{cell:{c:7,r:2},dir:'u'});
+  const mB=s.addPlaced('machine','s2',{cell:{c:7,r:6},dir:'u'});
+  { const p=pt(7,2); down(p,[]); }
+  ok(s.pickId===mA, '押した時点で選択が切り替わる（離す前）');
+  { const eB=ent(mB), a=pt(7,6), b=pt(1,4);
+    for(const fn of (s.input._h['dragstart']||[])) fn(a,eB.main,a.x,a.y);
+    ok(s.pickId===mB, '別の物をドラッグし始めたら選択もそちらへ移る');
+    for(const fn of (s.input._h['drag']||[])) fn(b,eB.main,b.x,b.y);
+    for(const fn of (s.input._h['dragend']||[])) fn(b,eB.main);
+    ok(s.pickId===mB, 'ドラッグし終わっても選択は動かした物のまま'); }
+  s.removeItem(mB);
+  ok(s.pickId==null, '選択中の物を撤去したら選択も外れる');
+  s.removeItem(mA);
+
   s.toggleEdit(false); window.__openMachine=null; window.__toast=null; window.__layoutChanged=null;
 }
 

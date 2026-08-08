@@ -186,7 +186,7 @@ export class Main extends Phaser.Scene {
     this._detach(this.placed[i]); this.placed.splice(i,1); this.lastRemoved=1; this._syncOcc();
     if(this.moveId===id) this.cancelMove();   // 掴んでいた物が消えたら移動モードも抜ける
     if(this._mdrag && this._mdrag.id===id) this._mdrag=null;   // ドラッグ中の物が消えた場合も同様
-    if(this._tap && this._tap.id===id) this._tap=null;         // 消えた物の設定パネルは開かない
+    if(this.pickId===id) this._clearPick();                    // 消えた物の選択は外す
     return true; }
   moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
     if(!this.canPlace(e.kind,c,r,{variant:e.variant,dir:e.dir,ignoreId:id})) return false;
