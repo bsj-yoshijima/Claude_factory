@@ -37,6 +37,10 @@ in. It is NOT a catalogue illustration, NOT a product shot, NOT a side view, NOT
   1 pixel down. Measure it against the cyan diamond in the shell.
 - Exactly TWO vertical faces of any box are visible: one facing lower-left, one facing
   lower-right. Never one flat face facing the viewer.
+- IF THE OBJECT IS ROUND (a pool, a basin, a well, a ring of stones), its footprint is an
+  ELLIPSE INSCRIBED IN THE DIAMOND: exactly TWICE AS WIDE AS IT IS DEEP, touching the
+  diamond's four corners and going no further. A circle, or an ellipse flatter than 2:1,
+  means the camera has tipped towards a top view and the object will not sit on its tile.
 - You MUST SEE THE TOP FACES: the top of its base and the top of its tallest part.
 - The cyan diamond is the floor tile. The object's footprint matches it and its lowest point
   sits on the diamond's FRONT corner. An object that stands at the BACK of the diamond, with
