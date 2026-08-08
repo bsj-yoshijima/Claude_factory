@@ -1,6 +1,6 @@
-# 添付1枚目(塗り替える殻): docs/prop-shell-sheet7-1579x1161.png
+# 添付1枚目(塗り替える殻): docs/prop-shell-sheet7-1519x1127.png
 # 添付2枚目(テーマの参照): assets/rooms/room-space.png
-# 出力サイズ: 1579x1161
+# 出力サイズ: 1519x1127
 
 TWO IMAGES ARE ATTACHED AND THEY HAVE DIFFERENT JOBS.
 THE FIRST IMAGE is the one you edit. It is a master shell for SEVEN objects.
@@ -18,7 +18,7 @@ the posture. You may change the design to suit the theme: a stool instead of a b
 a paper lantern instead of a shaded lamp, a chest of drawers instead of open shelves.
 What you may NOT change is the FOOTPRINT: how much floor the object covers. If the footprint
 grows, the object will not fit its tile on the game board.
-Output 1579x1161.
+Output 1519x1127.
 
 THE CYAN RECTANGLES ARE THE FRAME OF THE JOB. There are seven of them and they never move.
 - Repaint the object INSIDE each rectangle. One object per rectangle. Never move an object to

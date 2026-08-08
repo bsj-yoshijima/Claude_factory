@@ -3,10 +3,10 @@
 
      node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR]
 
-   例: node tools/assets/cut_prop_sheet.mjs ~/Downloads/jpn.png docs/prop-shell-sheet7-1579x1161.json jpn
+   例: node tools/assets/cut_prop_sheet.mjs ~/Downloads/jpn.png docs/prop-shell-sheet7-1519x1127.json jpn
 
 なぜ枠を基準にするか:
-  生成物は殻と同じ寸法では返らず（1579x1161 で頼んでも別サイズで返る）、並びも少し動く。
+  生成物は殻と同じ寸法では返らず（1519x1127 で頼んでも別サイズで返る）、並びも少し動く。
   殻の座標を拡縮して当てにいくと**別の物を切り出す**（ソファの位置から机が出た）。
   枠は絵に残るので、それを見つければ推測が要らない。
     枠の幅   → 1マスの大きさ
@@ -41,7 +41,11 @@ const isMark = (c)=> c[1]>110 && c[2]>140 && c[1]-c[0]>55 && c[2]-c[0]>55;
 const isMag  = (c)=> c[0]>170 && c[1]<110 && c[2]>170 && c[0]-c[1]>60 && c[2]-c[1]>60;
 const killMark=(c)=> c[2]>90 && c[1]-c[0]>18 && c[2]-c[0]>18;              // 青緑に寄った画素
 const killMag =(c)=> c[0]>120 && c[2]>120 && c[0]-c[1]>45 && c[2]-c[1]>45; // 赤紫に寄った画素
-const isBg = (c)=> killMark(c) || killMag(c);
+/* シアン(0,229,255)とマゼンタ(255,0,255)の中間色。線の縁に1〜2px出る。
+   どちらの判定にも当たらないので、これを入れないと物と誤認して切り出しが枠いっぱいに広がる。
+   青が支配的で、赤+緑が低い、が中間色の特徴。家具の色(木・畳・藍)はここに入らない。 */
+const isBlend=(c)=> c[2]>190 && c[2]>=c[0]-10 && c[2]>=c[1]-10 && (c[0]+c[1])<340;
+const isBg = (c)=> killMark(c) || killMag(c) || isBlend(c);
 
 function readPNG(file){
   const b = fs.readFileSync(file);
@@ -118,14 +122,21 @@ for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++){
    占有率が下がり、枠と区別できなくなる（実測で枠が6個のはずが9個になった）。
    確実なのは包含関係。菱形は必ずどれかの枠の内側にあるので、
    「他のかたまりの外接矩形に収まっているものは枠ではない」で落とせる。 */
-const big = comps.slice().sort((a,b)=>(b.bw*b.bh)-(a.bw*a.bh));
-const frames = [];
-for(const c of big){
-  const inside = frames.some(f => c.x0>=f.x0-2 && c.x1<=f.x1+2 && c.y0>=f.y0-2 && c.y1<=f.y1+2);
-  if(!inside) frames.push(c);
+let frames;
+if(spec.frame === false){
+  /* カスタム装飾品(1体ずつ発注)は仕切りの枠を描かない。キャンバスそのものが枠なので、
+     画像全体を1つの枠として扱う。中のシアンは接地菱形だけで、これは切り抜きで消える。 */
+  frames = [{ x0:0, y0:0, x1:sh.w-1, y1:sh.h-1, bw:sh.w, bh:sh.h }];
+} else {
+  const big = comps.slice().sort((a,b)=>(b.bw*b.bh)-(a.bw*a.bh));
+  frames = [];
+  for(const c of big){
+    const inside = frames.some(f => c.x0>=f.x0-2 && c.x1<=f.x1+2 && c.y0>=f.y0-2 && c.y1<=f.y1+2);
+    if(!inside) frames.push(c);
+  }
+  frames.sort((a,b)=>
+    (a.y1 > b.y1 + a.bh*0.5 ? 1 : b.y1 > a.y1 + b.bh*0.5 ? -1 : a.x0 - b.x0));
 }
-frames.sort((a,b)=>
-  (a.y1 > b.y1 + a.bh*0.5 ? 1 : b.y1 > a.y1 + b.bh*0.5 ? -1 : a.x0 - b.x0));
 const names = spec.cells.map(c=>c.k);
 console.log(`シアンの塊 ${comps.length}個 → 枠 ${frames.length}個 (期待 ${names.length})`);
 if(frames.length !== names.length) console.log('⚠ 枠の数が合いません。生成をやり直すか、枠が塗り替えられていないか確認してください');
@@ -137,12 +148,15 @@ for(const [i,fr] of frames.entries()){
   const gameW = cell ? cell.w/spec.scale : 64;          // その枠がゲーム内で何pxになるか
   const s = gameW / fr.bw;                              // 枠の幅を合わせる倍率
 
-  /* 枠の内側だけを見る。線の太さぶん内へ寄せる */
-  const lw = Math.max(2, Math.round(fr.bw*0.06));
-  const ix0=fr.x0+lw, ix1=fr.x1-lw, iy0=fr.y0+lw, iy1=fr.y1-lw;
+  const lw = spec.frame===false ? 0 : Math.max(2, Math.round(fr.bw*0.06));
+  /* 探す範囲は枠の外接矩形まで(線の帯も含める)。線の内側だけに限ると、線に触れた部分が
+     黙って捨てられて絵が欠ける（畳の手前角が削れた）。線そのものはシアンなので拾わない。
+     外側へは広げない: 線の外縁にはマゼンタとの中間色が出ていて、それを物と誤認する。 */
+  const ix0=fr.x0, ix1=fr.x1, iy0=fr.y0, iy1=fr.y1;
+  const inOther=(x,y)=>frames.some(o=>o!==fr && x>=o.x0 && x<=o.x1 && y>=o.y0 && y<=o.y1);
   let x0=ix1, x1=ix0, y0=iy1, y1=iy0, any=false;
   for(let y=iy0;y<=iy1;y++) for(let x=ix0;x<=ix1;x++){
-    const c=get(x,y); if(isBg(c)) continue;
+    const c=get(x,y); if(isBg(c) || inOther(x,y)) continue;
     any=true; if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
   }
   if(!any){ console.log(`  ${slot}: 中身が空 → スキップ`); continue; }
@@ -154,7 +168,7 @@ for(const [i,fr] of frames.entries()){
     for(let y=Math.floor(y0+oy/s); y<Math.min(y1+1, Math.ceil(y0+(oy+1)/s)); y++)
       for(let x=Math.floor(x0+ox/s); x<Math.min(x1+1, Math.ceil(x0+(ox+1)/s)); x++){
         const c=get(x,y); tot++;
-        if(isBg(c)) continue;
+        if(isBg(c) || inOther(x,y)) continue;
         r+=c[0]; g+=c[1]; b+=c[2]; a++;
       }
     const o=(oy*ow+ox)*4;
@@ -186,16 +200,35 @@ for(const [i,fr] of frames.entries()){
       specks += px.length;
     }
   }
-  writePNG(path.join(outDir, `prop_${prefix}_${slot}.png`), ow, oh, out);
-  crops.push({slot, ow, oh, out});
+  /* 孤立点を消したぶん、余白が残ることがある(切り出し範囲は消す前に決めているため。
+     実測: ランプの左に10pxの空白)。残った不透明画素で切り直す。 */
+  let cw=ow, chh=oh, cout=out, padL=0, padT=0;
+  {
+    let ax0=ow, ax1=-1, ay0=oh, ay1=-1;
+    for(let y=0;y<oh;y++) for(let x=0;x<ow;x++){
+      if(out[(y*ow+x)*4+3]<128) continue;
+      if(x<ax0)ax0=x; if(x>ax1)ax1=x; if(y<ay0)ay0=y; if(y>ay1)ay1=y;
+    }
+    if(ax1>=ax0 && (ax0>0||ay0>0||ax1<ow-1||ay1<oh-1)){
+      cw=ax1-ax0+1; chh=ay1-ay0+1; padL=ax0; padT=ay0;
+      cout=Buffer.alloc(cw*chh*4);
+      for(let y=0;y<chh;y++) out.copy(cout, y*cw*4, ((y+ay0)*ow+ax0)*4, ((y+ay0)*ow+ax1+1)*4);
+    }
+  }
+  writePNG(path.join(outDir, `prop_${prefix}_${slot}.png`), cw, chh, cout);
+  crops.push({slot, ow:cw, oh:chh, out:cout});
 
   const r4=(v)=>Math.round(v*10000)/10000;
   /* 接地線は枠の下辺そのものではない。殻はキャンバスを線幅ぶん広げてあるので、
      菱形の手前角は下辺より少し上にある。その比 gy を殻の JSON が持っている。 */
   const gy = cell && cell.gy ? cell.gy : 1;
+  /* 接地線は必ず枠から出す。絵の最下点で代用してはいけない:
+     足元がマスより小さい家具は、自分の手前角がマスの手前角より上に来るのが正しく、
+     by が 1.0 を超える。これは浮きではない。絵の最下点を接地点にすると、
+     小さい家具ほど手前へ押し出されてマスからずれる。 */
   const cxFrame=(fr.x0+fr.x1+1)/2, byFrame=fr.y0 + fr.bh*gy;   // 枠の中心x / 接地線
-  fit[`${prefix}_${slot}`] = { cx:r4((cxFrame-x0)*s/ow), by:r4((byFrame-y0)*s/oh),
-    px:[ow,oh], shape:SHAPE[slot] || [1,1] };
+  fit[`${prefix}_${slot}`] = { cx:r4(((cxFrame-x0)*s-padL)/cw), by:r4(((byFrame-y0)*s-padT)/chh),
+    px:[cw,chh], shape:SHAPE[slot] || [1,1] };
   /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
      捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
   /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と
@@ -212,7 +245,7 @@ for(const [i,fr] of frames.entries()){
     }
   /* 枠に対する物の入り方。1.00 を超えていたら線を越えている */
   const wOver=bw/(fr.bw-2*lw), below=(y1-(byFrame-1))*s;
-  rows.push(`  ${(prefix+'_'+slot).padEnd(12)} ${String(ow).padStart(3)}x${String(oh).padStart(3)}px`
+  rows.push(`  ${(prefix+'_'+slot).padEnd(12)} ${String(cw).padStart(3)}x${String(chh).padStart(3)}px`
     + `  枠に対する幅 ${wOver.toFixed(2)}` + (wOver>1 ? ' ⚠はみ出し' : '')
     + `  枠外へ捨てた画素 ${spill>50 ? spill+' ⚠切れている' : spill}`
     + (specks ? `  孤立点 ${specks}px を除去` : ''));

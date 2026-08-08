@@ -10,11 +10,11 @@
 
 | ファイル | 用途 | 添付する殻 |
 |---|---|---|
-| `<theme>-sheet.txt` | **これが標準。** 全テーマ共通の7種を1枚で発注 | `docs/prop-shell-sheet7-1579x1161.png` |
+| `<theme>-sheet.txt` | **これが標準。** 全テーマ共通の7種を1枚で発注 | `docs/prop-shell-sheet7-1519x1127.png` |
 | `<theme>-sheet-room.txt` | 上と同じだが、部屋の絵をテーマの参照として2枚目に添える版 | 同上 ＋ `assets/rooms/room-<theme>.png` |
-| `<theme>-custom-1x1.txt` | 名物・一点物（床1マス） | `docs/prop-shell-custom-1x1-426x646.png` |
-| `<theme>-custom-1x2.txt` | 同（細長い物） | `docs/prop-shell-custom-1x2-571x721.png` |
-| `<theme>-custom-2x2.txt` | 同（大きい物） | `docs/prop-shell-custom-2x2-717x777.png` |
+| `<theme>-custom-1x1.txt` | 名物・一点物（床1マス） | `docs/prop-shell-custom-1x1-256x476.png` |
+| `<theme>-custom-1x2.txt` | 同（細長い物） | `docs/prop-shell-custom-1x2-384x533.png` |
+| `<theme>-custom-2x2.txt` | 同（大きい物） | `docs/prop-shell-custom-2x2-512x572.png` |
 
 共通の7種は **chair / shelf / lamp / plant（1×1）と table / sofa / rug（1×2）**。
 名物は物ごとに特徴も大きさも違うので、共通シートには入れず1体ずつ発注する。
@@ -41,7 +41,7 @@ node tools/assets/prop_prompt.mjs japan --custom 1x2 --object "a KOTATSU with a 
 ## 生成したあと
 
 ```
-node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/prop-shell-sheet7-1579x1161.json <prefix>
+node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/prop-shell-sheet7-1519x1127.json <prefix>
 ```
 
 `prefix` はテーマの3文字（japan なら `jpn`。対応は `game/scene/catalog.mjs` の `PROP_NAMES`）。

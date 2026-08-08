@@ -202,7 +202,7 @@ Keep the theme in the MATERIAL and the ORNAMENT, not in the shape.
 `;
 };
 
-/* シート版。8体を1枚に並べた殻(docs/prop-shell-sheet7-1579x1161.png)に対して発注する。
+/* シート版。8体を1枚に並べた殻(docs/prop-shell-sheet7-1519x1127.png)に対して発注する。
    1体版と同じ強さのカメラ規則を、8体すべてに効かせるのが要点。 */
 /* 全テーマ共通で作るのはこの7種。名物だけは物ごとに特徴も大きさも違うので都度単体で。 */
 const SHEET_ORDER = ['chair','shelf','lamp','plant','table','sofa','rug'];
@@ -230,7 +230,7 @@ the posture. You may change the design to suit the theme: a stool instead of a b
 a paper lantern instead of a shaded lamp, a chest of drawers instead of open shelves.
 What you may NOT change is the FOOTPRINT: how much floor the object covers. If the footprint
 grows, the object will not fit its tile on the game board.
-Output 1579x1161.
+Output 1519x1127.
 
 THE CYAN RECTANGLES ARE THE FRAME OF THE JOB. There are seven of them and they never move.
 - Repaint the object INSIDE each rectangle. One object per rectangle. Never move an object to
@@ -300,28 +300,25 @@ const ROOM = { arabia:'arabia', beehive:'beehive', cabin:'cabin', circuit:'circu
 /* カスタム装飾品(名物・一点物)の殻。形が決まっていないので殻にはダミーの箱が立っている。
    1枠1体で、${OBJECT} にその物の説明を入れて発注する。 */
 const CUSTOM_SHELL = {
-  '1x1': { file:'prop-shell-custom-1x1-426x646.png', size:'426x646' },
-  '1x2': { file:'prop-shell-custom-1x2-571x721.png', size:'571x721' },
-  '2x2': { file:'prop-shell-custom-2x2-717x777.png', size:'717x777' },
+  '1x1': { file:'prop-shell-custom-1x1-256x476.png', size:'256x476' },
+  '1x2': { file:'prop-shell-custom-1x2-384x533.png', size:'384x533' },
+  '2x2': { file:'prop-shell-custom-2x2-512x572.png', size:'512x572' },
 };
 const buildCustom = (themeKey, shape, object) => {
   const t = THEMES[themeKey], sh = CUSTOM_SHELL[shape];
   if(!t) throw new Error(`未知のテーマ: ${themeKey}`);
   if(!sh) throw new Error(`形は 1x1 / 1x2 / 2x2 のどれか: ${shape}`);
   const what = object || t.landmark;
-  return `REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object standing inside a
-CYAN RECTANGLE. Paint your theme directly on top of it, like colouring in a line drawing.
-Output ${sh.size}.
+  return `REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object. Paint your theme
+directly on top of it, like colouring in a line drawing. Output ${sh.size}.
 
-THE CYAN RECTANGLE IS THE FRAME OF THE JOB.
-- Repaint the object INSIDE the rectangle. NOTHING crosses a cyan line. If a design does not
-  fit, make it smaller, not wider.
-- The object STANDS ON THE BOTTOM EDGE of the rectangle: its lowest point touches that line.
-  It is CENTRED left to right.
-- DO NOT REPAINT THE CYAN LINES and DO NOT REPAINT THE CYAN DIAMOND on the floor. Leave them
-  exactly the cyan they already are (#00E5FF). They are registration marks that a script uses
-  to cut the image, and it finds them by that exact colour. Never use that cyan anywhere else.
-- The magenta OUTSIDE the rectangle stays completely empty.
+THE IMAGE ITSELF IS THE FRAME OF THE JOB. Keep its size exactly.
+- NOTHING crosses the edge of the image. If a design does not fit, make it smaller, not wider.
+- The object STANDS ON THE BOTTOM EDGE of the image: its lowest point touches it, and the
+  object is CENTRED left to right.
+- DO NOT REPAINT THE CYAN DIAMOND on the floor. Leave it exactly the cyan it already is
+  (#00E5FF). It is a registration mark that a script removes later, and it finds it by that
+  exact colour. Never use that cyan anywhere else in the image.
 
 THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW.
 This is a game object seen from the same overhead isometric camera as the room it will stand
@@ -398,8 +395,8 @@ in the same places.
 REPAINT THE FIRST IMAGE.`);
   }
   const head = noRoom
-    ? `# 添付する殻: docs/prop-shell-sheet7-1579x1161.png\n# 出力サイズ: 1579x1161\n# 部屋の画像は添付しない(添えるとカメラが崩れる。--room で付けられるが非推奨)\n\n`
-    : `# 添付1枚目(塗り替える殻): docs/prop-shell-sheet7-1579x1161.png\n# 添付2枚目(テーマの参照): assets/rooms/room-${ROOM[theme]||theme}.png\n# 出力サイズ: 1579x1161\n\n`;
+    ? `# 添付する殻: docs/prop-shell-sheet7-1519x1127.png\n# 出力サイズ: 1519x1127\n# 部屋の画像は添付しない(添えるとカメラが崩れる。--room で付けられるが非推奨)\n\n`
+    : `# 添付1枚目(塗り替える殻): docs/prop-shell-sheet7-1519x1127.png\n# 添付2枚目(テーマの参照): assets/rooms/room-${ROOM[theme]||theme}.png\n# 出力サイズ: 1519x1127\n\n`;
   if(outDir){ const f = path.join(outDir, `${theme}-sheet.txt`); fs.writeFileSync(f, head+text); console.log(f); }
   else console.log(text);
   process.exit(0);

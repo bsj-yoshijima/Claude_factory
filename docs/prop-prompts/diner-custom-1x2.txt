@@ -1,19 +1,16 @@
-# 添付する殻: docs/prop-shell-custom-1x2-571x721.png
-# 出力サイズ: 571x721
+# 添付する殻: docs/prop-shell-custom-1x2-384x533.png
+# 出力サイズ: 384x533
 
-REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object standing inside a
-CYAN RECTANGLE. Paint your theme directly on top of it, like colouring in a line drawing.
-Output 571x721.
+REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object. Paint your theme
+directly on top of it, like colouring in a line drawing. Output 384x533.
 
-THE CYAN RECTANGLE IS THE FRAME OF THE JOB.
-- Repaint the object INSIDE the rectangle. NOTHING crosses a cyan line. If a design does not
-  fit, make it smaller, not wider.
-- The object STANDS ON THE BOTTOM EDGE of the rectangle: its lowest point touches that line.
-  It is CENTRED left to right.
-- DO NOT REPAINT THE CYAN LINES and DO NOT REPAINT THE CYAN DIAMOND on the floor. Leave them
-  exactly the cyan they already are (#00E5FF). They are registration marks that a script uses
-  to cut the image, and it finds them by that exact colour. Never use that cyan anywhere else.
-- The magenta OUTSIDE the rectangle stays completely empty.
+THE IMAGE ITSELF IS THE FRAME OF THE JOB. Keep its size exactly.
+- NOTHING crosses the edge of the image. If a design does not fit, make it smaller, not wider.
+- The object STANDS ON THE BOTTOM EDGE of the image: its lowest point touches it, and the
+  object is CENTRED left to right.
+- DO NOT REPAINT THE CYAN DIAMOND on the floor. Leave it exactly the cyan it already is
+  (#00E5FF). It is a registration mark that a script removes later, and it finds it by that
+  exact colour. Never use that cyan anywhere else in the image.
 
 THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW.
 This is a game object seen from the same overhead isometric camera as the room it will stand

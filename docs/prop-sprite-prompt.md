@@ -33,10 +33,10 @@
 
 | ファイル | 中身 |
 |---|---|
-| `docs/prop-shell-sheet7-1579x1161.png` | 標準セット7種を1枚。chair/shelf/lamp/plant（1×1）+ table/sofa/rug（1×2） |
-| `docs/prop-shell-custom-1x1-426x646.png` | カスタム1体（1マス）。ダミーの四角が高さと接地面の手本 |
-| `docs/prop-shell-custom-1x2-571x721.png` | 同（細長い） |
-| `docs/prop-shell-custom-2x2-717x777.png` | 同（大きい） |
+| `docs/prop-shell-sheet7-1519x1127.png` | 標準セット7種を1枚。chair/shelf/lamp/plant（1×1）+ table/sofa/rug（1×2） |
+| `docs/prop-shell-custom-1x1-256x476.png` | カスタム1体（1マス）。ダミーの四角が高さと接地面の手本 |
+| `docs/prop-shell-custom-1x2-384x533.png` | 同（細長い） |
+| `docs/prop-shell-custom-2x2-512x572.png` | 同（大きい） |
 
 `.json` が対になっていて、焼き込みが並び順と接地線の位置（`gy`）を読む。
 
@@ -47,7 +47,7 @@
 ```
 1. docs/prop-prompts/<theme>-sheet.txt の本文を Stitch に貼り、殻を1枚添付して生成
 2. 出てきた画像を保存
-3. node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/prop-shell-sheet7-1579x1161.json <prefix>
+3. node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/prop-shell-sheet7-1519x1127.json <prefix>
 4. _contact-<prefix>.png を目で見る（数値だけで判断しない）
 5. prop-fit-<prefix>.json を assets/props/prop-fit.json へ baked:1 付きで統合
 ```
@@ -111,6 +111,20 @@
 - 「枠の外へ捨てた画素」は、枠が太いと帯が隣のセルへ届いて誤検知する（他の枠の内側は除外済み）
 - シアンの判定は2段構え。**探すとき**は純粋なシアンだけ、**落とすとき**は青緑寄りを全部。
   線の縁の中間色が残ると切り抜きの縁にノイズが出る
+
+### by が 1.0 を超えるのは正常（浮きではない）
+
+`prop-fit.json` の `by`（接地点が画像の高さのどこか）は 1.0 を**超えてよい**。
+足元がマスより小さい家具は、自分の接地菱形の手前角がマスの手前角より上に来るのが
+正しいアイソメの見え方で、その差がそのまま `by > 1.0` として出る。
+
+japan の実測: chair 1.015 / shelf 1.020 / lamp 1.015 / plant 1.010 /
+table 1.033 / sofa 1.026 / rug 1.061。数字が大きいほど、その家具はマスを
+埋め尽くさずコンパクトに描かれている、というだけ。
+
+**これを「浮いている」と見て絵の最下点を接地点に使ってはいけない。**
+小さい家具ほど手前へ押し出され、マスの中心からずれる。接地線は必ず枠から出す
+（枠の下辺 ＝ マスの手前角）。一度この誤りで直しかけたので記録しておく。
 
 ---
 

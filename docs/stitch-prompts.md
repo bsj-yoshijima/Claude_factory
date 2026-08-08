@@ -1145,7 +1145,7 @@ IMPORTANT: no characters, no people, no floor objects, no text, no UI.
 | | 部屋背景 | 製造機 | 装飾品 |
 |---|---|---|---|
 | 型を作る | `tools/preview/guide.html` | `tools/assets/make_machine_shell.py` | `tools/preview/props.html` の「🧱 殻」 |
-| Stitch に渡す殻 | `docs/room-shell-1376x768.png` | `docs/mach-shell-1024.png` | `docs/prop-shell-sheet7-1579x1161.png` ほか |
+| Stitch に渡す殻 | `docs/room-shell-1376x768.png` | `docs/mach-shell-1024.png` | `docs/prop-shell-sheet7-1519x1127.png` ほか |
 | 発注文 | 同ファイル内 | `docs/machine-sprite-prompt.md` | `docs/prop-prompts/<theme>-sheet.txt` |
 | 検収 | `tools/preview/guide.html` に重ねる | `tools/assets/check_machine_module.py` | `tools/preview/props.html` ＋ 焼き込みの `_contact-*.png` |
 | 焼き込み | なし（そのまま使う） | `tools/assets/cut_machines.py` | `tools/assets/cut_prop_sheet.mjs` |

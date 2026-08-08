@@ -275,10 +275,10 @@ const G_EDGE = '#ff3da6', G_MID = '#6ee6ff';                     // 検収の線
 /* 描く順は必ず「奥から手前」。a,b が小さいほど奥なので、背もたれ → 脚 → 座面 の順になる。
    手前の物を先に描くと、奥の物がその上に乗って立体が壊れる。 */
 const SLOTS = [
-  { k:'chair', shape:[1,1], h:0.95, draw:(D)=>{
-      D.box(0.10, 0.90, 0.10, 0.26, 0.42, 0.95);            // 背もたれ(奥)
-      D.legs(0.18, 0.82, 0.42, 0.10);                       // 4本脚
-      D.box(0.10, 0.90, 0.10, 0.90, 0.36, 0.42);            // 座面
+  { k:'chair', shape:[1,1], h:0.86, draw:(D)=>{
+      D.box(0.14, 0.86, 0.14, 0.28, 0.38, 0.86);            // 背もたれ(奥)
+      D.legs(0.21, 0.79, 0.38, 0.10);                       // 4本脚
+      D.box(0.14, 0.86, 0.14, 0.86, 0.32, 0.38);            // 座面
     }},
   { k:'shelf', shape:[1,1], h:1.05, draw:(D)=>{
       // 薄い箱だが、奥行きはマスの中心に置く(奥に寄せると絵が右奥へずれて見える)
@@ -350,9 +350,11 @@ function drawShell(cv, spec, WR, HR, ss, guide, ref, opt){
   // キャンバスは中身にぴったり合わせる(HR = 頭の上に取る余白。マス幅比)。
   // 高さを比で決め打ちすると、背の低い物ほど上に無駄なマゼンタが残り、生成側が
   // 「そこにも何か描く空間がある」と解釈してしまう
-  /* 枠を描くときは、線のぶんキャンバスを四方に広げる。広げないと、下端に接している
-     菱形の手前角を枠線が上書きして角が欠ける（ラグは全体が菱形なので特に目立つ）。 */
-  const lw = Math.max(1, FRAME_W*DW), pad = opt.frame ? lw*1.6 : 0;
+  /* 枠を描くときは、線幅ぶんキャンバスを四方に広げる。広げないと枠線が菱形の手前角を
+     上書きして角が欠ける（ラグは全体が菱形なので特に目立つ）。
+     広げる量は線幅ちょうど＝菱形の手前角が線の内側にぴったり接する。隙間を空けると
+     「枠の下辺に立つ」という指示と絵が食い違って、生成側が迷う。 */
+  const lw = Math.max(1, FRAME_W*DW), pad = opt.frame ? lw : 0;
   const W2 = DW*WR + pad*2, H2 = Math.max((n+m)*SY, top + HR*U) + pad*2;
 
   cv.width = Math.round(W2*ss); cv.height = Math.round(H2*ss);
@@ -485,12 +487,16 @@ function buildSheet(ss, guide, order){
 }
 
 /* シート殻とその切り出し位置を取り出す口（保存ボタンと同じ中身を返す） */
-/* カスタム装飾品(名物・一点物)用の殻。1マスぶんの枠だけを1枚にする。
-   形は決まっていないので、殻にはダミーの箱を立てておく。菱形だけだと幾何ごと外れる
-   （2026-08 の屏風で稜線が 1.24 になった。他の7体は 0.50〜0.53） */
+/* カスタム装飾品(名物・一点物)用の殻。1体ずつ発注するので、セルを仕切る枠は要らない。
+   キャンバスそのものが枠。菱形の手前角はキャンバスの下端に接する(pad=0)。
+   焼き込みは「枠＝画像全体」として扱う(cells の frame:false)。 */
 window.__customPNG = (k) => {
-  const out = buildSheet(+$('sh_ss').value, false, [k]);
-  return { png:out.cv.toDataURL('image/png'), w:out.W, h:out.H, cells:out.rects };
+  const spec = [...SLOTS, ...FREE].find(s => s.k === k);
+  if(!spec) return null;
+  const cv = document.createElement('canvas');
+  const r = drawShell(cv, spec, +$('sh_w').value/100, +$('sh_h').value/100, +$('sh_ss').value, false, null);
+  return { png:cv.toDataURL('image/png'), w:cv.width, h:cv.height,
+    cells:[{ k:spec.k, x:0, y:0, w:cv.width, h:cv.height, gy:Math.round(r.gy*10000)/10000 }] };
 };
 
 window.__sheetPNG = () => {
@@ -622,7 +628,8 @@ async function renderRoom(){
     const name = `${theme.pre}_${it.slot}`, f = FIT[name];
     const im = await load(`/assets/props/prop_${name}.png`);
     if(!im || !f) continue;
-    const [n,m] = shapeOf(name), b = block(n,m);
+    // 形は焼き込み済みなら fit が持つ。コマ数の表(FURN_SPAN)は旧290体むけで lamp が 2コマ
+    const [n,m] = f.shape || shapeOf(name), b = block(n,m);
     // block() は基準マス(0,0)で作られるので、置きたいマスぶん平行移動する
     const off = uvXY(it.c/GU, it.r/GV), org = uvXY(0,0);
     const dx = off.x-org.x, dy = off.y-org.y;
