@@ -7,13 +7,19 @@ directly on top of it, like colouring in a line drawing. Output 417x567.
 THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes shape.
 - Repaint the object INSIDE the rectangle. NOTHING crosses a cyan line. If a design does not
   fit, make it smaller, not wider.
-- The object STANDS ON THE BOTTOM LINE of the rectangle: its lowest point touches that line,
+- The object STANDS ON THE BOTTOM LINE of the rectangle: its lowest point TOUCHES that line,
   and the object is CENTRED left to right.
+- DO NOT CENTRE THE OBJECT VERTICALLY and DO NOT FLOAT IT. There must be NO magenta gap
+  between the lowest point of the object and the bottom line. Empty space belongs ABOVE the
+  object, never below it. Follow the placeholder: its lowest corner touches the line.
 - DO NOT REPAINT THE CYAN LINES, and DO NOT REPAINT THE CYAN DIAMOND on the floor. Leave them
   exactly the cyan they already are (#00E5FF). They are registration marks that a script uses
   to cut the object out, and it finds them by that exact colour. It reads the WIDTH of the
   rectangle as one floor tile, so the rectangle must stay a rectangle of the same proportions.
   Never use that cyan anywhere else in the image.
+- THE DIAMOND KEEPS ITS EXACT SIZE, SHAPE AND POSITION. Do not enlarge it, do not stretch it,
+  do not redraw it wider than it already is. Its front corner already touches the bottom line;
+  that corner is where the object's lowest point goes.
 - The magenta OUTSIDE the rectangle stays completely empty.
 
 THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW.
@@ -25,7 +31,8 @@ in. It is NOT a catalogue illustration, NOT a product shot, NOT a side view, NOT
   lower-right. Never one flat face facing the viewer.
 - You MUST SEE THE TOP FACES: the top of its base and the top of its tallest part.
 - The cyan diamond is the floor tile. The object's footprint matches it and its lowest point
-  sits on the diamond's FRONT corner.
+  sits on the diamond's FRONT corner. An object that stands at the BACK of the diamond, with
+  the floor showing in front of it, is WRONG: it will hover above its tile in the game.
 
 WHAT THIS IS: a holographic STAR MAP.
 The plain box in the shell is only a placeholder for the SIZE and the POSITION. Replace it

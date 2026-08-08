@@ -610,7 +610,9 @@ const ROOM_LAYOUT = [   // どのスロットをどのマスに置くか
   { slot:'rug',   c:2, r:7 }, { slot:'chair', c:3, r:3 }, { slot:'shelf', c:6, r:1 },
   { slot:'lamp',  c:9, r:3 }, { slot:'plant', c:10, r:6 },
   { slot:'table', c:4, r:6 }, { slot:'sofa',  c:7, r:7 },
+  { slot:'@landmark', c:1, r:1 },      // その テーマの名物(カスタム殻で1体ずつ作る物)
 ];
+const LANDMARK = { jpn:'byobu', dno:'fossil', din:'jukebox', cab:'hearth', sus:'noren', stm:'helmet' };
 const load = (src) => new Promise(res => { const im=new Image(); im.onload=()=>res(im); im.onerror=()=>res(null); im.src=src; });
 
 async function renderRoom(){
@@ -628,7 +630,9 @@ async function renderRoom(){
   }
   const items = [];
   for(const it of ROOM_LAYOUT){
-    const name = `${theme.pre}_${it.slot}`, f = FIT[name];
+    const slot = it.slot === '@landmark' ? LANDMARK[theme.pre] : it.slot;
+    if(!slot) continue;
+    const name = `${theme.pre}_${slot}`, f = FIT[name];
     const im = await load(`/assets/props/prop_${name}.png`);
     if(!im || !f) continue;
     // 形は焼き込み済みなら fit が持つ。コマ数の表(FURN_SPAN)は旧290体むけで lamp が 2コマ

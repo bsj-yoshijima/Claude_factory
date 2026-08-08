@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { CELL_W } from '../../game/scene/iso.mjs';   // 1マスの接地菱形の幅(55.65px)
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 /* スロットが床のいくつ分を占めるか。殻がこの形で描かれているので、焼き込みも同じ形で記録し、
@@ -247,8 +248,16 @@ for(const [i,fr] of frames.entries()){
     }
   /* 枠に対する物の入り方。1.00 を超えていたら線を越えている */
   const wOver=bw/(fr.bw-2*lw), below=(y1-(byFrame-1))*s;
+  /* 接地線と絵の下端の隙間。by>1.0 自体は正常(コンパクトな家具は自分の手前角がマスの
+     手前角より上に来る)だが、それはマスの奥行きに対して小さい差のはず。マスの奥行きの
+     半分近くなったら、絵が枠の下辺に接しておらず宙に浮く。
+     実測: 採用した japan 7点は rug -0% / table 9% / sofa 9% / chair 14% / shelf 17% /
+     lamp 32% / plant 31%。失敗した屏風(縦に中央寄せされた)は 57%。境目は 45% に置いた。 */
+  const [sn,sm] = SHAPE[cellK] || [1,1];
+  const gap = (byFrame - (y1+1)) * s, depth = (sn+sm)*CELL_W/4;
   rows.push(`  ${(prefix+'_'+slot).padEnd(12)} ${String(cw).padStart(3)}x${String(chh).padStart(3)}px`
     + `  枠に対する幅 ${wOver.toFixed(2)}` + (wOver>1 ? ' ⚠はみ出し' : '')
+    + `  接地線との隙間 ${(gap/depth*100).toFixed(0)}%` + (gap/depth>0.45 ? ' ⚠浮いている' : '')
     + `  枠外へ捨てた画素 ${spill>50 ? spill+' ⚠切れている' : spill}`
     + (specks ? `  孤立点 ${specks}px を除去` : ''));
 }
