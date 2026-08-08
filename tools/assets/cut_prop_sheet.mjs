@@ -100,7 +100,7 @@ function writePNG(file,w,h,rgba){
 
 const args = process.argv.slice(2);
 const [sheetFile, cellsFile, prefix] = args;
-if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率]'); process.exit(1); }
+if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--sit]'); process.exit(1); }
 const oi = args.indexOf('--out');
 const outDir = oi>=0 ? args[oi+1] : path.join(ROOT,'assets','props');
 /* カスタムの殻はセル名が形(free-1x2)なので、そのままだと prop_jpn_free-1x2.png になる。
@@ -111,6 +111,12 @@ const slotOverride = si>=0 ? args[si+1] : null;
    作り直す代わりにこの倍率で縮める。**共通7種には使わないこと**(そこは殻と
    プロンプトで揃うのが正で、係数で誤魔化すと規格が崩れる)。
    使ったら fit に scale として残るので、後から効いているのが分かる。 */
+/* --sit は接地点を「絵の最下点」に置き直す一点物むけの手当て。
+   接地線は本来 枠の下辺(gy)から出すのが正で、by>1.0(＝マスを埋め尽くさない家具)は正常。
+   だが生成側が物を枠の中で浮かせて描いてくることがあり、そのぶん奥へずれて見える。
+   露天風呂で 13px(マスの奥行きの23%)浮いていた。床を覆う物はこれが目立つ。
+   **共通7種には使わないこと**(あちらは浮きがあっても 0〜32% に収まっている)。 */
+const sit = args.includes('--sit');
 const ki = args.indexOf('--scale');
 const manualScale = ki>=0 ? Number(args[ki+1]) : 1;
 if(!(manualScale>0)) { console.log('--scale は正の数'); process.exit(1); }
@@ -265,9 +271,12 @@ for(const [i,fr] of frames.entries()){
      足元がマスより小さい家具は、自分の手前角がマスの手前角より上に来るのが正しく、
      by が 1.0 を超える。これは浮きではない。絵の最下点を接地点にすると、
      小さい家具ほど手前へ押し出されてマスからずれる。 */
-  const cxFrame=(fr.x0+fr.x1+1)/2, byFrame=fr.y0 + fr.bh*gy;   // 枠の中心x / 接地線
+  const cxFrame=(fr.x0+fr.x1+1)/2;
+  // 接地線。既定は枠の下辺(gy)。--sit なら絵の最下点をそこへ持ってくる
+  const byFrame = sit ? (y1+1) : (fr.y0 + fr.bh*gy);
   fit[`${prefix}_${slot}`] = { cx:r4(((cxFrame-x0)*s-padL)/cw), by:r4(((byFrame-y0)*s-padT)/chh),
-    px:[cw,chh], shape:SHAPE[cellK] || [1,1], ...(manualScale!==1 ? {scale:manualScale} : {}) };
+    px:[cw,chh], shape:SHAPE[cellK] || [1,1],
+    ...(manualScale!==1 ? {scale:manualScale} : {}), ...(sit ? {sit:1} : {}) };
   /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
      捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
   /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と
