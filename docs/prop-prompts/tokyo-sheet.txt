@@ -1,4 +1,4 @@
-# 添付する殻: docs/prop-shell-sheet7-1519x1127.png
+# 添付する殻: docs/shells/prop-shell-sheet7-1519x1127.png
 # 出力サイズ: 1519x1127
 # 部屋の画像は添付しない(添えるとカメラが崩れる。--room で付けられるが非推奨)
 

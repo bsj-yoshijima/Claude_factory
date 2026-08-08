@@ -1,7 +1,7 @@
-/* docs/slides.html を PDF に書き出す（docs/Claude-Factory.pdf）。
+/* docs/decks/slides.html を PDF に書き出す（docs/decks/Claude-Factory.pdf）。
 
    スライドは JS で1枚だけ .on にして見せる作りなので、そのまま印刷すると1枚しか出ない。
-   docs/slides.html 側の `@media print` が全枚数を縦並びに戻して1枚=1ページにしているので、
+   docs/decks/slides.html 側の `@media print` が全枚数を縦並びに戻して1枚=1ページにしているので、
    ここは Chrome の printToPDF を叩くだけでよい。
 
    使い方: node tools/make_slides_pdf.mjs
@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = process.env.CF_URL || 'http://127.0.0.1:4321';
-const URL_ = `${BASE.replace(/\/$/, '')}/docs/slides.html`;
+const URL_ = `${BASE.replace(/\/$/, '')}/docs/decks/slides.html`;
 const OUT = path.join(ROOT, 'docs', 'Claude-Factory.pdf');
 const CHROME = process.env.CHROME_PATH
   || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';

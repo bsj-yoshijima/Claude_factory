@@ -42,17 +42,17 @@
 **0. 型を用意する（すでにコミット済み。規格を変えたときだけ作り直す）**
 
 ```bash
-python3 tools/assets/make_machine_shell.py     # docs/mach-shell-1024.png と docs/mach-guide-1024.png
+python3 tools/assets/make_machine_shell.py     # docs/shells/mach-shell-1024.png と docs/shells/mach-guide-1024.png
 ```
 
-- `docs/mach-shell-1024.png` … **Stitch に渡す殻**。3面を単色で塗り、ホッパーと点検窓を
+- `docs/shells/mach-shell-1024.png` … **Stitch に渡す殻**。3面を単色で塗り、ホッパーと点検窓を
   「境界をぼかしたゾーン」として置いただけの絵。線は1本も引いていない。
-- `docs/mach-guide-1024.png` … **検収用**。菱形・接地線・ホッパー位置の線が焼き込んである。
+- `docs/shells/mach-guide-1024.png` … **検収用**。菱形・接地線・ホッパー位置の線が焼き込んである。
   **これを Stitch に渡してはいけない**（線ごと描き込まれる。部屋の guide と同じ事故）。
 
 **1. 1台目（ゴールデンモジュール）を作る**
 
-下の「プロンプト」の `{{...}}` を埋め、参照画像に `docs/mach-shell-1024.png` を添えて生成する。
+下の「プロンプト」の `{{...}}` を埋め、参照画像に `docs/shells/mach-shell-1024.png` を添えて生成する。
 **ここだけは検収に通るまで作り直す。**後続すべての基準になる。
 
 > Stitch MCP は `generate_screen_from_text` に画像を添えられない。参照画像を使う発注は
@@ -73,8 +73,9 @@ python3 tools/assets/make_machine_shell.py     # docs/mach-shell-1024.png と do
 `=s0` を付けた downloadUrl で原寸を取得し、`assets/mach-sheets/_module_<theme>.png` に保存。
 
 > ⚠️ `.gitignore` の `_*` で **モジュール原画は git に入らない**（既存32枚も手元にしか無い）。
-> 部屋のゴールデンルームは `docs/room-golden-1376x768.png` としてコミットしてあるので、
-> **1台目のゴールデンモジュールだけは `docs/mach-golden-1024.png` にも複製してコミットする**。
+> だから **1台目のゴールデンモジュールだけは `docs/shells/mach-golden-1024.png` に複製してコミットする**。
+> （部屋の方は「ゴールデンルームもコミットしてある」と書いてあったが、そのファイルは
+> 一度も存在しない。部屋は `docs/shells/room-shell-1376x768.png` の殻だけが正。）
 > これが無いと、後続テーマの参照画像を失って型が再現できなくなる。
 
 ```bash

@@ -1,4 +1,4 @@
-# 添付1枚目(塗り替える殻): docs/prop-shell-sheet7-1519x1127.png
+# 添付1枚目(塗り替える殻): docs/shells/prop-shell-sheet7-1519x1127.png
 # 添付2枚目(テーマの参照): assets/rooms/room-halloween.png
 # 出力サイズ: 1519x1127
 

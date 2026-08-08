@@ -33,10 +33,10 @@
 
 | ファイル | 中身 |
 |---|---|
-| `docs/prop-shell-sheet7-1519x1127.png` | 標準セット7種を1枚。chair/shelf/lamp/plant（1×1）+ table/sofa/rug（1×2） |
-| `docs/prop-shell-custom-1x1-372x499.png` | カスタム1体（1マス）。ダミーの四角が高さと接地面の手本 |
-| `docs/prop-shell-custom-1x2-423x567.png` | 同（細長い） |
-| `docs/prop-shell-custom-2x2-617x617.png` | 同（大きい） |
+| `docs/shells/prop-shell-sheet7-1519x1127.png` | 標準セット7種を1枚。chair/shelf/lamp/plant（1×1）+ table/sofa/rug（1×2） |
+| `docs/shells/prop-shell-custom-1x1-372x499.png` | カスタム1体（1マス）。ダミーの四角が高さと接地面の手本 |
+| `docs/shells/prop-shell-custom-1x2-423x567.png` | 同（細長い） |
+| `docs/shells/prop-shell-custom-2x2-617x617.png` | 同（大きい） |
 
 `.json` が対になっていて、焼き込みが並び順と接地線の位置（`gy`）を読む。
 
@@ -47,7 +47,7 @@
 ```
 1. docs/prop-prompts/<theme>-sheet.txt の本文を Stitch に貼り、殻を1枚添付して生成
 2. 出てきた画像を保存
-3. node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/prop-shell-sheet7-1519x1127.json <prefix>
+3. node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/shells/prop-shell-sheet7-1519x1127.json <prefix>
 4. _contact-<prefix>.png を目で見る（数値だけで判断しない）
 5. prop-fit-<prefix>.json を assets/props/prop-fit.json へ baked:1 付きで統合
 ```

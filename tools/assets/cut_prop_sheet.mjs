@@ -3,7 +3,7 @@
 
      node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR]
 
-   例: node tools/assets/cut_prop_sheet.mjs ~/Downloads/jpn.png docs/prop-shell-sheet7-1519x1127.json jpn
+   例: node tools/assets/cut_prop_sheet.mjs ~/Downloads/jpn.png docs/shells/prop-shell-sheet7-1519x1127.json jpn
 
 なぜ枠を基準にするか:
   生成物は殻と同じ寸法では返らず（1519x1127 で頼んでも別サイズで返る）、並びも少し動く。

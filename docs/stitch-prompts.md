@@ -66,7 +66,7 @@ Empty clear floor, same size as reference rooms, dark void margins in corners.
 ### サイズ検証（2026-08 更新: 基準は arabia ではなく ISO 定数）
 - 現在のグリッドは `game/scene/iso.mjs` の `ISO`（軸対称・画像中心揃え・OFF=0）が唯一の基準。
   旧記載の「arabia 基準 + OFF_U=0.577/OFF_V=0.851」は廃止済みで、既存のテーマ部屋は現行グリッドとずれている。
-- 生成時は `docs/room-guide-1376x768.png`（規格の床ダイヤ 12×12・壁立ち上げを描いた下絵）を参照画像として渡す。
+- 生成時は `docs/shells/room-guide-1376x768.png`（規格の床ダイヤ 12×12・壁立ち上げを描いた下絵）を参照画像として渡す。
   床は 12×12 マス（ゲームの論理マスと同一。旧背景の床絵は11列分しかないが旧デザインとして無視）。
   **床は厚み25pxの板**として描き、規定ダイヤは「上面」＝物が立つ面。厚みは上面の下に出す
   （画像下端まで44pxあるので収まる）。壁の上端も10pxの天面を持つ。既存32枚の実測は21〜37px。
@@ -114,10 +114,10 @@ npm run dev
 
 **1. Stitch に渡す参照画像を用意する**
 
-`docs/room-shell-1376x768.png` を使う。**これは既にコミットされているので、作り直す必要はない**。
+`docs/shells/room-shell-1376x768.png` を使う。**これは既にコミットされているので、作り直す必要はない**。
 壁2面と床を単色で塗った「部屋の殻」で、床の12×12の目地だけ入っている。
 
-> ⚠️ `docs/room-guide-1376x768.png` を Stitch に渡してはいけない。こちらは**検収用**で、
+> ⚠️ `docs/shells/room-guide-1376x768.png` を Stitch に渡してはいけない。こちらは**検収用**で、
 > ピンク/金の線と座標ラベルが焼き込まれている。渡すとモデルがその線や日本語ごと
 > 部屋の中に描いてしまう。
 >
@@ -1040,7 +1040,7 @@ Palette: rust brown, copper, gunmetal grey, warm ochre, dark chocolate.
 
 ### 記入例: arabia（1部屋目・そのまま貼れる完成形）
 
-参照画像に `docs/room-shell-1376x768.png` を添えて、これをそのまま投げる。
+参照画像に `docs/shells/room-shell-1376x768.png` を添えて、これをそのまま投げる。
 
 ```
 Repaint THIS EXACT room shell with a new theme. Output 1376x768.
@@ -1145,7 +1145,7 @@ IMPORTANT: no characters, no people, no floor objects, no text, no UI.
 | | 部屋背景 | 製造機 | 装飾品 |
 |---|---|---|---|
 | 型を作る | `tools/preview/guide.html` | `tools/assets/make_machine_shell.py` | `tools/preview/props.html` の「🧱 殻」 |
-| Stitch に渡す殻 | `docs/room-shell-1376x768.png` | `docs/mach-shell-1024.png` | `docs/prop-shell-sheet7-1519x1127.png` ほか |
+| Stitch に渡す殻 | `docs/shells/room-shell-1376x768.png` | `docs/shells/mach-shell-1024.png` | `docs/shells/prop-shell-sheet7-1519x1127.png` ほか |
 | 発注文 | 同ファイル内 | `docs/machine-sprite-prompt.md` | `docs/prop-prompts/<theme>-sheet.txt` |
 | 検収 | `tools/preview/guide.html` に重ねる | `tools/assets/check_machine_module.py` | `tools/preview/props.html` ＋ 焼き込みの `_contact-*.png` |
 | 焼き込み | なし（そのまま使う） | `tools/assets/cut_machines.py` | `tools/assets/cut_prop_sheet.mjs` |

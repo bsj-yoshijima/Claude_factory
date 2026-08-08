@@ -1,4 +1,4 @@
-# 添付する殻: docs/prop-shell-custom-1x1-372x499.png
+# 添付する殻: docs/shells/prop-shell-custom-1x1-372x499.png
 # 出力サイズ: 372x499
 
 REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object. Paint your theme

@@ -155,7 +155,7 @@ const THEMES = {
    7点シートに統合した時点で殻ごと消したため、参照先が無い prompt を吐いていた。
    いま作れるのは --sheet(共通7種) と --custom(名物1体) の2つ。 */
 
-/* シート版。8体を1枚に並べた殻(docs/prop-shell-sheet7-1519x1127.png)に対して発注する。
+/* シート版。8体を1枚に並べた殻(docs/shells/prop-shell-sheet7-1519x1127.png)に対して発注する。
    1体版と同じ強さのカメラ規則を、8体すべてに効かせるのが要点。 */
 /* 全テーマ共通で作るのはこの7種。名物だけは物ごとに特徴も大きさも違うので都度単体で。 */
 const SHEET_ORDER = ['chair','shelf','lamp','plant','table','sofa','rug'];
@@ -350,7 +350,7 @@ if(ci >= 0){
   const shape = args[ci+1];
   const oi2 = args.indexOf('--object');
   const text = buildCustom(theme, shape, oi2>=0 ? args[oi2+1] : null);
-  const head = `# 添付する殻: docs/${CUSTOM_SHELL[shape].file}\n# 出力サイズ: ${CUSTOM_SHELL[shape].size}\n\n`;
+  const head = `# 添付する殻: docs/shells/${CUSTOM_SHELL[shape].file}\n# 出力サイズ: ${CUSTOM_SHELL[shape].size}\n\n`;
   if(outDir){ const p2=path.join(outDir, `${theme}-custom-${shape}.txt`); fs.writeFileSync(p2, head+text); console.log(p2); }
   else console.log(text);
   process.exit(0);
@@ -373,8 +373,8 @@ in the same places.
 REPAINT THE FIRST IMAGE.`);
   }
   const head = noRoom
-    ? `# 添付する殻: docs/prop-shell-sheet7-1519x1127.png\n# 出力サイズ: 1519x1127\n# 部屋の画像は添付しない(添えるとカメラが崩れる。--room で付けられるが非推奨)\n\n`
-    : `# 添付1枚目(塗り替える殻): docs/prop-shell-sheet7-1519x1127.png\n# 添付2枚目(テーマの参照): assets/rooms/room-${ROOM[theme]||theme}.png\n# 出力サイズ: 1519x1127\n\n`;
+    ? `# 添付する殻: docs/shells/prop-shell-sheet7-1519x1127.png\n# 出力サイズ: 1519x1127\n# 部屋の画像は添付しない(添えるとカメラが崩れる。--room で付けられるが非推奨)\n\n`
+    : `# 添付1枚目(塗り替える殻): docs/shells/prop-shell-sheet7-1519x1127.png\n# 添付2枚目(テーマの参照): assets/rooms/room-${ROOM[theme]||theme}.png\n# 出力サイズ: 1519x1127\n\n`;
   /* --room 版は別名で出す。同じ名前に書いていたので、再生成のループを回すと
      標準版が部屋参照版で上書きされていた(実際に踏んだ)。 */
   if(outDir){ const f = path.join(outDir, `${theme}-sheet${noRoom?'':'-room'}.txt`); fs.writeFileSync(f, head+text); console.log(f); }

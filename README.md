@@ -247,11 +247,14 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 | `tools/assets/cut_props.py` | シートから1体ずつ切り出し、背景と接地影を抜いて `assets/prop-src/` を作る |
 | `tools/assets/fit_props.py` | 原寸版をゲーム内の表示サイズへ縮小して `assets/props/prop_*.png` を作る |
 | `docs/archive/index.html` / `docs/archive/machine-concepts.html` | 初期のシンプル版（カードUI）／機械のコンセプトボード |
-| `docs/proposal.html` | **企画書（現行）**。1枚もので画像を焼き込んであるので単体で配れる。数値は実装から拾っているので、経済バランスや素材数を変えたら直す |
-| `docs/slides.html` / `docs/Claude-Factory.pdf` | **発表スライド（現行・全10枚）**。← → で移動。PDFは印刷CSSからの書き出しで、`tools/make_slides_pdf.mjs` で作り直せる |
+| `docs/decks/proposal.html` | **企画書（現行）**。1枚もので画像を焼き込んであるので単体で配れる。数値は実装から拾っているので、経済バランスや素材数を変えたら直す |
+| `docs/decks/slides.html` / `docs/decks/Claude-Factory.pdf` | **発表スライド（現行・全10枚）**。← → で移動。PDFは印刷CSSからの書き出しで、`tools/make_slides_pdf.mjs` で作り直せる |
 | `tools/preview/rooms.html` | 素材ビューア。背景32にグリッドと床の規定枠を重ねて規格ずれを見る／製造機・プロップ・被り物・オブジェクトをタブで一覧（`http://localhost:4321/tools/preview/rooms.html`。表示専用） |
 | `docs/archive/proposal.html` / `docs/archive/slides.html` / `docs/archive/slides-en.html` / `docs/archive/Claude-Factory.pdf` | 旧企画書（2026-07-08 ハッカソン版。`~/.claude/sessions` を読む単一ユーザーのダッシュボードだった頃）・発表スライド |
+| `docs/README.md` | **docs/ の索引**。どの資料がどこにあるか、絵の発注はどれを読むか |
+| `docs/shells/` | 絵を発注するときに添付する殻（下絵）。部屋・製造機・装飾品ぶん |
 | `docs/machine-sprite-prompt.md` | 製造機スプライトを Stitch に依頼するテンプレ（向きをピクセル送りで数値指定する。文章だと横一列で返ってくる） |
+| `docs/prop-sprite-prompt.md` / `docs/prop-prompts/` | 装飾品の規格と失敗の記録 ／ 31テーマ×5種の発注プロンプト（生成済み。そのまま貼れる） |
 | `tools/assets/cut_machines.py` | 製造機シートから**2マス機の絵だけを正**として3/4/5マス機を合成し、表示サイズへ縮小＋投入口のアンカーを書き出す（`python3 tools/assets/cut_machines.py`） |
 | `tools/assets/mach_axis.mjs` | 製造機スプライトの長軸が全テーマ `+u`（右斜め下）を向いているか検査する（`node tools/assets/mach_axis.mjs`／`--fix` で左右反転して揃える）。逆向きの絵は**影・占有マス・素材アイコンが正しい向きなのに本体だけ直交して見える**。`test/test_machines.mjs` から呼ばれる |
 | `tools/assets/make_favicon.mjs` | ファビコン（工場＋左下にClaude君）を描いて `assets/ui/favicon.png` / `favicon-192.png` を出す（`node tools/assets/make_favicon.mjs`。依存ゼロ。Claude君は `mascotCanvas()` の手順を移植したものなので、マスコットの形を変えたら再実行する） |
