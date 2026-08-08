@@ -55,11 +55,16 @@ export const Edit = {
         if(window.__layoutChanged) window.__layoutChanged();
         this._drawHover(this.input.activePointer); return; }
       /* 設置済みの装飾品の上でRを押したらその物を回す。装飾品には設定パネルが無いので、
-         これが回転の入口になる(製造機はパネルの「移動」→R)。 */
+         これが回転の入口になる(製造機はパネルの「移動」→R)。
+         見ている絵を先に拾う。床のマスから引くだけだと、背の高い物(屏風・ランプ)は
+         絵が自分のマスよりずっと上に描かれるので、絵を指しているのにカーソル下の床は
+         2〜3マス奥の別マスになり、Rが空振りして「向き」の切替に落ちていた。
+         pointerdown が製造機で同じ手(over[0]._e)を使っている。 */
       const po=this.input.activePointer;
       if(po){ const uv=screenToIso(po.x,po.y);
         const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
-        const at=this.entryAtCell(c,r);
+        const hit=this.input.hitTestPointer(po).find(o=>o&&o._e&&o._e.kind==='prop');
+        const at=(hit&&hit._e) || this.entryAtCell(c,r);
         if(at && at.kind==='prop'){
           if(!this.rotateProp(at.id)){ if(window.__toast) window.__toast('回した先に空きがありません'); return; }
           if(window.__layoutChanged) window.__layoutChanged();
