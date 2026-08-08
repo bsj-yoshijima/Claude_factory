@@ -12,9 +12,9 @@
 |---|---|---|
 | `<theme>-sheet.txt` | **これが標準。** 全テーマ共通の7種を1枚で発注 | `docs/prop-shell-sheet7-1519x1127.png` |
 | `<theme>-sheet-room.txt` | 上と同じだが、部屋の絵をテーマの参照として2枚目に添える版 | 同上 ＋ `assets/rooms/room-<theme>.png` |
-| `<theme>-custom-1x1.txt` | 名物・一点物（床1マス） | `docs/prop-shell-custom-1x1-278x499.png` |
-| `<theme>-custom-1x2.txt` | 同（細長い物） | `docs/prop-shell-custom-1x2-417x567.png` |
-| `<theme>-custom-2x2.txt` | 同（大きい物） | `docs/prop-shell-custom-2x2-557x617.png` |
+| `<theme>-custom-1x1.txt` | 名物・一点物（床1マス） | `docs/prop-shell-custom-1x1-373x499.png` |
+| `<theme>-custom-1x2.txt` | 同（細長い物） | `docs/prop-shell-custom-1x2-423x567.png` |
+| `<theme>-custom-2x2.txt` | 同（大きい物） | `docs/prop-shell-custom-2x2-617x617.png` |
 
 共通の7種は **chair / shelf / lamp / plant（1×1）と table / sofa / rug（1×2）**。
 名物は物ごとに特徴も大きさも違うので、共通シートには入れず1体ずつ発注する。
@@ -50,7 +50,7 @@ node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/prop-shell-sheet7-1519
 カスタムは殻のJSONを渡し、`--slot` でその物の名前を付ける（付けないと `free-1x2` になる）:
 
 ```
-node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/prop-shell-custom-1x2-417x567.json jpn --slot byobu
+node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/prop-shell-custom-1x2-423x567.json jpn --slot byobu
 ```
 
 `prefix` はテーマの3文字（japan なら `jpn`。対応は `game/scene/catalog.mjs` の `PROP_NAMES`）。

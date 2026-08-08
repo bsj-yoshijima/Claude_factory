@@ -1,8 +1,8 @@
-# 添付する殻: docs/prop-shell-custom-2x2-557x617.png
-# 出力サイズ: 557x617
+# 添付する殻: docs/prop-shell-custom-2x2-617x617.png
+# 出力サイズ: 617x617
 
 REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object. Paint your theme
-directly on top of it, like colouring in a line drawing. Output 557x617.
+directly on top of it, like colouring in a line drawing. Output 617x617.
 
 THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes shape.
 - Repaint the object INSIDE the rectangle. NOTHING crosses a cyan line. If a design does not
@@ -14,9 +14,11 @@ THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes 
   object, never below it. Follow the placeholder: its lowest corner touches the line.
 - DO NOT REPAINT THE CYAN LINES, and DO NOT REPAINT THE CYAN DIAMOND on the floor. Leave them
   exactly the cyan they already are (#00E5FF). They are registration marks that a script uses
-  to cut the object out, and it finds them by that exact colour. It reads the WIDTH of the
-  rectangle as one floor tile, so the rectangle must stay a rectangle of the same proportions.
-  Never use that cyan anywhere else in the image.
+  to cut the object out, and it finds them by that exact colour. It works out the scale from
+  the WIDTH of the rectangle, so THE RECTANGLE MUST KEEP ITS PROPORTIONS: same width against
+  height as in the shell. Never use that cyan anywhere else in the image.
+- THE MAGENTA BAND AROUND THE RECTANGLE IS PART OF THE SHELL. Keep it. Do not grow the
+  rectangle to fill the image, and do not crop the band away.
 - THE DIAMOND KEEPS ITS EXACT SIZE, SHAPE AND POSITION. Do not enlarge it, do not stretch it,
   do not redraw it wider than it already is. Its front corner already touches the bottom line;
   that corner is where the object's lowest point goes.
