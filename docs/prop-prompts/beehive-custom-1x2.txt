@@ -22,6 +22,14 @@ THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes 
   that corner is where the object's lowest point goes.
 - The magenta OUTSIDE the rectangle stays completely empty.
 
+THE NUMBERS. Measure them against the image; they are not approximations.
+- The CONTACT POINT of the object (its lowest pixel, on the centre line) sits at
+  50.0% across and 97.0% down from the top of the image.
+- The FOOTPRINT is 78.9% of the image width and 29.4% of its height. That is the cyan
+  diamond, and it is a true 2:1 diamond. Nothing that touches the floor is wider than it.
+- Parts that do not touch the floor may overhang a little (a tail, foliage, a roof), but the
+  overhang stays inside the cyan rectangle.
+
 THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW.
 This is a game object seen from the same overhead isometric camera as the room it will stand
 in. It is NOT a catalogue illustration, NOT a product shot, NOT a side view, NOT an elevation.

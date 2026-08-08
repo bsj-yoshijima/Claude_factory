@@ -16,6 +16,10 @@
 */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { CELL_W } from '../../game/scene/iso.mjs';   // 1マスの接地菱形の幅(55.65px)
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /* スロット。size は殻の発注サイズ、shell は添付する殻のファイル名。
    top は「必ず見えていなければならない上面」。正面図で描かれると成立しないものを具体名で挙げる。 */
@@ -271,11 +275,23 @@ const CUSTOM_SHELL = {
   '1x2': { file:'prop-shell-custom-1x2-423x567.png', size:'423x567' },
   '2x2': { file:'prop-shell-custom-2x2-617x617.png', size:'617x617' },
 };
+/* 殻から「どこに何%で描くか」を出す。部屋のプロンプトが同じやり方(床は画像幅の65%…)で
+   効いているので、1体だけのカスタムでも数字で言う。言葉だけの「中央に・下辺に」より、
+   検算できる指示の方が強い。数字は殻のJSONから導くので、殻を作り直せば自動で追従する。 */
+const shellNumbers = (shape) => {
+  const sh = CUSTOM_SHELL[shape];
+  const j = JSON.parse(fs.readFileSync(path.join(ROOT,'docs','shells',sh.file.replace(/\.png$/,'.json')),'utf8'));
+  const [n,m] = shape.split('x').map(Number);
+  const [W,H] = j.sheet, dw = (n+m)*CELL_W/2*j.scale;
+  return { w:(dw/W*100).toFixed(1), h:(dw/2/H*100).toFixed(1), gy:(j.cells[0].gy*100).toFixed(1) };
+};
+
 const buildCustom = (themeKey, shape, object) => {
   const t = THEMES[themeKey], sh = CUSTOM_SHELL[shape];
   if(!t) throw new Error(`未知のテーマ: ${themeKey}`);
   if(!sh) throw new Error(`形は 1x1 / 1x2 / 2x2 のどれか: ${shape}`);
   const what = object || t.landmark;
+  const num = { ...shellNumbers(shape), w0:'50.0%' };
   return `REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object. Paint your theme
 directly on top of it, like colouring in a line drawing. Output ${sh.size}.
 
@@ -296,6 +312,14 @@ THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes 
   do not redraw it wider than it already is. Its front corner already touches the bottom line;
   that corner is where the object's lowest point goes.
 - The magenta OUTSIDE the rectangle stays completely empty.
+
+THE NUMBERS. Measure them against the image; they are not approximations.
+- The CONTACT POINT of the object (its lowest pixel, on the centre line) sits at
+  ${num.w0} across and ${num.gy}% down from the top of the image.
+- The FOOTPRINT is ${num.w}% of the image width and ${num.h}% of its height. That is the cyan
+  diamond, and it is a true 2:1 diamond. Nothing that touches the floor is wider than it.
+- Parts that do not touch the floor may overhang a little (a tail, foliage, a roof), but the
+  overhang stays inside the cyan rectangle.
 
 THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW.
 This is a game object seen from the same overhead isometric camera as the room it will stand
