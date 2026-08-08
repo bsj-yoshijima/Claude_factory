@@ -35,19 +35,23 @@ const SHAPE = { chair:[1,1], shelf:[1,1], lamp:[1,1], plant:[1,1],
                 table:[1,2], sofa:[1,2], rug:[1,2],
                 'free-1x1':[1,1], 'free-1x2':[1,2], 'free-2x2':[2,2] };
 /* 枠・菱形(シアン)と背景(マゼンタ)の判定。
-   厳しめ(isMark/isMag)は「どこに枠があるか」を探すため。
-   落とすときは緩め(killMark/killMag)を使う。線の縁にはマゼンタとシアンの中間色が
-   1〜2px出ていて、厳しい判定だとそれが物として残り、切り抜きの縁にシアンのノイズになる。
-   この2色は「絵に使うな」とプロンプトで禁じてあるので、緩く落として構わない。 */
-const isMark = (c)=> c[1]>110 && c[2]>140 && c[1]-c[0]>55 && c[2]-c[0]>55;
+   シアンは「色で落とす」のをやめた。以前は青緑寄りの画素を全部落としていたが、
+   それだと**淡い水色を使った物が消える**（onsen の露天風呂で湯が丸ごと消えた。
+   湯 rgb(207,238,240) は枠を探す厳しい判定には掛からないのに、落とす緩い判定には掛かる）。
+   ice / undersea など水色を使うテーマでも同じことが起きる。
+   いまは「純粋なシアンの画素の集まり」をマスクにして、その数px外側までを落とす。
+   線の縁のマゼンタとの中間色は、この膨張ぶんで一緒に消える。
+   マゼンタは背景全面なので従来どおり色で落とす。 */
+/* 印のシアンは #00E5FF、つまり**赤が0**。赤が高い水色は絵の側の色なので除く。
+   これが無いと onsen の湯 rgb(175,241,231) が印と判定されて丸ごと消えた
+   (差は1ポイント: 231-175=56 に対してしきい値55)。実測した枠の芯は赤 7〜20。 */
+const isMark = (c)=> c[0]<120 && c[1]>110 && c[2]>140 && c[1]-c[0]>55 && c[2]-c[0]>55;
 const isMag  = (c)=> c[0]>170 && c[1]<110 && c[2]>170 && c[0]-c[1]>60 && c[2]-c[1]>60;
-const killMark=(c)=> c[2]>90 && c[1]-c[0]>18 && c[2]-c[0]>18;              // 青緑に寄った画素
 const killMag =(c)=> c[0]>120 && c[2]>120 && c[0]-c[1]>45 && c[2]-c[1]>45; // 赤紫に寄った画素
+const cyanish=(c)=> c[2]>90 && c[1]-c[0]>18 && c[2]-c[0]>18;              // 青緑に寄った画素
 /* シアン(0,229,255)とマゼンタ(255,0,255)の中間色。線の縁に1〜2px出る。
-   どちらの判定にも当たらないので、これを入れないと物と誤認して切り出しが枠いっぱいに広がる。
-   青が支配的で、赤+緑が低い、が中間色の特徴。家具の色(木・畳・藍)はここに入らない。 */
+   青が支配的で赤+緑が低い。これを落とさないと枠の縁が物として残り、切り出しが枠まで広がる。 */
 const isBlend=(c)=> c[2]>190 && c[2]>=c[0]-10 && c[2]>=c[1]-10 && (c[0]+c[1])<340;
-const isBg = (c)=> killMark(c) || killMag(c) || isBlend(c);
 
 function readPNG(file){
   const b = fs.readFileSync(file);
@@ -91,18 +95,40 @@ function writePNG(file,w,h,rgba){
 
 const args = process.argv.slice(2);
 const [sheetFile, cellsFile, prefix] = args;
-if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前]'); process.exit(1); }
+if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率]'); process.exit(1); }
 const oi = args.indexOf('--out');
 const outDir = oi>=0 ? args[oi+1] : path.join(ROOT,'assets','props');
 /* カスタムの殻はセル名が形(free-1x2)なので、そのままだと prop_jpn_free-1x2.png になる。
    --slot でその物の名前(byobu など)に差し替える。 */
 const si = args.indexOf('--slot');
 const slotOverride = si>=0 ? args[si+1] : null;
+/* --scale は一点物の救済用の手動係数。生成物が枠に対して大きすぎるとき、
+   作り直す代わりにこの倍率で縮める。**共通7種には使わないこと**(そこは殻と
+   プロンプトで揃うのが正で、係数で誤魔化すと規格が崩れる)。
+   使ったら fit に scale として残るので、後から効いているのが分かる。 */
+const ki = args.indexOf('--scale');
+const manualScale = ki>=0 ? Number(args[ki+1]) : 1;
+if(!(manualScale>0)) { console.log('--scale は正の数'); process.exit(1); }
 fs.mkdirSync(outDir, { recursive:true });
 
 const sh = readPNG(sheetFile);
 const spec = JSON.parse(fs.readFileSync(cellsFile,'utf8'));
 const get=(x,y)=>{const i=(y*sh.w+x)*sh.ch; return [sh.px[i],sh.px[i+1],sh.px[i+2]];};
+
+/* シアンの印(枠と菱形)のマスク。純粋なシアンの画素と、その数px以内にある青緑寄りの画素
+   (＝線の縁の中間色)だけを落とす。「青緑なら全部落とす」ではないので、印から離れた所に
+   ある淡い水色(湯・氷・海)は残る。逆に、印の近くでも青緑でない画素(木の脚など)は
+   落とさない。膨張だけで落とすと線に触れた絵の下端が削れて、物が数%浮いた。 */
+const D = Math.max(3, Math.round(sh.w*0.004));
+const markPx = new Uint8Array(sh.w*sh.h);
+for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++) if(isMark(get(x,y))) markPx[y*sh.w+x]=1;
+const markD = new Uint8Array(sh.w*sh.h);
+for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++){
+  if(!markPx[y*sh.w+x]) continue;
+  for(let dy=-D;dy<=D;dy++){ const ny=y+dy; if(ny<0||ny>=sh.h) continue;
+    for(let dx=-D;dx<=D;dx++){ const nx=x+dx; if(nx<0||nx>=sh.w) continue; markD[ny*sh.w+nx]=1; } }
+}
+const isBg = (x,y,c)=> markPx[y*sh.w+x] || (markD[y*sh.w+x] && (cyanish(c)||isBlend(c))) || killMag(c);
 
 /* シアンの連結成分を拾う。枠と菱形の見分けは次のブロックでやる */
 const seen=new Uint8Array(sh.w*sh.h), comps=[];
@@ -149,7 +175,7 @@ for(const [i,fr] of frames.entries()){
   const slot = (slotOverride && frames.length===1) ? slotOverride : cellK;
   const cell = spec.cells[i];
   const gameW = cell ? cell.w/spec.scale : 64;          // その枠がゲーム内で何pxになるか
-  const s = gameW / fr.bw;                              // 枠の幅を合わせる倍率
+  const s = gameW / fr.bw * manualScale;                // 枠の幅を合わせる倍率(--scale で手動補正)
 
   const lw = Math.max(2, Math.round(fr.bw*0.06));
   /* 探す範囲は枠の外接矩形まで(線の帯も含める)。線の内側だけに限ると、線に触れた部分が
@@ -159,7 +185,7 @@ for(const [i,fr] of frames.entries()){
   const inOther=(x,y)=>frames.some(o=>o!==fr && x>=o.x0 && x<=o.x1 && y>=o.y0 && y<=o.y1);
   let x0=ix1, x1=ix0, y0=iy1, y1=iy0, any=false;
   for(let y=iy0;y<=iy1;y++) for(let x=ix0;x<=ix1;x++){
-    const c=get(x,y); if(isBg(c) || inOther(x,y)) continue;
+    const c=get(x,y); if(isBg(x,y,c) || inOther(x,y)) continue;
     any=true; if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
   }
   if(!any){ console.log(`  ${slot}: 中身が空 → スキップ`); continue; }
@@ -171,7 +197,7 @@ for(const [i,fr] of frames.entries()){
     for(let y=Math.floor(y0+oy/s); y<Math.min(y1+1, Math.ceil(y0+(oy+1)/s)); y++)
       for(let x=Math.floor(x0+ox/s); x<Math.min(x1+1, Math.ceil(x0+(ox+1)/s)); x++){
         const c=get(x,y); tot++;
-        if(isBg(c) || inOther(x,y)) continue;
+        if(isBg(x,y,c) || inOther(x,y)) continue;
         r+=c[0]; g+=c[1]; b+=c[2]; a++;
       }
     const o=(oy*ow+ox)*4;
@@ -231,7 +257,7 @@ for(const [i,fr] of frames.entries()){
      小さい家具ほど手前へ押し出されてマスからずれる。 */
   const cxFrame=(fr.x0+fr.x1+1)/2, byFrame=fr.y0 + fr.bh*gy;   // 枠の中心x / 接地線
   fit[`${prefix}_${slot}`] = { cx:r4(((cxFrame-x0)*s-padL)/cw), by:r4(((byFrame-y0)*s-padT)/chh),
-    px:[cw,chh], shape:SHAPE[cellK] || [1,1] };
+    px:[cw,chh], shape:SHAPE[cellK] || [1,1], ...(manualScale!==1 ? {scale:manualScale} : {}) };
   /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
      捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
   /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と
@@ -249,7 +275,7 @@ for(const [i,fr] of frames.entries()){
       if(frames.some(o=>{ if(o===fr) return false;
         const m=Math.max(4, Math.round(o.bw*0.06*1.5));
         return x>=o.x0-m && x<=o.x1+m && y>=o.y0-m && y<=o.y1+m; })) continue;
-      const c=get(x,y); if(!isBg(c)) spill++;
+      const c=get(x,y); if(!isBg(x,y,c)) spill++;
     }
   /* 枠に対する物の入り方。1.00 を超えていたら線を越えている。
      ただし枠が足元より広い殻(カスタム)ではこれが緩くなるので、
