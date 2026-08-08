@@ -121,10 +121,13 @@ console.log('\n=== 中心ズレの大きかった個体 ===');
 for(const name of ['tky_lamp','cab_lamp','lantern','stm_shelf']){
   const f = FIT[name]; if(!f) continue;
   const o = scene.propImage({ kind:'prop', variant:name, cell:{c:3, r:4} });
-  const [nn,mm] = propShape(name), b = blockIso(3, 4, nn, mm), R = rect(o);
+  /* 形は焼き込み済みなら fit が持つ。コマ数の表(propShape)は旧290体むけで lamp が 1×2。
+     テーマを焼き込むとその表と食い違い、別の大きさのブロックで判定してしまう
+     (tokyo を焼いたときに tky_lamp がこれで落ちた。ゲーム側は既に fit.shape を見ている)。 */
+  const [nn,mm] = f.shape || propShape(name), b = blockIso(3, 4, nn, mm), R = rect(o);
   const off = Math.abs(R.x0 + f.cx*R.w - (b.back.x+b.front.x)/2);
-  const wasOff = Math.abs(f.cx - (f.left + f.w/2)) / f.w * 100;
-  ok(off < EPS, `${name}: 足元の中心がマス中心に乗る (旧規格では bbox 中心から ${wasOff.toFixed(0)}% ずれていた)`);
+  const wasOff = f.left!=null ? (Math.abs(f.cx - (f.left + f.w/2)) / f.w * 100).toFixed(0)+'%' : '焼き込み済み';
+  ok(off < EPS, `${name}: 足元の中心がマス中心に乗る (旧規格では bbox 中心から ${wasOff} ずれていた)`);
 }
 
 
