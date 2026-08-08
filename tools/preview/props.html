@@ -634,7 +634,7 @@ const ROOM_LAYOUT = [   // どのスロットをどのマスに置くか
   { slot:'table', c:4, r:6 }, { slot:'sofa',  c:7, r:7 },
   { slot:'@landmark', c:1, r:1 },      // その テーマの名物(カスタム殻で1体ずつ作る物)
 ];
-const LANDMARK = { jpn:'byobu', dno:'fossil', din:'jukebox', cab:'hearth', sus:'noren', stm:'helmet' };
+const LANDMARK = { jpn:'byobu', dno:'fossil', din:'jukebox', cab:'hearth', sus:'noren', stm:'helmet', ons:'rotenburo' };
 const load = (src) => new Promise(res => { const im=new Image(); im.onload=()=>res(im); im.onerror=()=>res(null); im.src=src; });
 
 async function renderRoom(){
@@ -671,7 +671,7 @@ async function renderRoom(){
 }
 {
   /* 焼き込み済み(baked)の絵があるテーマだけ出す */
-  const PRE2ROOM = { jpn:'japan', sus:'sushi', stm:'steampunk', din:'diner', cab:'cabin', dno:'dino' };
+  const PRE2ROOM = { jpn:'japan', sus:'sushi', stm:'steampunk', din:'diner', cab:'cabin', dno:'dino', ons:'onsen' };
   const sel = $('rm_theme');
   const pres = [...new Set(Object.entries(FIT).filter(([,v])=>v.baked).map(([k])=>k.split('_')[0]))];
   const opts = (pres.length?pres:['jpn']).map(p=>({pre:p, room:PRE2ROOM[p]||'factory'}));

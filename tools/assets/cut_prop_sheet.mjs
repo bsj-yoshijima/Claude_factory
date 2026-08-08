@@ -241,9 +241,14 @@ for(const [i,fr] of frames.entries()){
   for(let y=Math.max(0,fr.y0-band); y<=Math.min(sh.h-1,fr.y1+band); y++)
     for(let x=Math.max(0,fr.x0-band); x<=Math.min(sh.w-1,fr.x1+band); x++){
       if(x>=fr.x0-dead && x<=fr.x1+dead && y>=fr.y0-dead && y<=fr.y1+dead) continue;
-      // 隣の枠の中は数えない。枠が太い(セルが塗りつぶしになった)ときに帯が隣のセルへ
-      // 届いて、隣の物を「はみ出し」と誤検知した
-      if(frames.some(o=>o!==fr && x>=o.x0 && x<=o.x1 && y>=o.y0 && y<=o.y1)) continue;
+      /* 隣の枠の中は数えない。枠が太い(セルが塗りつぶしになった)ときに帯が隣のセルへ
+         届いて、隣の物を「はみ出し」と誤検知した。
+         外側にも隣の線幅ぶんの余白を取る: 生成側がシアンの枠のさらに外に黒い縁を
+         描いてくることがあり(onsen で実際に出た)、それが隣の枠の飾りなのに
+         こちらの「はみ出し」として数えられていた。1体あたり最大4400画素の誤検知。 */
+      if(frames.some(o=>{ if(o===fr) return false;
+        const m=Math.max(4, Math.round(o.bw*0.06*1.5));
+        return x>=o.x0-m && x<=o.x1+m && y>=o.y0-m && y<=o.y1+m; })) continue;
       const c=get(x,y); if(!isBg(c)) spill++;
     }
   /* 枠に対する物の入り方。1.00 を超えていたら線を越えている。
