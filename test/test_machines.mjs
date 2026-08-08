@@ -285,9 +285,10 @@ console.log('\n[12] 製造機の移動（掴んで置き直す）');
   F().beginMoveMachine(mv); s.removeItem(mv);
   ok(F().isMoving()===false, '掴んでいた製造機を撤去したら移動モードも解除される');
 
-  // 移動モードでなければ従来どおり製造機クリックで設定パネルが開く
+  // 編集中のクリックは「選択」。設定パネルは通常モードのクリックでだけ開く
   s.toggleEdit(true); opened=null; click(5,5);
-  ok(opened===other, '移動モード外では製造機クリックで設定パネルが開く');
+  ok(opened===null, '編集中は製造機をクリックしても設定パネルは開かない');
+  ok(s.pickId===other, '編集中の製造機クリックは選択中になる');
   s.toggleEdit(false); window.__toast=null; window.__layoutChanged=null; window.__openMachine=null;
 }
 
@@ -358,17 +359,19 @@ console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と�
   drag(dm, pt(11,7));
   ok(cellOf(dm)==='8,2', '3マスぶんが盤外へ出る先には置けない');
 
-  // -- クリック(ほぼ動かない)なら設定パネル --
-  opened=null;
+  // -- クリック(ほぼ動かない)なら選択。編集中は設定パネルを開かない --
+  opened=null; s._clearPick();
   { const e=ent(dm), a=pt(e.cell.c,e.cell.r);
     down(a.x,a.y); dstart(e.main,a.x,a.y); dmove(e.main,a.x+3,a.y+2); dend(e.main,a.x+3,a.y+2); up(a.x+3,a.y+2);
-    ok(opened===dm, 'しきい値以下の移動はクリック扱い → 設定パネルが開く');
+    ok(s.pickId===dm, 'しきい値以下の移動はクリック扱い → 選択中になる');
+    ok(opened===null, 'クリック扱いでも編集中は設定パネルを開かない');
     ok(cellOf(dm)==='8,2', 'クリック扱いのときは移動しない'); }
   opened=null; { const a=pt(5,5); down(a.x,a.y); up(a.x,a.y); }
-  ok(opened===blk, 'ドラッグせずクリックしただけでも設定パネルが開く');
+  ok(s.pickId===blk, 'ドラッグせずクリックしただけでも選択中になる');
+  ok(opened===null, 'そのときも設定パネルは開かない');
 
   // -- ゴミ箱へドロップで撤去 --
-  opened=null; const l1=layoutN, tr=s._trashRect, tp={x:tr.x+tr.width/2, y:tr.y+tr.height/2};
+  opened=null; s._clearPick(); const l1=layoutN, tr=s._trashRect, tp={x:tr.x+tr.width/2, y:tr.y+tr.height/2};
   drag(dm, tp);
   ok(ent(dm)===undefined, 'ゴミ箱へドラッグすると撤去される');
   ok(!s.occ.has('8,2')&&!s.occ.has('9,2')&&!s.occ.has('10,2'), '撤去で占有マスが解放される');
@@ -550,6 +553,69 @@ console.log('\n[16] 製造機は「マスごとの深度」で描く（帯分割
     s.removeItem(id);
   }
   machTexOn=true; s._machFit=null; s.setPartsTheme(null); s.buildLayout([]);
+}
+
+/* 編集中の「選択中」。回転の入口はRキーだけなので、選ばれていることと
+   キーの案内が出ることが操作の分かれ目になる。 */
+console.log('\n[17] 編集中はクリックで選択（設定パネルは開かない）');
+{
+  let opened=null; const toasts=[];
+  window.__openMachine=(id)=>{ opened=id; };
+  window.__toast=(t)=>toasts.push(String(t));
+  window.__layoutChanged=()=>{};
+  const pt=(c,r)=>cellXY(c,r);
+  const down=(p,over)=>{ for(const fn of (s.input._h['pointerdown']||[])) fn(p,over||[]); };
+  const up=(p)=>{ for(const fn of (s.input._h['pointerup']||[])) fn(p); };
+  const click=(c,r,over)=>{ const p=pt(c,r); down(p,over); up(p); };
+  const key=(n)=>{ for(const fn of (s.input.keyboard._h[n]||[])) fn(); };
+  const ent=(id)=>s.placed.find(x=>x.id===id);
+
+  s.buildLayout([]); s.toggleEdit(true); s._clearPick();
+  const mc=s.addPlaced('machine','s2',{cell:{c:2,r:2},dir:'u'});
+
+  opened=null; click(2,2);
+  ok(s.pickId===mc, '製造機のクリックで選択中になる');
+  ok(opened===null, '編集中は設定パネルを開かない');
+  ok(s.pickTip.visible===true, 'キーの案内が出る');
+
+  key('keydown-R');
+  ok(ent(mc).dir==='v', '選択中の製造機は R で回る');
+  key('keydown-R');
+  ok(ent(mc).dir==='u', 'もう一度 R で戻る');
+
+  click(9,9);
+  ok(s.pickId==null, '何も無い床のクリックで選択が外れる');
+
+  click(2,2); key('keydown-ESC');
+  ok(s.pickId==null, 'Esc でも選択が外れる');
+
+  click(2,2); s.toggleEdit(false);
+  ok(s.pickId==null, '編集モードを抜けると選択も外れる');
+
+  // 通常モードのクリックは従来どおり設定パネル
+  opened=null; { const p=pt(2,2); down(p,[]); }
+  ok(opened===mc, '通常モードのクリックは設定パネルを開く（従来どおり）');
+
+  /* 装飾品は「絵」を拾って選ぶ。床のマスから引くとラグが家具の上に敷けなくなる。
+     旧規格(焼き込みなし)の装飾品は回せないので、R は断る。 */
+  s.toggleEdit(true); s._clearPick();
+  const pr=s.addPlaced('prop','jpn_chair',{cell:{c:5,r:5},dir:'u'});
+  const pe=ent(pr);
+  click(5,5,[{ _e:pe }]);
+  ok(s.pickId===pr, '装飾品も絵のクリックで選択中になる');
+
+  const fit0=s.propFit;
+  s.propFit=()=>({});                       // 焼き込みなし = 回せない
+  toasts.length=0; key('keydown-R');
+  ok(toasts.some(t=>t.includes('回せません')), '回せない装飾品は R で断る');
+  s.propFit=()=>({ jpn_chair:{cx:0.5, by:1.05, px:[41,69], shape:[1,2], baked:1} });
+  s._drawPick();
+  key('keydown-R');
+  ok(ent(pr).dir==='v', '焼き込み済みの装飾品は選択中に R で回る');
+  ok(s.cellsOf(ent(pr)).length===2, '1×2 なので占有は2マス');
+  s.propFit=fit0;
+
+  s.toggleEdit(false); window.__openMachine=null; window.__toast=null; window.__layoutChanged=null;
 }
 
 /* ===== スプライトの長軸の向き =====
