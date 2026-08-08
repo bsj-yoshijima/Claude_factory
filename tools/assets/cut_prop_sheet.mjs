@@ -100,7 +100,7 @@ function writePNG(file,w,h,rgba){
 
 const args = process.argv.slice(2);
 const [sheetFile, cellsFile, prefix] = args;
-if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--sit]'); process.exit(1); }
+if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--pad px]'); process.exit(1); }
 const oi = args.indexOf('--out');
 const outDir = oi>=0 ? args[oi+1] : path.join(ROOT,'assets','props');
 /* カスタムの殻はセル名が形(free-1x2)なので、そのままだと prop_jpn_free-1x2.png になる。
@@ -111,12 +111,20 @@ const slotOverride = si>=0 ? args[si+1] : null;
    作り直す代わりにこの倍率で縮める。**共通7種には使わないこと**(そこは殻と
    プロンプトで揃うのが正で、係数で誤魔化すと規格が崩れる)。
    使ったら fit に scale として残るので、後から効いているのが分かる。 */
-/* --sit は接地点を「絵の最下点」に置き直す一点物むけの手当て。
-   接地線は本来 枠の下辺(gy)から出すのが正で、by>1.0(＝マスを埋め尽くさない家具)は正常。
-   だが生成側が物を枠の中で浮かせて描いてくることがあり、そのぶん奥へずれて見える。
-   露天風呂で 13px(マスの奥行きの23%)浮いていた。床を覆う物はこれが目立つ。
-   **共通7種には使わないこと**(あちらは浮きがあっても 0〜32% に収まっている)。 */
-const sit = args.includes('--sit');
+/* --pad は絵の下に透明の余白を足す一点物むけの手当て。
+   接地線は本来 枠の下辺(gy)から出すのが正で、by>1.0(＝マスを埋め尽くさない物ほど
+   自分の手前角がマスの手前角より上に来る)も正常。だが生成側が枠の中の置き方を外すと
+   そのまま前後にずれる。--pad N は「PNGの下端を接地線に置き、絵はそこから N px 上」
+   にする。N がそのまま「マスの手前角からどれだけ奥に置くか」になる。
+
+   これも2回まわり道した:
+     --sit    絵の最下点を接地線へ … マスより小さい物がマスの前半分に寄る
+     --center 外接矩形の中心をマスの中心へ … 計算は合うが、見た目はまだ手前だった
+   結局「下にどれだけ余白を置くか」を直に指定するのが分かりやすい。
+   **共通7種には使わないこと**(あちらは殻の時点で位置が合っている)。 */
+const pi = args.indexOf('--pad');
+const padBottom = pi>=0 ? Math.round(Number(args[pi+1])) : 0;
+if(!(padBottom>=0)) { console.log('--pad は0以上の整数'); process.exit(1); }
 const ki = args.indexOf('--scale');
 const manualScale = ki>=0 ? Number(args[ki+1]) : 1;
 if(!(manualScale>0)) { console.log('--scale は正の数'); process.exit(1); }
@@ -193,6 +201,7 @@ for(const [i,fr] of frames.entries()){
   const gameW = cell ? cell.w/spec.scale : 64;          // その枠がゲーム内で何pxになるか
   const s = gameW / fr.bw * manualScale;                // 枠の幅を合わせる倍率(--scale で手動補正)
 
+  const [sn0,sm0] = SHAPE[cellK] || [1,1];
   const lw = Math.max(2, Math.round(fr.bw*0.06));
   /* 探す範囲は枠の外接矩形まで(線の帯も含める)。線の内側だけに限ると、線に触れた部分が
      黙って捨てられて絵が欠ける（畳の手前角が削れた）。線そのものはシアンなので拾わない。
@@ -260,6 +269,14 @@ for(const [i,fr] of frames.entries()){
       for(let y=0;y<chh;y++) out.copy(cout, y*cw*4, ((y+ay0)*ow+ax0)*4, ((y+ay0)*ow+ax1+1)*4);
     }
   }
+  /* 余白。下は「マスのどこに置くか」を決める実効の余白。上は同じ量を足すだけで、
+     盤面の見え方は変わらない(接地点は比率 by で持つので、高さと by が同じ割合で増える)。
+     上を足すのは一覧(レイアウト編集のパレット・ショップ)で PNG をそのまま並べるため。
+     下だけ足すと絵が枠の上寄りに見えてバランスが悪い。 */
+  if(padBottom>0){
+    const nh=chh+padBottom*2, nb=Buffer.alloc(cw*nh*4);
+    cout.copy(nb, cw*padBottom*4); cout=nb; chh=nh; padT+=padBottom/s;
+  }
   writePNG(path.join(outDir, `prop_${prefix}_${slot}.png`), cw, chh, cout);
   crops.push({slot, ow:cw, oh:chh, out:cout});
 
@@ -271,12 +288,13 @@ for(const [i,fr] of frames.entries()){
      足元がマスより小さい家具は、自分の手前角がマスの手前角より上に来るのが正しく、
      by が 1.0 を超える。これは浮きではない。絵の最下点を接地点にすると、
      小さい家具ほど手前へ押し出されてマスからずれる。 */
-  const cxFrame=(fr.x0+fr.x1+1)/2;
-  // 接地線。既定は枠の下辺(gy)。--sit なら絵の最下点をそこへ持ってくる
-  const byFrame = sit ? (y1+1) : (fr.y0 + fr.bh*gy);
-  fit[`${prefix}_${slot}`] = { cx:r4(((cxFrame-x0)*s-padL)/cw), by:r4(((byFrame-y0)*s-padT)/chh),
-    px:[cw,chh], shape:SHAPE[cellK] || [1,1],
-    ...(manualScale!==1 ? {scale:manualScale} : {}), ...(sit ? {sit:1} : {}) };
+  const cxFrame=(fr.x0+fr.x1+1)/2, byFrame = fr.y0 + fr.bh*gy;   // 枠の中心x / 接地線
+  /* --pad を使ったら「絵の下端 + padBottom」が接地線。上の余白は接地点より下には
+     効かないので、by は (上の余白 + 絵 + 下の余白) 分の (上の余白 + 絵 + 下の余白) = 1 */
+  const byRatio = padBottom>0 ? 1 : ((byFrame-y0)*s-padT)/chh;
+  fit[`${prefix}_${slot}`] = { cx:r4(((cxFrame-x0)*s-padL)/cw), by:r4(byRatio),
+    px:[cw,chh], shape:[sn0,sm0],
+    ...(manualScale!==1 ? {scale:manualScale} : {}), ...(padBottom ? {pad:padBottom} : {}) };
   /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
      捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
   /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と
@@ -305,7 +323,7 @@ for(const [i,fr] of frames.entries()){
      半分近くなったら、絵が枠の下辺に接しておらず宙に浮く。
      実測: 採用した japan 7点は rug -0% / table 9% / sofa 9% / chair 14% / shelf 17% /
      lamp 32% / plant 31%。失敗した屏風(縦に中央寄せされた)は 57%。境目は 45% に置いた。 */
-  const [sn,sm] = SHAPE[cellK] || [1,1];
+  const [sn,sm] = [sn0,sm0];
   const gap = (byFrame - (y1+1)) * s, depth = (sn+sm)*CELL_W/4;
   /* 足元のマス(接地菱形)に対する絵の幅。枠に対する幅は殻の取り方で変わるが、
      こちらは盤面の寸法そのもの。ただし**張り出しも数える**ので足元の大きさではない:
