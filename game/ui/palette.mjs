@@ -4,7 +4,7 @@ import { NET, applyFactory, saveGame } from '../net.mjs';
 import { G, availN, snapLayout } from '../state.mjs';
 import { toast } from './dialog.mjs';
 import { morphInto } from './morph.mjs';
-import { machIcon, themeIcon, uic, updateBadge } from './parts.mjs';
+import { machIcon, propArt, themeIcon, uic, updateBadge } from './parts.mjs';
 
 const ROOM_THEMES=['arabia','undersea','japan','china','diner','fantasy','scifi','cabin','dino','haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen','tech'];
 const SKY_THEMES=['blue','sunset','night','space'];   // オーロラは星空・宇宙と同じ暗い夜空で見分けが付かないので外した
@@ -54,7 +54,9 @@ let selMode=false, selN=0;                       // 収納の複数選択モー�
 let propFilter=null;                             // 装飾の絞り込みテーマ(null=すべて / ''=汎用)
 let _paletteView=null;                           // 最後に描いた一覧の種類。切り替わったときだけスクロールを戻す
 export function renderPalette(){
-  const cats=[['bg',`${uic('sky')} 背景`],['prop',`${uic('sofa')} 装飾`],['machine',`${uic('factory')} 製造機`]];
+  // 製造機タブの絵は工場(uic('factory'))ではなく製造機そのもの。工場のアイコンは
+  // 🏭製造タブ(作るものを決める方)で使っていて、隣り合うと役割が紛らわしい
+  const cats=[['bg',`${uic('sky')} 背景`],['prop',`${uic('sofa')} 装飾`],['machine',`${machIcon('s2','uic')} 製造機`]];
   let items='', hint='', acts='', fil='';
   // key は差分適用でノードを持ち回すための識別子（在庫が増減しても他の項目が作り直されない）
   const cell=(key,dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" data-key="${key}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
@@ -70,7 +72,7 @@ export function renderPalette(){
         +`<br>設置済みはドラッグで移動 / ${uic('trash')}ゴミ箱へドラッグで撤去 ・ ラグは床の平物なので家具の下に敷けます`;
       // テーマ(=背景)で絞り込む。propFilter が null なら全部。DECO は汎用('')扱い
       const inFilter=(th)=> propFilter===null || (th||'')===propFilter;
-      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`prop:${t}`,`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.variant===t));
+      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`prop:${t}`,`data-place="prop:${t}"`,propArt(t,PROP[t].e),PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.variant===t));
       const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`deco:${t}`,`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.variant===t));
       items=(P.concat(D).join(''))||`<div class="phint" style="padding:8px">${propFilter===null?`在庫なし。${uic('shop')}ショップ→装飾 で購入してください。`:`このテーマの在庫がありません。「すべて」に戻すか、${uic('shop')}ショップで購入してください。`}</div>`;
       // 絞り込み行: 在庫のあるテーマだけ出す。適用中の背景と同じテーマには印を付ける

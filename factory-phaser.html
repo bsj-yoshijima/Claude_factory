@@ -151,6 +151,10 @@
      倍率は 1倍か2倍だけにすること */
   .micon{width:16px;height:16px;image-rendering:pixelated;vertical-align:middle}
   .rc .ic .micon{width:32px;height:32px}
+  /* 装飾品は盤面と同じ絵を一覧に出す（殻から作り直した個体だけ。旧290体は絵文字のまま）。
+     縦横の比は個体ごとに違うので、枠に収めて中央に置く。縮小はドット絵なので pixelated */
+  .propart{max-width:42px;max-height:40px;image-rendering:pixelated;display:block;object-fit:contain;margin:0 auto}
+  .rc .ic .propart{max-width:34px;max-height:34px}   /* ショップの行は枠が 34px */
   .rc .mid{flex:1;min-width:0}
   .rc .nm{font-size:13px;color:#eafff4;font-weight:700}
   .rc button{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:7px;padding:8px 13px;cursor:pointer;font-family:inherit;font-size:12px}

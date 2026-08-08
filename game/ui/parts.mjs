@@ -50,9 +50,21 @@ export const genreIcon=(id,lg=false)=> GENRE[id] ? icon(lg?'pic':'uic',`genre-${
 
 /* 製造機のドット絵アイコン（16×16。編集パレットでは原寸、ショップの行だけ2倍）。
    HTMLを置ける場所（ショップの行・編集パレット）だけで使う。トーストや title 属性は
-   文字列しか入らないので、そこは MACH[].e の絵文字のまま。 */
-export const machIcon=(variant)=>
-  `<img class="micon" src="assets/ui/icons/${MACH[machVariant(variant)].ic}.png" alt="">`;
+   文字列しか入らないので、そこは MACH[].e の絵文字のまま。
+   cls は置き場所に合わせて変える。既定の .micon は行やマスの中に置くとき用で、
+   'uic' を渡すと他のUIアイコンと同じ縦位置になる（タブの見出しなど、並びが揃う）。 */
+export const machIcon=(variant,cls='micon')=>
+  `<img class="${cls}" src="assets/ui/icons/${MACH[machVariant(variant)].ic}.png" alt="">`;
+
+/* 装飾品のアイコン。殻から作り直した個体(prop-fit.json の baked)は、盤面に置くのと
+   同じ絵をそのまま出す。旧290体は絵の余白や大きさがまちまちで一覧に並べると不揃いなので、
+   従来どおり絵文字のまま（fb で受ける）。baked が増えれば自動でこちらへ移る。 */
+export const propArt=(variant,fb)=>{
+  const f = window.__scene && window.__scene.propFit && window.__scene.propFit()[variant];
+  return (f && f.baked)
+    ? `<img class="propart" src="assets/props/prop_${variant}.png" alt="">`
+    : fb;
+};
 
 /* =========================================================================
    共通のUI部品 — 同じ見た目のものは同じ関数から出す

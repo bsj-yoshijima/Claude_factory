@@ -5,7 +5,7 @@ import { NET, applyFactory } from '../net.mjs';
 import { G, availN, machState, ownedN } from '../state.mjs';
 import { hatReady } from './agents.mjs';
 import { openDialog, toast } from './dialog.mjs';
-import { itemRow, machIcon, matIcon, themeIcon, uic, updateBadge, yen } from './parts.mjs';
+import { itemRow, machIcon, matIcon, propArt, themeIcon, uic, updateBadge, yen } from './parts.mjs';
 
 async function apiBuy(kind,id,okMsg){
   const r=await NET.call('POST','/api/shop/buy',{kind,id});
@@ -79,7 +79,7 @@ function shopBody(){
         // 基本家具(全テーマ共通スロット)と名物(そのテーマだけの一点物)を分けて並べる
         const ks=[...all.filter(t=>PROP[t].fu), ...all.filter(t=>!PROP[t].fu)];
         body += ks.map(t=>{ const sp=(window.PROP_SPAN||{})[t]||1;   // 占有コマ数(見た目の大きさ)
-          return itemRow({ icon:PROP[t].e, key:`pr:${t}`,
+          return itemRow({ icon:propArt(t,PROP[t].e), key:`pr:${t}`,
             name:`${PROP[t].n} ${stockBadge(ownedN('prop',t))}`,
             sub:`${yen(PROP[t].price)}${sp>1?` ・ ${sp}コマ`:''}`,
             action:buyBtn('data-prop',t,PROP[t].price) }); }).join('');
