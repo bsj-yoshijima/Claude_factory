@@ -7,10 +7,18 @@
    追加: 接地影(背景に溶け込む), idle小ネタ(座り💤 / コーヒー☕ / 壁際にもたれる)。 */
 
 export const W = 1024, H = 572, GU = 12, GV = 12;
-// ISO は背景 factory-room.png に「描かれた床タイル格子」(12x12)を画像から実測フィットした値。
-// 旧値は床の縁(トリム)基準で、描き込みのタイル目地と半マス位相＋約5%ピッチがずれており、
-// マス中心に置いた設置物が"目地の交差点"に乗って見えていた。GU/GV=12 は不変なので保存レイアウトは互換。
-export const ISO = { Bx:0.4930, By:0.3584, ux:0.3240, uy:0.3005, vx:-0.3281, vy:0.2864 };
+// ISO は「背景画像に対する床ダイヤ(12x12)の位置」を比率で持つ。背景を作る側の規格でもある
+// (tools/preview/guide.html が同じ値から Stitch 用の下絵と検収オーバーレイを引く)。
+// 経緯: 元は room-factory.png のタイル目地に実測フィットした値だったが、手描き絵の歪みを
+// そのまま拾って (a) u軸とv軸で1.39°のねじれ (b) Bx=0.4930 で全体が画像中心より約10px左
+// という非対称が入っていた。背景の絵自体は左右マージンが完全一致(=中央)だったので、
+// 絵ではなくグリッド側の誤差と判断し、軸を対称化(ux=-vx, uy=vy)して Bx=0.5 に中央揃えした。
+// さらに 1マスを厳密な 2:1 にした: 旧u軸は 1.930:1、旧v軸は 2.051:1 で、平均は 1.991:1。
+// つまり絵は true 2:1 で描かれていて、旧値は u と v が逆方向に約3.5%ずれていただけ。
+// uy は ux から導出(uy = ux*W/(2*H))。これで 奥/手前/壁上奥 が画像中心 x に乗り、
+// 左右の角が同じ y になり、1マスの送りが x:y = 2:1 になる。
+// GU/GV=12 は不変なので保存レイアウト(c,r)は互換。画面上の位置は最大10px程度動く。
+export const ISO = { Bx:0.5, By:0.3584, ux:0.3261, uy:0.2919, vx:-0.3261, vy:0.2919 };
 export const CELL = ( Math.hypot(ISO.ux*W/GU, ISO.uy*H/GU) + Math.hypot(ISO.vx*W/GV, ISO.vy*H/GV) ) / 2;
 function isoToScreen(u,v){ return { x:(ISO.Bx+u*ISO.ux+v*ISO.vx)*W, y:(ISO.By+u*ISO.uy+v*ISO.vy)*H }; }
 export const OFF_U = 0, OFF_V = 0;
@@ -20,6 +28,14 @@ const ISO_DET = ISO.ux*ISO.vy - ISO.vx*ISO.uy;
 export function screenToIso(sx,sy){ const nx=sx/W-ISO.Bx, ny=sy/H-ISO.By;
   return { u:(nx*ISO.vy - ISO.vx*ny)/ISO_DET, v:(ISO.ux*ny - nx*ISO.uy)/ISO_DET }; }
 export function uvXY(u,v){ return { x:(ISO.Bx+u*ISO.ux+v*ISO.vx)*W, y:(ISO.By+u*ISO.uy+v*ISO.vy)*H }; }
+// 1マスの接地菱形の幅(55.65px)。マス送りの CELL(31.1px) とは別物で、
+// 「絵がマスに収まっているか」の基準はこちら。装飾品の大きさはこの幅の比で決める。
+export const CELL_W = Math.abs(ISO.ux*W/GU) + Math.abs(ISO.vx*W/GV);
+// n×m マスのブロックの接地菱形。手前角(front)は絵の下端を合わせる点で、
+// 菱形の左右の中点でもある(菱形は上下対称なので front.x が中心 x)。
+export function blockIso(c,r,n,m){
+  return { back:uvXY(c/GU,r/GV), right:uvXY((c+n)/GU,r/GV),
+    front:uvXY((c+n)/GU,(r+m)/GV), left:uvXY(c/GU,(r+m)/GV), w:(n+m)*CELL_W/2 }; }
 const AU={x:ISO.ux*W/GU, y:ISO.uy*H/GU};   // 1セル u方向 の画面ベクトル
 const AV={x:ISO.vx*W/GV, y:ISO.vy*H/GV};   // 1セル v方向 の画面ベクトル
 export const K = (c,r)=> c+','+r;

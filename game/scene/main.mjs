@@ -5,7 +5,7 @@
      scene/lighting.mjs     採光と内装
      scene/edit.mjs         レイアウト編集
    UI(game/app.mjs ほか)へは window.__* 経由でしか触らない。 */
-import { DECOR, DEMO, KINDS, MACH_ART, MACH_SIZES, PROP_NAMES, SKINS, isFlatProp, machSize, matArt } from './catalog.mjs';
+import { DECOR, DEMO, KINDS, MACH_ART, MACH_SIZES, MAT_TEX, PROP_NAMES, SKINS, isFlatProp, machSize, matArt } from './catalog.mjs';
 import { Edit } from './edit.mjs';
 import { CELL, GU, GV, H, K, W, cellXY, uvXY } from './iso.mjs';
 import { Lighting } from './lighting.mjs';
@@ -14,7 +14,7 @@ import { DOTP, HAT_BASE_Y, HAT_CX, HAT_W_DOT, PRESETS, makeMascot, mascotIcons }
 
 export class Main extends Phaser.Scene {
   preload(){
-    this.load.image('bg_room','assets/rooms/factory-room.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
+    this.load.image('bg_room','assets/rooms/room-factory.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
     this.load.image('room_arabia','assets/rooms/room-arabia.png');   // Stitch製 テーマ部屋(壁/床/窓 焼き込み)
     this.load.image('room_undersea','assets/rooms/room-undersea.png');
     this.load.image('room_japan','assets/rooms/room-japan.png');
@@ -24,9 +24,10 @@ export class Main extends Phaser.Scene {
     this.load.image('room_scifi','assets/rooms/room-scifi.png');
     this.load.image('room_cabin','assets/rooms/room-cabin.png');
     this.load.image('room_dino','assets/rooms/room-dino.png');
-    for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen']) this.load.image('room_'+n, `assets/rooms/room-${n}.png`);
+    for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen','tech']) this.load.image('room_'+n, `assets/rooms/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/props/prop_${n}.png`);
     this.load.text('machfit','assets/machines/mach-fit.json');   // 投入口のアンカー。素材アイコンを絵の口に乗せる
+    this.load.text('propfit','assets/props/prop-fit.json');   // 装飾品ごとの足元(中心・幅・接地の高さ)。絵から実測: tools/assets/measure_props.mjs
     this.load.text('hatfit','assets/hats/hat-fit.json');   // 被り物ごとのツバ中心(cx=幅比)＋下げ量(dy=ドット)。非対称な飾りでも頭の中心で被る(load.json は中身が壊れるとローダーごと落ちるので text 読み)
     /* 被り物は「用意できているテーマだけ」読む。どれが用意済みかの正は hat-fit.json のキー。
        SKINS 全部(32種)を投機的に読むと、絵が無いぶんだけ 404 がコンソールに並んで
@@ -36,6 +37,7 @@ export class Main extends Phaser.Scene {
       let ready={}; try{ ready=JSON.parse(data)||{}; }catch(_){}
       for(const s of SKINS) if(s.id!=='none' && ready[s.id]) this.load.image('hat_'+s.id, `assets/hats/hat-${s.id}.png`);
     });
+    for(const t of MAT_TEX) this.load.image(t.key, t.file);   // 投入口に載せる素材のドット絵(16×16)。全32枚あるので被り物のような「あるものだけ読む」判定は要らない
     for(const d of DECOR) this.load.image('dec_'+d, `assets/objects/obj_${d}.png`);
     // 製造機スプライト(Stitch製)。命名規約 mach_<theme>_s<N>。無いテーマは normal → 手続き描画 の順にフォールバック
     for(const th of MACH_ART) for(const n of MACH_SIZES) this.load.image(`mach_${th}_s${n}`, `assets/machines/mach-${th}-s${n}.png`);
@@ -109,28 +111,54 @@ export class Main extends Phaser.Scene {
   /* ---- 占有・設置可否 ---- */
   _syncOcc(){ this.occ.clear(); this.rugOcc.clear();
     for(const e of this.placed){
-      if(this.isFlat(e)){ this.rugOcc.add(K(e.cell.c,e.cell.r)); continue; }   // ラグは床の平物。マスを塞がない
+      // ラグは床の平物。家具のマス(occ)は塞がないが、ラグ同士の重なりは占有ぶん全部で見る
+      // (jpn_rug/dno_rug のような 1×2 のラグは2マスぶん敷かれている)
+      if(this.isFlat(e)){ for(const q of this.cellsOf(e)) this.rugOcc.add(K(q.c,q.r)); continue; }
       for(const q of this.cellsOf(e)) this.occ.add(K(q.c,q.r)); } }
-  isRugFree(c,r){ return c>=0&&r>=0&&c<GU&&r<GV && !this.rugOcc.has(K(c,r)); }
-  freeRugCell(){ for(let i=0;i<60;i++){ const c=Math.floor(Math.random()*GU), r=Math.floor(Math.random()*GV);
-      if(this.isRugFree(c,r)) return {c,r}; }
-    for(let c=0;c<GU;c++) for(let r=0;r<GV;r++) if(this.isRugFree(c,r)) return {c,r};
-    return null; }
+  flatAtCell(c,r){ return this.placed.find(e=>this.isFlat(e) && this.cellsOf(e).some(q=>q.c===c&&q.r===r))||null; }
   machineAtCell(c,r){ return this.placed.find(e=>e.kind==='machine' && this.cellsOf(e).some(q=>q.c===c&&q.r===r))||null; }
   entryAtCell(c,r){ return this.placed.find(e=>this.cellsOf(e).some(q=>q.c===c&&q.r===r))||null; }
+  // 立体物だけを見る当たり判定。ラグ(平物)の上には家具も製造機も置ける
+  solidAtCell(c,r){ return this.placed.find(e=>!this.isFlat(e) && this.cellsOf(e).some(q=>q.c===c&&q.r===r))||null; }
   /* 仮の entry を作って占有マスを判定する(設置前チェック用) */
   canPlace(kind,c,r,opt){ opt=opt||{};
-    if(kind==='prop' && isFlatProp(opt.variant)) return this.isRugFree(c,r);   // ラグは家具の上にも敷ける
+    /* ラグは家具の上にも敷ける(occ は見ない)が、ラグ同士は重ねない。
+       1×2 のラグは2マスを敷くので占有ぶん全部を見る。ignoreId(自分)は除く:
+       除かないと同じマスへの置き直しも回転も必ず失敗する。 */
+    if(kind==='prop' && isFlatProp(opt.variant)){
+      const probe={kind:'prop', variant:opt.variant, dir:opt.dir||'u', cell:{c,r}};
+      const skipF=opt.ignoreId||null;
+      for(const q of this.cellsOf(probe)){
+        if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) return false;
+        const at=this.flatAtCell(q.c,q.r); if(at && at.id!==skipF) return false;
+      }
+      return true;
+    }
+    if(kind==='prop'){
+      // 新規格の装飾品は複数マスを占める。旧290体は propBlock が [1,1] を返すので今までどおり
+      const probe={kind:'prop', variant:opt.variant, dir:opt.dir||'u', cell:{c,r}};
+      const skipP=opt.ignoreId||null;
+      for(const q of this.cellsOf(probe)){
+        if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) return false;
+        const at=this.solidAtCell(q.c,q.r); if(at && at.id!==skipP) return false;
+      }
+      return true;
+    }
     if(kind!=='machine') return this.isFree(c,r);
     const probe={kind:'machine', variant:opt.variant||'s1', dir:opt.dir||'u', cell:{c,r}};
     const skip=opt.ignoreId||null;
     for(const q of this.cellsOf(probe)){
       if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) return false;
-      const at=this.entryAtCell(q.c,q.r); if(at && at.id!==skip) return false;
+      const at=this.solidAtCell(q.c,q.r); if(at && at.id!==skip) return false;
     }
     return true; }
   /* 位置未指定のときの落とし先(その向き・サイズで収まる空き) */
-  autoCell(kind,opt){ if(kind!=='machine') return this.freeCell();
+  autoCell(kind,opt){
+    if(kind==='prop'){   // 新規格は複数マスを占めるので、空きマスではなく置ける場所を探す
+      for(let r=0;r<GV;r++) for(let c=0;c<GU;c++)
+        if(this.canPlace('prop',c,r,{variant:opt&&opt.variant,dir:opt&&opt.dir})) return {c,r};
+      return null; }
+    if(kind!=='machine') return this.freeCell();
     for(const dir of [opt&&opt.dir||'u','u','v'])
       for(let r=1;r<GV-1;r++) for(let c=1;c<GU-1;c++)
         if(this.canPlace('machine',c,r,{variant:opt&&opt.variant,dir})){ if(opt) opt.dir=dir; return {c,r,dir}; }
@@ -140,13 +168,14 @@ export class Main extends Phaser.Scene {
     if(KINDS.indexOf(kind)<0) return null;
     if(kind==='deco' && !this.textures.exists('dec_'+variant)) return null;
     if(kind==='machine') variant = 's'+machSize(variant);
-    let dir = (kind==='machine') ? (extra.dir==='v'?'v':'u') : undefined;
+    // 装飾品も向きを持つ(新規格の複数マスの物を回すため)。旧290体は形が [1,1] なので影響しない
+    let dir = (kind==='machine'||kind==='prop') ? (extra.dir==='v'?'v':'u') : undefined;
     // ラグは平物。家具の占有(occ)を無視して敷けるが、ラグ同士(rugOcc)は重ねない
     const flat = kind==='prop' && isFlatProp(variant);
     let cell=extra.cell||null;
     if(cell && !this.canPlace(kind,cell.c,cell.r,{variant,dir})) cell=null;
     if(!cell && extra.strict) return null;              // レイアウト復元: 勝手に別マスへ動かさない
-    if(!cell) cell = flat ? this.freeRugCell() : (function(o){ const q=this.autoCell(kind,o); if(q&&q.dir) dir=q.dir; return q; }).call(this,{variant,dir});
+    if(!cell) cell = flat ? this.freeRugCell(variant,dir) : (function(o){ const q=this.autoCell(kind,o); if(q&&q.dir) dir=q.dir; return q; }).call(this,{variant,dir});
     if(!cell) return null;
     const e={ id: extra.id||('o'+(this._oid=(this._oid||0)+1)), kind, variant, lvl:extra.lvl||1,
       cell:{c:cell.c,r:cell.r}, dir, slots:(kind==='machine'? (extra.slots||[]) : undefined) };
@@ -168,11 +197,19 @@ export class Main extends Phaser.Scene {
     this._detach(this.placed[i]); this.placed.splice(i,1); this.lastRemoved=1; this._syncOcc();
     if(this.moveId===id) this.cancelMove();   // 掴んでいた物が消えたら移動モードも抜ける
     if(this._mdrag && this._mdrag.id===id) this._mdrag=null;   // ドラッグ中の物が消えた場合も同様
-    if(this._tap && this._tap.id===id) this._tap=null;         // 消えた物の設定パネルは開かない
+    if(this.pickId===id) this._clearPick();                    // 消えた物の選択は外す
     return true; }
   moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
     if(!this.canPlace(e.kind,c,r,{variant:e.variant,dir:e.dir,ignoreId:id})) return false;
     this._detach(e); e.cell={c,r}; this._makeObjs(e); this._syncOcc();
+    if(this.editMode) this._enableDrag(e); return true; }
+  /* 装飾品を90°回転。1×2 の物は占有マスも入れ替わる。絵は左右反転で向きが変わる
+     (アイソメでは水平反転が90度回転に相当。machine-art.mjs の propImage 参照)。
+     1×1 の物は形が変わらないので、絵の反転だけが効く。 */
+  rotateProp(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='prop'); if(!e) return false;
+    const nd=(e.dir==='v')?'u':'v';
+    if(!this.canPlace('prop',e.cell.c,e.cell.r,{variant:e.variant,dir:nd,ignoreId:id})) return false;
+    this._detach(e); e.dir=nd; this._makeObjs(e); this._syncOcc();
     if(this.editMode) this._enableDrag(e); return true; }
   /* 製造機を90°回転(u軸⇔v軸)。回した先が空いていなければ何もしない */
   rotateMachine(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return false;
@@ -210,7 +247,9 @@ export class Main extends Phaser.Scene {
   /* ドラッグをやめたときに見た目を元へ戻す。製造機は絵が複数あるので掴んだ時点の座標(_dbase)を書き戻す */
   _snapBack(e){
     if(e.kind==='machine'){ for(const b of (e._dbase||[])){ b.o.x=b.x; b.o.y=b.y; } e._dbase=null; return; }
-    const p=cellXY(e.cell.c,e.cell.r); if(e.main){ e.main.x=p.x; e.main.y=p.y; } }
+    /* 絵を作り直して戻す。マス中心へ置き直してはいけない: 新規格(焼き込み済み)の装飾品は
+       原点が接地菱形の"手前角"なので、中心へ置くと絵が奥へ跳ぶ(machine-art.mjs propImage 参照)。 */
+    this._remake(e); }
   /* ===== 製造UI(factory-phaser.html)との橋渡し ===== */
   machineList(){ return this.placed.filter(e=>e.kind==='machine').map(e=>this.getMachine(e.id)); }
   // 製造の開始/停止・完成で筐体上の表示(製造中/待機中/進捗)が変わるので作り直す
@@ -247,8 +286,11 @@ export class Main extends Phaser.Scene {
   isFree(c,r){ return c>=0&&r>=0&&c<GU&&r<GV && !this.occ.has(K(c,r)); }
   // ラグは家具とは別レイヤーで1マス1枚。家具のあるマスにも敷けるが、ラグ同士は重ねない
   isRugFree(c,r){ return c>=0&&r>=0&&c<GU&&r<GV && !this.rugOcc.has(K(c,r)); }
-  freeRugCell(){ for(let i=0;i<80;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=1+Math.floor(Math.random()*(GV-2)); if(this.isRugFree(c,r)) return {c,r}; }
-    for(let c=0;c<GU;c++) for(let r=0;r<GV;r++) if(this.isRugFree(c,r)) return {c,r};
+  /* 品目を渡せば、その形(1×2 のラグなど)ぶん敷ける場所を探す。渡さなければ1マスぶんの空き */
+  freeRugCell(variant,dir){
+    const ok=(c,r)=> variant ? this.canPlace('prop',c,r,{variant,dir}) : this.isRugFree(c,r);
+    for(let i=0;i<80;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=1+Math.floor(Math.random()*(GV-2)); if(ok(c,r)) return {c,r}; }
+    for(let c=0;c<GU;c++) for(let r=0;r<GV;r++) if(ok(c,r)) return {c,r};
     return {c:1,r:1}; }
   freeCell(){ for(let i=0;i<50;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=1+Math.floor(Math.random()*(GV-2)); if(this.isFree(c,r)) return {c,r}; } return {c:1,r:1}; }
   freeCellIn(minr,maxr){ for(let i=0;i<40;i++){ const c=1+Math.floor(Math.random()*(GU-2)), r=minr+Math.floor(Math.random()*(maxr-minr+1)); if(this.isFree(c,r)) return {c,r}; } return null; }

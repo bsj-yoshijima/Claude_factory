@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>製造機ビューア — Claude Factory</title>
+<style>
+  :root{ --bg:#0c1014; --fg:#dfe7e3; --dim:#8fa39c; --line:#1e2a30; --accent:#ffd08a;
+         --pink:#ff3da6; --cyan:#6ee6ff; --gold:#ffd24a; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+  header{position:sticky;top:0;z-index:10;background:#0c1014ee;backdrop-filter:blur(6px);
+         border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;
+         gap:14px;align-items:center}
+  h1{font-size:15px;margin:0 8px 0 0;color:var(--accent);font-weight:700}
+  label{display:inline-flex;gap:6px;align-items:center;white-space:nowrap;color:var(--dim)}
+  select,button,input[type=text]{background:#16202a;color:var(--fg);border:1px solid var(--line);
+                border-radius:6px;padding:4px 8px;font:inherit}
+  button{cursor:pointer}
+  button.on{background:var(--accent);color:#14202a;border-color:var(--accent)}
+  #grid{display:grid;gap:16px;padding:16px}
+  .card{border:1px solid var(--line);border-radius:10px;background:#0f151b;overflow:hidden}
+  .cap{display:flex;justify-content:space-between;gap:10px;padding:6px 10px;
+       border-bottom:1px solid var(--line);font-size:12px;align-items:baseline}
+  .cap b{color:var(--accent);font-weight:700;font-size:13px}
+  .cap .n{color:var(--dim)}
+  .row{display:flex;gap:14px;align-items:flex-end;padding:12px;overflow-x:auto;
+       background:conic-gradient(#20282e 0 25%,#161d22 0 50%) 0 0/16px 16px}
+  .cell{position:relative;flex:0 0 auto}
+  .cell img{display:block;image-rendering:pixelated}
+  .cell canvas{position:absolute;left:0;top:0;pointer-events:none}
+  .cell .lbl{position:absolute;left:0;top:-16px;font-size:10px;color:var(--dim)}
+  .miss{color:#ff8a8a;padding:12px;font-size:12px}
+  .hint{padding:10px 16px;color:var(--dim);font-size:12px;border-top:1px solid var(--line)}
+  .k{color:var(--gold)} .p{color:var(--pink)} .c{color:var(--cyan)}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚙️ 製造機ビューア</h1>
+  <label>倍率 <select id="zoom"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>6</option></select></label>
+  <label>並べる <select id="sizes">
+    <option value="mod,2,3,5" selected>原画+2/3/5</option>
+    <option value="mod">1マス原画だけ</option>
+    <option value="2,3,4,5">2/3/4/5マス</option>
+    <option value="5">5マスだけ</option>
+  </select></label>
+  <label>列 <select id="cols"><option selected>1</option><option>2</option><option>3</option></select></label>
+  <button id="bAnchor" class="on">投入口アンカー</button>
+  <button id="bGround" class="on">接地線</button>
+  <button id="bTile">1マスの菱形</button>
+  <label>絞り込み <input type="text" id="find" placeholder="テーマ名" style="width:130px"></label>
+  <span id="count" style="color:var(--dim)"></span>
+</header>
+<div id="grid"></div>
+<p class="hint">
+  <span class="c">シアン</span>=<code>mach-fit.json</code> の投入口アンカー（素材アイコンが乗る点。以降のマスは <code>step</code> で送る）／
+  <span class="p">ピンク</span>=接地線 <code>gy</code>（ゲームはここを足元の四角形の手前の辺に合わせる）／
+  <span class="k">金</span>=1マスの菱形（<code>step</code>×2:1）。
+  1マス原画は <code>assets/mach-sheets/_module_&lt;theme&gt;.png</code>（マゼンタ背景のまま）。
+  表示専用で、ゲームのデータは一切変わりません。型と検収は <code>tools/assets/make_machine_shell.py</code> /
+  <code>tools/assets/check_machine_module.py</code>。
+</p>
+
+<script>
+const NAME = { normal:'デフォルト', arabia:'アラビア', beehive:'ミツバチの巣', cabin:'山小屋',
+  carnival:'カーニバル', china:'中華', christmas:'クリスマス', circuit:'サーキット', circus:'サーカス',
+  desert:'砂漠', diner:'ダイナー', dino:'恐竜', dwarf:'ドワーフ鉱山', egypt:'エジプト',
+  fantasy:'ファンタジー', halloween:'ハロウィン', haunted:'幽霊屋敷', hell:'地獄', ice:'氷',
+  japan:'和風', jungle:'ジャングル', mushroom:'森のきのこ', onsen:'温泉', pirate:'海賊',
+  retrofuture:'レトロフューチャー', scifi:'SF', space:'宇宙ステーション', steampunk:'スチームパンク',
+  sushi:'回転寿司', tokyo:'東京ネオン', undersea:'海底', western:'西部開拓' };
+
+const $ = (id)=>document.getElementById(id);
+const state = { zoom:3, sizes:['mod','2','3','5'], cols:1, anchor:true, ground:true, tile:false, find:'' };
+let FIT = {};
+
+fetch('/assets/machines/mach-fit.json').then(r=>r.json()).then(j=>{ FIT=j; render(); })
+  .catch(()=>{ $('grid').innerHTML='<p class="miss">mach-fit.json を読めません。リポジトリのルートを配信しているか確認してください（例: python3 -m http.server 4455）。</p>'; });
+
+function overlay(cv, fit, w, h, z){
+  const g = cv.getContext('2d'); g.clearRect(0,0,cv.width,cv.height);
+  g.lineWidth = 1;
+  const ax = fit.ax*w*z, ay = fit.ay*h*z, sx = fit.step*z, sy = fit.stepY*z, gy = fit.gy*h*z;
+  if(state.ground){ g.strokeStyle='#ff3da6'; g.beginPath(); g.moveTo(0,gy+.5); g.lineTo(cv.width,gy+.5); g.stroke(); }
+  const n = fit._n || 1;
+  for(let i=0;i<n;i++){
+    const x = ax + sx*i*(fit._flip?-1:1), y = ay + sy*i;
+    if(state.tile){ g.strokeStyle='#ffd24a'; g.beginPath();
+      g.moveTo(x, y-sy/2); g.lineTo(x+sx/2, y); g.lineTo(x, y+sy/2); g.lineTo(x-sx/2, y); g.closePath(); g.stroke(); }
+    if(state.anchor){ g.strokeStyle= i? '#ffd24a' : '#6ee6ff'; g.beginPath();
+      g.arc(x, y, i?2.5:4, 0, Math.PI*2); g.stroke(); }
+  }
+}
+
+function cell(theme, size){
+  const wrap = document.createElement('div'); wrap.className='cell';
+  const z = state.zoom;
+  const img = document.createElement('img');
+  const isMod = (size==='mod');
+  img.src = isMod ? `/assets/mach-sheets/_module_${theme}.png` : `/assets/machines/mach-${theme}-s${size}.png`;
+  const lbl = document.createElement('span'); lbl.className='lbl';
+  lbl.textContent = isMod ? '1マス原画' : `s${size}`;
+  wrap.append(lbl, img);
+  img.onerror = ()=>{ wrap.innerHTML = `<span class="miss">${isMod?'原画なし':'s'+size+' なし'}</span>`; };
+  img.onload = ()=>{
+    const w = img.naturalWidth, h = img.naturalHeight;
+    // 原画は 1024px などで大きいので、原画だけ「1マス機の見た目の幅」に合わせて縮める
+    const mz = isMod ? (56*z/w) : z;
+    img.style.width = (w*mz)+'px'; img.style.height = (h*mz)+'px';
+    lbl.textContent += `  ${w}×${h}`;
+    const fit = (FIT[theme]||{})[size];
+    if(!fit) return;
+    const cv = document.createElement('canvas');
+    cv.width = w*mz; cv.height = h*mz; cv.style.width=cv.width+'px'; cv.style.height=cv.height+'px';
+    wrap.append(cv);
+    overlay(cv, Object.assign({_n:+size}, fit), w, h, mz);
+  };
+  return wrap;
+}
+
+function render(){
+  const g = $('grid'); g.innerHTML='';
+  g.style.gridTemplateColumns = `repeat(${state.cols}, minmax(0,1fr))`;
+  const themes = Object.keys(FIT).sort()
+    .filter(t=> !state.find || t.includes(state.find) || (NAME[t]||'').includes(state.find));
+  for(const t of themes){
+    const card = document.createElement('div'); card.className='card';
+    const f2 = (FIT[t]||{})['2'] || {};
+    card.innerHTML = `<div class="cap"><b>${t}</b><span class="n">${NAME[t]||''}</span>
+      <span class="n">送り ${f2.step??'-'} / ${f2.stepY??'-'} px　src=${f2.src||'-'}</span></div>`;
+    const row = document.createElement('div'); row.className='row';
+    for(const s of state.sizes) row.append(cell(t, s));
+    card.append(row); g.append(card);
+  }
+  $('count').textContent = `${themes.length} テーマ`;
+}
+
+$('zoom').onchange = e=>{ state.zoom=+e.target.value; render(); };
+$('sizes').onchange = e=>{ state.sizes=e.target.value.split(','); render(); };
+$('cols').onchange = e=>{ state.cols=+e.target.value; render(); };
+$('find').oninput = e=>{ state.find=e.target.value.trim(); render(); };
+for(const [id,key] of [['bAnchor','anchor'],['bGround','ground'],['bTile','tile']]){
+  $(id).onclick = ()=>{ state[key]=!state[key]; $(id).classList.toggle('on', state[key]); render(); };
+}
+</script>
+</body>
+</html>

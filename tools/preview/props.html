@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>装飾品の接地ビューア — Claude Factory</title>
+<style>
+  :root{ --bg:#0c1014; --fg:#dfe7e3; --dim:#8fa39c; --line:#1e2a30; --accent:#ffd08a; --warn:#ff8a6a; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+  header{position:sticky;top:0;z-index:10;background:#0c1014ee;backdrop-filter:blur(6px);
+         border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;
+         gap:12px;align-items:center}
+  h1{font-size:15px;margin:0 8px 0 0;color:var(--accent);font-weight:700}
+  label{display:inline-flex;gap:6px;align-items:center;white-space:nowrap;color:var(--dim)}
+  input[type=range]{width:110px}
+  select,button,input[type=text]{background:#16202a;color:var(--fg);border:1px solid var(--line);
+                border-radius:6px;padding:4px 8px;font:inherit}
+  button{cursor:pointer}
+  button.on{background:var(--accent);color:#14202a;border-color:var(--accent)}
+  #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;padding:14px}
+  .card{border:1px solid var(--line);border-radius:8px;background:#0f151b;overflow:hidden}
+  .card.hit{border-color:var(--warn)}
+  .card canvas{display:block;width:100%;height:auto;image-rendering:pixelated;background:#0a0f13}
+  .cap{padding:4px 8px;border-top:1px solid var(--line);font-size:11px;line-height:1.5}
+  .cap b{color:var(--accent);font-weight:700}
+  .cap .n{color:var(--dim)}
+  .cap .f{color:var(--warn)}
+  .hint{padding:12px 16px;color:var(--dim);font-size:12px;border-top:1px solid var(--line)}
+  .hint code{color:var(--fg)}
+  #shellPanel{border-bottom:1px solid var(--line);background:#0b1116}
+  #shellPanel .bar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:10px 16px;color:var(--dim)}
+  #shells{display:flex;flex-wrap:wrap;gap:16px;padding:0 16px 12px}
+  #shells .s{border:1px solid var(--line);border-radius:8px;background:#0f151b;padding:8px}
+  #shells canvas{display:block;image-rendering:pixelated;background:
+    conic-gradient(#20282e 0 25%,#161d22 0 50%) 0 0/12px 12px}
+  #shells .m{display:flex;justify-content:space-between;gap:10px;align-items:center;
+    font-size:11px;color:var(--dim);padding-top:6px}
+  #shells .m b{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🪑 装飾品の接地ビューア</h1>
+  <label>規格
+    <select id="mode">
+      <option value="new" selected>新（足元基準・手前角）</option>
+      <option value="old">現行（高さ基準・マス中心）</option>
+      <option value="both">両方かさねる</option>
+    </select>
+  </label>
+  <label>コマ形状
+    <select id="shape">
+      <option value="auto" selected>今のコマ数から自動</option>
+      <option value="1x1">1×1</option>
+      <option value="2x2">2×2</option>
+      <option value="1x2">1×2（右下がり）</option>
+      <option value="2x1">2×1（右上がり）</option>
+    </select>
+  </label>
+  <label>足元の占有率 <input type="range" id="foot" min="30" max="130" value="50"><b id="footV">0.50</b></label>
+  <label>幅の上限 <input type="range" id="maxw" min="90" max="220" value="115"><b id="maxwV">1.15</b></label>
+  <label>高さの上限 <input type="range" id="maxh" min="80" max="400" value="160"><b id="maxhV">1.60</b></label>
+  <label>拡大 <input type="range" id="zoom" min="10" max="50" value="26"><b id="zoomV">2.6</b></label>
+  <nav id="tags"></nav>
+  <label>絞り込み <input type="text" id="find" placeholder="名前" style="width:120px"></label>
+  <span id="count" style="color:var(--dim)"></span>
+  <button id="bShell">🧱 殻（新規格）</button>
+  <button id="bRoom">🏠 部屋に置く</button>
+</header>
+<section id="roomPanel" hidden>
+  <div class="bar" style="display:flex;gap:14px;align-items:center;padding:10px 16px;color:var(--dim)">
+    <b>部屋に置いた見え方。</b>
+    <label>テーマ <select id="rm_theme"></select></label>
+    <label><input type="checkbox" id="rm_grid"> マスの線を出す</label>
+    <span id="rm_note"></span>
+  </div>
+  <div style="padding:0 16px 12px"><canvas id="rm_cv" style="width:100%;max-width:1024px;image-rendering:pixelated;display:block"></canvas></div>
+  <p class="hint">
+    実機と同じ <code>ISO</code> 定数・同じ配置規則（接地点を菱形の中心x・手前角のyへ、等倍）で描いています。
+    <b>ゲーム本体ではなく再現です</b>が、位置と大きさの計算は同じものを使っています。
+  </p>
+</section>
+<section id="shellPanel" hidden>
+  <div class="bar">
+    <b>殻 = Stitch に渡す型。</b>
+    <label>頭上の余白 <input type="range" id="sh_h" min="0" max="80" value="18"><b id="sh_hV">0.18</b></label>
+    <label>幅比 <input type="range" id="sh_w" min="100" max="160" value="115"><b id="sh_wV">1.15</b></label>
+    <label>生成倍率 <select id="sh_ss"><option>2</option><option>3</option><option selected>4</option><option>6</option><option>8</option></select></label>
+    <label>参考の絵 <select id="sh_ref"></select></label>
+    <label><input type="checkbox" id="sh_guide" checked> 検収の線を出す</label>
+    <button id="bSheet">🧾 シート殻（全テーマ共通の7種を1枚）</button>
+  </div>
+  <div id="sheetBox" hidden></div>
+  <div id="shells"></div>
+  <p class="hint">
+    「🧾 シート殻」で出るのが Stitch に渡す型。セルをシアン #00E5FF の枠で仕切ってあり、
+    焼き込み(tools/assets/cut_prop_sheet.mjs)はこの枠を見つけて切る。枠の幅が1マスの大きさ、
+    枠の下辺が接地線になる。下に並ぶ1体ずつのカードは寸法を詰めるための下見用。
+    <b>殻の形はプレースホルダ</b>で、テーマに合えば形は変えてよい。足元の大きさだけが絶対。
+  </p>
+</section>
+<div id="grid"></div>
+<p class="hint">
+  実機 <code>game/scene/iso.mjs</code> と同じ ISO 定数から床を引いています。1マス = 幅55.65 × 高さ27.83px。
+  <b style="color:#ff5ec8">ピンク</b>が占有ブロックの接地菱形、<b style="color:#6ee6ff">水色の十字</b>が
+  <code>prop-fit.json</code> で実測した足元の中心と接地の高さ、<b style="color:#8f8">緑</b>が絵の bbox。
+  数値は「絵の全体幅 ÷ 菱形の幅」。1.00 を超えるとマスからはみ出します。
+  枠がオレンジのカードは flag 付き（自動測定が当てにならない疑いのある個体）。
+  表示専用で、ゲームのデータは一切変わりません。
+</p>
+
+<script type="module">
+/* 実機 game/scene/iso.mjs と同じ値。ここを書き換えないこと（ずれの判定基準が変わる） */
+const W = 1024, H = 572, GU = 12, GV = 12;
+const ISO = { Bx:0.5, By:0.3584, ux:0.3261, uy:0.2919, vx:-0.3261, vy:0.2919 };
+const uvXY = (u,v) => ({ x:(ISO.Bx + u*ISO.ux + v*ISO.vx)*W, y:(ISO.By + u*ISO.uy + v*ISO.vy)*H });
+const CELL = (Math.hypot(ISO.ux*W/GU, ISO.uy*H/GU) + Math.hypot(ISO.vx*W/GV, ISO.vy*H/GV)) / 2;
+const AUX = ISO.ux*W/GU, AUY = ISO.uy*H/GU;      // 1マス u方向の画面ベクトル(27.83, 13.91)
+
+/* catalog.mjs の PROP_SPAN / FURN_SPAN と同じ規則。コマ数 → 現行の倍率にだけ使う */
+const FURN_SPAN = { chair:1, table:2, shelf:1, sofa:2, rug:2, lamp:2, plant:2 };
+let SPAN = {};
+const spanOf = (n) => SPAN[n] || FURN_SPAN[String(n).split('_')[1]] || 1;
+const isFlat = (n) => /(^|_)rug$/.test(n);
+/* コマ数 → 既定のブロック形状。2コマは細長い物なので 1×2 に割り当てる */
+const shapeOf = (n) => { const s = spanOf(n); return s >= 4 ? [2,2] : s >= 2 ? [1,2] : [1,1]; };
+
+const $ = (id) => document.getElementById(id);
+const grid = $('grid');
+let FIT = {}, names = [], tag = 'all';
+
+/* ブロック(n×m マス)の接地菱形。基準マスは (0,0) 固定 */
+function block(n, m){
+  const back  = uvXY(0, 0), right = uvXY(n/GU, 0);
+  const front = uvXY(n/GU, m/GV), left = uvXY(0, m/GV);
+  return { back, right, front, left, w:(n+m)*AUX, h:(n+m)*AUY,
+    cx:(back.x+front.x)/2, cy:(back.y+front.y)/2 };
+}
+
+/* 新規格の置き方: 足元の幅をブロック菱形の FOOT 倍に合わせ、足元の中心を菱形の手前角へ。
+   横の張り出し(MAXW)と高さ(MAXH)は上限を超えないよう、3つの倍率の最小を採る。
+   game/scene/machine-art.mjs の propImage() と同じ式にすること。 */
+function layoutNew(f, img, b, FOOT, MAXW, MAXH){
+  if(f.flat){
+    const s = b.w / (f.w * img.width);                        // 平物は絵の全幅を菱形の幅へ
+    return { s, x:b.cx - (f.left + f.w/2)*img.width*s, y:b.cy - (f.by - f.h/2)*img.height*s };
+  }
+  const s = Math.min(FOOT * b.w / (f.bw * img.width),
+                     MAXW * b.w / (f.w * img.width),
+                     MAXH * b.w / (f.h * img.height));
+  /* 「自分の接地菱形の中心」を「マスの菱形の中心」に重ねる。原点は自分の菱形の手前角(最下点)
+     なので、中心から手前角までの距離 fw/4 (菱形は2:1) だけ下げる。
+     手前角どうしを合わせると、foot<1.0 のぶんだけ全部が手前へずれる。 */
+  const fw = f.bw * img.width * s;
+  return { s, x:b.cx - f.cx*img.width*s, y:b.cy + fw/4 - f.by*img.height*s };
+}
+/* 現行の置き方(machine-art.mjs): 絵の高さを 1.35*√コマ数*CELL に合わせ、bbox の下端中央をマス中心へ */
+function layoutOld(name, img, b){
+  const s = 1.35 * Math.sqrt(spanOf(name)) * CELL / img.height;
+  const c = uvXY(0.5/GU, 0.5/GV);                             // 基準マスの中心
+  return { s, x:c.x - img.width*s/2, y:c.y - img.height*s, flat:isFlat(name) };
+}
+
+function poly(g, pts, stroke, fill){
+  g.beginPath(); pts.forEach((p,i) => i ? g.lineTo(p.x,p.y) : g.moveTo(p.x,p.y)); g.closePath();
+  if(fill){ g.fillStyle = fill; g.fill(); }
+  if(stroke){ g.strokeStyle = stroke; g.lineWidth = 1; g.stroke(); }
+}
+
+function drawCard(cv, name, img){
+  const f = FIT[name]; if(!f) return;
+  const FOOT = +$('foot').value/100, MAXW = +$('maxw').value/100, MAXH = +$('maxh').value/100, Z = +$('zoom').value/10;
+  const mode = $('mode').value, sh = $('shape').value;
+  const [n,m] = sh === 'auto' ? shapeOf(name) : sh.split('x').map(Number);
+  const b = block(n, m);
+  f.flat = isFlat(name);
+
+  /* カードのビューポート: 菱形を中心に、上へ絵が伸びるぶんの余白を取る */
+  const vw = Math.max(b.w * 2.0, 90), vh = Math.max(b.w * 1.9, 90);
+  cv.width = Math.round(vw*Z); cv.height = Math.round(vh*Z);
+  const g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.setTransform(Z, 0, 0, Z, Math.round((vw/2 - b.cx)*Z), Math.round((vh - b.w*0.42 - b.cy)*Z));
+
+  /* 周りの床(3×3マスぶん)。はみ出しが隣のマスへ何マスぶん出るか見えるように */
+  g.globalAlpha = 0.5;
+  for(let c=-2; c<n+2; c++) for(let r=-2; r<m+2; r++)
+    poly(g, [uvXY(c/GU,r/GV), uvXY((c+1)/GU,r/GV), uvXY((c+1)/GU,(r+1)/GV), uvXY(c/GU,(r+1)/GV)], '#2b3a44');
+  g.globalAlpha = 1;
+  poly(g, [b.back, b.right, b.front, b.left], '#ff5ec8', 'rgba(255,94,200,0.10)');
+
+  const put = (L) => { g.drawImage(img, L.x, L.y, img.width*L.s, img.height*L.s); return L; };
+  let L = null, over = 0;
+  if(mode === 'old' || mode === 'both'){ g.globalAlpha = mode === 'both' ? 0.45 : 1; L = put(layoutOld(name, img, b)); g.globalAlpha = 1; }
+  if(mode === 'new' || mode === 'both'){ L = put(layoutNew(f, img, b, FOOT, MAXW, MAXH)); }
+  over = f.w * img.width * L.s / b.w;
+  L.hh = f.h * img.height * L.s / b.w;                        // 絵の高さ / 菱形の幅
+
+  /* 実測した足元(水色の十字)と bbox(緑) */
+  const iw = img.width*L.s, ih = img.height*L.s;
+  g.strokeStyle = '#8f8'; g.lineWidth = 0.5;
+  g.strokeRect(L.x + f.left*iw, L.y + (f.by - f.h)*ih, f.w*iw, f.h*ih);
+  const fx = L.x + f.cx*iw, fy = L.y + f.by*ih;
+  g.strokeStyle = '#6ee6ff'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(fx - f.bw*iw/2, fy); g.lineTo(fx + f.bw*iw/2, fy);
+  g.moveTo(fx, fy - 5); g.lineTo(fx, fy + 3); g.stroke();
+  return { over, hh:L.hh, n, m };
+}
+
+function render(){
+  const q = $('find').value.trim().toLowerCase();
+  grid.innerHTML = '';
+  let shown = 0;
+  for(const name of names){
+    const f = FIT[name];
+    if(q && !name.includes(q)) continue;
+    if(tag === 'clean' && (f.flags||[]).length) continue;
+    if(tag !== 'all' && tag !== 'clean' && !(f.flags||[]).includes(tag)) continue;
+    shown++;
+    const card = document.createElement('div');
+    card.className = 'card' + ((f.flags||[]).length ? ' hit' : '');
+    const cv = document.createElement('canvas');
+    const cap = document.createElement('div');
+    cap.className = 'cap';
+    card.append(cv, cap); grid.append(card);
+    const img = new Image();
+    img.onload = () => {
+      const r = drawCard(cv, name, img);
+      cap.innerHTML = `<b>${name}</b> <span class="n">${r.n}×${r.m} / ${f.px[0]}×${f.px[1]}px</span><br>`
+        + `<span class="${r.over > 1 ? 'f' : 'n'}">幅 ${r.over.toFixed(2)}</span>`
+        + ` <span class="n">高 ${r.hh.toFixed(2)}</span>`
+        + ((f.flags||[]).length ? ` <span class="f">${f.flags.join(' ')}</span>` : '');
+    };
+    img.src = `/assets/props/prop_${name}.png`;
+  }
+  $('count').textContent = `${shown} / ${names.length}体`;
+}
+
+/* コマ数は catalog.mjs を正として読む(二重管理を避ける) */
+const cat = await (await fetch('/game/scene/catalog.mjs')).text();
+for(const [, k, v] of cat.match(/const PROP_SPAN = \{[\s\S]*?\n\};/)[0].matchAll(/(\w+):(\d+)/g)) SPAN[k] = +v;
+FIT = await (await fetch('/assets/props/prop-fit.json', {cache:'no-store'})).json();
+names = Object.keys(FIT).sort();
+
+const TAGS = [['all','すべて'],['clean','無印'],['narrowBase','narrowBase'],['skew','skew'],['wide','wide'],['edge','edge']];
+for(const [k, label] of TAGS){
+  const b = document.createElement('button');
+  const n = k === 'all' ? names.length
+          : k === 'clean' ? names.filter(x => !(FIT[x].flags||[]).length).length
+          : names.filter(x => (FIT[x].flags||[]).includes(k)).length;
+  b.textContent = `${label} ${n}`;
+  b.className = k === 'all' ? 'on' : '';
+  b.onclick = () => { tag = k; [...$('tags').children].forEach(c => c.classList.toggle('on', c === b)); render(); };
+  $('tags').append(b);
+}
+/* ===== 殻（新規格の型） =====
+   キャンバスそのものを許容枠にする。幅 = WR×DW / 高さ = HR×DW で、接地菱形(幅 DW)の
+   最下点をキャンバス下端に密着させる。物は菱形の上に立ち、キャンバスの外へは出られない。
+   → 焼き込みは「キャンバス全体を目標サイズへ縮小」だけで済み、トリムも測定も要らなくなる。
+   色は製造機の殻(tools/assets/make_machine_shell.py)と揃える。 */
+const MAGENTA = '#ff00ff';
+/* 接地菱形は「位置合わせの目印」なので、家具に使われない色にする。
+   部屋の床と同じクリーム(#cdbfa4)にしていたら、和紙の行灯・畳のラグと同色になって
+   焼き込みが菱形を見失った（2026-08 の jpn で 8体中4体が失敗）。 */
+const TILE_MARK = '#00e5ff';
+const TOP = '#cdbfa4', SIDE_L = '#8d7f66', SIDE_R = '#6f6350';   // 上向き面 / 手前左面 / 手前右面
+const HOLE = '#2a3548';                                          // 開口・くぼみ(製造機の殻と同じ)
+const G_EDGE = '#ff3da6', G_MID = '#6ee6ff';                     // 検収の線
+
+/* スロットごとの殻。Stitch には「この形をテーマの意匠で塗り替えろ」と渡すので、
+   形(高さ・幅・脚の位置)はここで決まり、生成AIには意匠だけを任せる。
+   単位はすべて「1マスの菱形の幅 DW」に対する比。a,b は床の2軸(0..n, 0..m)、h は高さ。 */
+/* 描く順は必ず「奥から手前」。a,b が小さいほど奥なので、背もたれ → 脚 → 座面 の順になる。
+   手前の物を先に描くと、奥の物がその上に乗って立体が壊れる。 */
+const SLOTS = [
+  { k:'chair', shape:[1,1], h:0.86, draw:(D)=>{
+      D.box(0.14, 0.86, 0.14, 0.28, 0.38, 0.86);            // 背もたれ(奥)
+      D.legs(0.21, 0.79, 0.38, 0.10);                       // 4本脚
+      D.box(0.14, 0.86, 0.14, 0.86, 0.32, 0.38);            // 座面
+    }},
+  { k:'shelf', shape:[1,1], h:1.05, draw:(D)=>{
+      // 薄い箱だが、奥行きはマスの中心に置く(奥に寄せると絵が右奥へずれて見える)
+      D.box(0.08, 0.92, 0.29, 0.71, 0.00, 1.05);
+      D.hole(0.16, 0.84, 0.71, 0.10, 0.46);                 // 下段の空き(手前の面に開く)
+      D.hole(0.16, 0.84, 0.71, 0.56, 0.94);                 // 上段の空き
+    }},
+  { k:'lamp',  shape:[1,1], h:1.65, draw:(D)=>{
+      D.box(0.34, 0.66, 0.34, 0.66, 0.00, 0.07);            // 台座
+      D.box(0.45, 0.55, 0.45, 0.55, 0.07, 1.22);            // 支柱
+      D.box(0.22, 0.78, 0.22, 0.78, 1.22, 1.65);            // 傘
+    }},
+  { k:'plant', shape:[1,1], h:1.20, draw:(D)=>{
+      D.box(0.28, 0.72, 0.28, 0.72, 0.00, 0.34);            // 鉢
+      D.box(0.44, 0.56, 0.44, 0.56, 0.34, 0.48);            // 幹(鉢が隠れないよう間を空ける)
+      D.box(0.14, 0.86, 0.14, 0.86, 0.48, 1.20);            // 葉のかたまり
+    }},
+  { k:'table', shape:[1,2], h:0.46, draw:(D)=>{
+      D.legs(0.14, 0.86, 0.40, 0.08);
+      D.box(0.06, 0.94, 0.06, 0.94, 0.34, 0.40);            // 天板
+    }},
+  /* ソファは 1×2 なので、長手は b 軸(2マスある側)。背もたれは長辺に沿って a の奥側に立て、
+     肘掛けは長手の両端(b の両端)に置く。短い側に背もたれを立てるとソファに見えない。 */
+  { k:'sofa',  shape:[1,2], h:0.80, draw:(D)=>{
+      D.box(0.08, 0.92, 0.04, 0.18, 0.40, 0.60);            // 肘掛け(奥端)
+      D.box(0.08, 0.32, 0.04, 0.96, 0.40, 0.80);            // 背もたれ(長辺に沿う)
+      D.legs(0.16, 0.84, 0.20, 0.10);
+      D.box(0.08, 0.92, 0.04, 0.96, 0.20, 0.40);            // 座面
+      D.box(0.08, 0.92, 0.82, 0.96, 0.40, 0.60);            // 肘掛け(手前端)
+    }},
+  { k:'rug',   shape:[1,2], h:0.02, draw:(D)=>{
+      D.box(0.04, 0.96, 0.04, 0.96, 0.00, 0.015);           // 床に敷くだけの平物
+    }},
+];
+/* 名物(一点物)はスロットが無いので汎用の殻を使う。ただし菱形だけを描いた殻では
+   幾何ごと外れる（2026-08 の検証で屏風だけ稜線 1.24/1.53 になった。他7体は 0.50〜0.53）。
+   形は自由でも「この大きさに収める」という物理的な手本が要るので、素の箱を1つ立てておく。 */
+const FREE = [{ k:'free-1x1', shape:[1,1], h:1.55, draw:(D)=>D.box(0.18,0.82,0.18,0.82,0,1.55) },
+              { k:'free-1x2', shape:[1,2], h:1.55, draw:(D)=>D.box(0.14,0.86,0.10,0.90,0,1.55) },
+              { k:'free-2x2', shape:[2,2], h:1.55, draw:(D)=>D.box(0.16,0.84,0.16,0.84,0,1.55) }];
+
+/* 殻1枚を描く。ss = 1ゲームpxあたりの倍率。guide=false なら Stitch へ渡す絵そのもの。
+   1×2 の菱形は左右対称ではない(手前角が中心から半マスずれる)ので、4頂点から素直に引く。 */
+function drawShell(cv, spec, WR, HR, ss, guide, ref, opt){
+  opt = opt || {};
+  const [n,m] = spec.shape, SX = AUX, SY = AUY;              // 1マスの半幅・半高
+  const DW = (n+m)*SX;                                       // ブロックの接地菱形の幅
+  const U = 2*SX;                                            // 高さの単位 = 1マスの幅(55.65px)
+  /* 高さは必ず「1マスの幅」を単位にする。ブロックの菱形幅 DW を単位にすると、
+     同じ 0.80 でも 1×1 では 45px・1×2 では 67px になり、細長い物だけ背が高く化ける。 */
+  const A = (t)=>t*n, B = (t)=>t*m;
+
+  /* 中身の高さを実測してからキャンバスを決める。比で決め打ちすると、
+     物は菱形の「奥」に立つぶん(最大で菱形の高さのぶん)だけ上へ出て、頭が切れる。 */
+  let top = 0;                                               // 手前角から上への最大距離
+  const reach = (a0,b0,h1) => {
+    const t = (n+m)*SY - (A(a0)+B(b0))*SY + h1*U;
+    if(t > top) top = t;
+  };
+  const measure = {
+    box:(a0,a1,b0,b1,h0,h1)=>reach(a0,b0,h1),
+    legs:(i0,i1,h,w)=>reach(i0-w/2,i0-w/2,h),
+    hole:()=>{},
+  };
+  // spec.h は「マスの中心にこの高さの物が立つ」という最低保証。名物用の殻(free-*)は
+  // 形を描かないので、これが無いと枠が接地菱形の高さまで潰れる
+  if(spec.h) reach(0.5, 0.5, spec.h);
+  spec.draw(measure);
+  // キャンバスは中身にぴったり合わせる(HR = 頭の上に取る余白。マス幅比)。
+  // 高さを比で決め打ちすると、背の低い物ほど上に無駄なマゼンタが残り、生成側が
+  // 「そこにも何か描く空間がある」と解釈してしまう
+  /* 枠を描くときは、線幅ぶんキャンバスを四方に広げる。広げないと枠線が菱形の手前角を
+     上書きして角が欠ける（ラグは全体が菱形なので特に目立つ）。
+     広げる量は線幅ちょうど＝菱形の手前角が線の内側にぴったり接する。隙間を空けると
+     「枠の下辺に立つ」という指示と絵が食い違って、生成側が迷う。 */
+  const lw = Math.max(1, FRAME_W*DW), pad = opt.frame ? lw : 0;
+  let W2 = DW*WR + pad*2;
+  const H2 = Math.max((n+m)*SY, top + HR*U) + pad*2;
+  /* opt.ar があれば、キャンバスをその縦横比のどれかに広げる(カスタムの殻で使う)。
+     生成側が返す画像は決まった比のものしかなく、外れた比で頼むと近い比へ丸めて
+     描き直され、そのぶん割り付けが変わるため(→ docs/prop-sprite-prompt.md)。
+     広げるのは横だけ。縦を詰めると背の高い名物が入らなくなる。
+     菱形は下端中央のままなので、足元の大きさは変わらない。 */
+  if(opt.ar && opt.ar.length){
+    const a0 = W2/H2;
+    const t = opt.ar.reduce((b,x)=> Math.abs(Math.log(x/a0)) < Math.abs(Math.log(b/a0)) ? x : b);
+    if(t > a0) W2 = H2*t;
+  }
+
+  cv.width = Math.round(W2*ss); cv.height = Math.round(H2*ss);
+  const g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.setTransform(ss,0,0,ss,0,0);
+  g.fillStyle = MAGENTA; g.fillRect(0,0,W2,H2);
+  // 菱形の bbox をキャンバスの下端中央に置く(手前角は下端から pad だけ上)
+  const ox = W2/2 - (n-m)*SX/2, oy = H2 - pad - (n+m)*SY;    // 奥角(a=0,b=0)の位置
+  const P = (a,b,h) => ({ x:ox + (a-b)*SX, y:oy + (a+b)*SY - h*U });
+  const dia = [P(0,0,0), P(n,0,0), P(n,m,0), P(0,m,0)];      // 奥・右・手前・左
+  /* 接地菱形。「どこに立つか」と 2:1 のカメラを絵で教えるのが役目で、殻には必ず要る。
+     位置合わせは枠がやるので出力には要らないが、枠と同じシアンにしてあるので
+     焼き込みでシアンを消せば菱形も一緒に消える。物に隠れても構わない。 */
+  poly(g, dia, null, TILE_MARK);
+
+  /* 立体を描く道具。a,b は 0..1 の比で受けて、そのブロックの実寸へ伸ばす */
+  const p = (a,b,h)=>P(A(a),B(b),h);
+  const D = {
+    /* 直方体。見えるのは 上面 と 手前の2面 だけ。a,b が大きい側が手前なので、
+       側面は a=a1(手前右) と b=b1(手前左) に描く。a0/b0 の面は奥を向くので描かない。 */
+    box(a0,a1,b0,b1,h0,h1){
+      poly(g, [p(a1,b0,h1),p(a1,b1,h1),p(a1,b1,h0),p(a1,b0,h0)], null, SIDE_R);       // 手前右
+      poly(g, [p(a0,b1,h1),p(a1,b1,h1),p(a1,b1,h0),p(a0,b1,h0)], null, SIDE_L);       // 手前左
+      poly(g, [p(a0,b0,h1),p(a1,b0,h1),p(a1,b1,h1),p(a0,b1,h1)], null, TOP);          // 上面
+    },
+    /* 4本脚。inset の位置に細い柱を立てる。奥の脚から描く */
+    legs(i0,i1,h,w){
+      for(const [a,b] of [[i0,i0],[i1,i0],[i0,i1],[i1,i1]])
+        D.box(a-w/2, a+w/2, b-w/2, b+w/2, 0, h);
+    },
+    /* 開口・くぼみ。手前左(b=bF)の面に開ける。位置だけ規格で、形はテーマ任せなので、
+       硬い枠で描かず上端をぼかす(硬い四角だと、その四角ごと写される) */
+    hole(a0,a1,bF,h0,h1){
+      g.save(); g.filter = `blur(${DW*0.014}px)`;
+      poly(g, [p(a0,bF,h1),p(a1,bF,h1),p(a1,bF,h0),p(a0,bF,h0)], null, HOLE);
+      g.restore();
+    },
+  };
+  spec.draw(D);
+
+  if(ref && ref.img && ref.f){
+    /* 参考の絵。菱形は「物の footprint」ではなくマスそのものなので、一覧と同じ占有率で置く */
+    const f = ref.f, im = ref.img, foot = +$('foot').value/100;
+    const s = foot*DW/(f.bw*im.width), fw = f.bw*im.width*s;
+    const cx = (dia[0].x+dia[2].x)/2, cy = (dia[0].y+dia[2].y)/2;
+    g.globalAlpha = 0.55;
+    g.drawImage(im, cx - f.cx*im.width*s, (cy + fw/4) - f.by*im.height*s, im.width*s, im.height*s);
+    g.globalAlpha = 1;
+  }
+  /* セルの枠。これが焼き込みの唯一の基準になる:
+       枠の幅   → 1マスの大きさ（セル幅は菱形の幅の WR 倍と決まっている）
+       枠の下辺 → 接地線。物の最下点がここに乗る
+       枠の中心 → 物の横中心
+     線が絵に残るので、生成物の寸法や並びが動いても機械的に切り出せる。 */
+  if(opt.frame){
+    g.strokeStyle = FRAME; g.lineWidth = lw;
+    g.strokeRect(lw/2, lw/2, W2-lw, H2-lw);
+  }
+  if(guide){
+    g.lineWidth = 2/ss;
+    poly(g, dia, G_EDGE);
+    g.strokeStyle = G_MID;                                   // 菱形の中心を通る十字
+    g.beginPath();
+    g.moveTo((dia[0].x+dia[2].x)/2, dia[0].y); g.lineTo((dia[0].x+dia[2].x)/2, dia[2].y);
+    g.moveTo(dia[3].x, (dia[1].y+dia[3].y)/2); g.lineTo(dia[1].x, (dia[1].y+dia[3].y)/2);
+    g.stroke();
+    g.strokeStyle = '#ffffff66'; g.setLineDash([4,3]);
+    g.strokeRect(g.lineWidth/2, g.lineWidth/2, W2-g.lineWidth, H2-g.lineWidth);
+    g.setLineDash([]);
+  }
+  /* gy = 接地線(菱形の手前角)がキャンバスの高さのどこにあるか。枠の下辺は線幅ぶん下なので、
+     焼き込みが枠から接地点を出すのにこの比が要る */
+  return { W2, H2, DW, n, m, gy:(H2-pad)/H2 };
+}
+
+// want = いま選ばれている名前。読み込みは非同期なので、戻ってきた時に選択が変わっていたら捨てる
+// (捨てないと、クリアした後に前の画像が届いて勝手に復活する)
+/* ===== シート殻 =====
+   1テーマ8体を1枚にまとめた殻。スロットごとに発注すると、同じテーマなのに枚ごとに
+   デザインが割れる(製造機で実測済み。docs/machine-sprite-prompt.md)。1枚に収めれば
+   生成が1回で済み、デザインも揃う。
+   各殻の置き場所(セル矩形)を規格として持ち、焼き込みはその矩形で切り出す。
+   マゼンタの溝を広めに取るのは、生成側が隣のセルと繋げて描いてしまうのを防ぐため。 */
+/* 全テーマ共通で作るのはこの7種。名物(一点物)だけは物ごとに特徴も大きさも違うので
+   都度、単体の殻で発注する。 */
+const SHEET_ORDER = ['chair','shelf','lamp','plant','table','sofa','rug'];
+const SHEET_COLS = 4;   // 上段に1×1の4つ、下段に1×2の3つ が並ぶ
+const GUTTER = 0.30;                                   // セル間の溝 / 1マスの幅
+/* セルを枠線で囲む。焼き込みは「殻の座標から推測」ではなく「絵に残った枠を見つけて切る」。
+   生成物は殻と同じ寸法では返らず並びも動くので、推測に頼ると別の物を切り出す（実際に
+   ソファの位置から机が出た）。枠は溝の中にあり、切り出したら捨てる部分なので、
+   塗り込まれても害がない。 */
+const FRAME = '#00e5ff', FRAME_W = 0.05;               // 枠の色と太さ / 1マスの幅
+
+function buildSheet(ss, guide, order){
+  const specs = (order||SHEET_ORDER).map(k => [...SLOTS, ...FREE].find(s => s.k === k));
+  const tiles = specs.map(spec => {                    // 先に1枚ずつ焼いて実寸を得る
+    const cv = document.createElement('canvas');
+    const r = drawShell(cv, spec, +$('sh_w').value/100, +$('sh_h').value/100, ss, guide, null,
+      { frame:true });
+    return { k:spec.k, cv, w:cv.width, h:cv.height, gw:r.W2, gh:r.H2, gy:r.gy };
+  });
+  const gap = Math.round(GUTTER * 2*AUX * ss);
+  const cols = Math.min(SHEET_COLS, tiles.length);
+  const rows = [];
+  for(let i = 0; i < tiles.length; i += cols) rows.push(tiles.slice(i, i+cols));
+  const rowH = rows.map(r => Math.max(...r.map(t => t.h)));
+  const W = gap + Math.max(...rows.map(r => r.reduce((a,t) => a + t.w + gap, 0)));
+  const H = gap + rowH.reduce((a,h) => a + h + gap, 0);
+
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.fillStyle = MAGENTA; g.fillRect(0,0,W,H);
+  const rects = [];
+  let y = gap;
+  rows.forEach((row, ri) => {
+    let x = gap;
+    for(const t of row){
+      const ty = y + rowH[ri] - t.h;                   // 下端を揃える(接地線が一直線に並ぶ)
+      g.drawImage(t.cv, x, ty);
+      rects.push({ k:t.k, x, y:ty, w:t.w, h:t.h, gy:Math.round(t.gy*10000)/10000 });
+      x += t.w + gap;
+    }
+    y += rowH[ri] + gap;
+  });
+  return { cv, W, H, rects };
+}
+
+/* シート殻とその切り出し位置を取り出す口（保存ボタンと同じ中身を返す） */
+/* カスタム装飾品(名物・一点物)用の殻。1体ずつ発注するがシアンの枠は必ず描く。
+   一度「1体だけならキャンバスの縁が枠になる」として枠を省いたが、生成物は指定した寸法で
+   返らない(384x533 で頼んで 848x1264 が返り、縦横比が 7% ずれた)。縁は絵ではないので
+   生成側は保てず、枠を省くと大きさの基準が絵の中に一つも残らない。菱形まで縦に10%伸びた。
+   枠は「描かれた線」なので寸法が動いても一緒に動く。これが焼き込みの唯一の基準。 */
+/* 生成側が返してくるキャンバスは3種類しかない(実測): 1200x896 / 1024x1024 / 896x1200。
+   頼んだ寸法は無視され、いちばん近いこの比に丸めて描き直される。
+   殻の比が中途半端だと、その丸めのぶんだけ絵の割り付けが変わる:
+     sheet7  1.348 → 1.339  ずれ -0.6%   問題なし
+     1x2     0.735 → 0.747  ずれ  1.5%   問題なし
+     2x2     0.903 → 1.000  ずれ 10.8%   ← 高さが1割減り、菱形が枠に対して8%太った
+   そこでキャンバスの比をこの3つのどれかに合わせておく。広げるのは横だけで、
+   **枠はキャンバスの縁に引く**(枠の中に細いマゼンタの帯を作らない)。
+   枠が広がるぶん、枠の幅と足元の菱形の比は変わるが、それは JSON に記録されるので
+   縮尺は狂わない。菱形そのものの大きさは変えていないので、足元の規格は同じ。 */
+const CANVAS_AR = [1200/896, 1, 896/1200];
+window.__customPNG = (k) => {
+  const spec = [...SLOTS, ...FREE].find(s => s.k === k);
+  if(!spec) return null;
+  const cv = document.createElement('canvas');
+  const r = drawShell(cv, spec, +$('sh_w').value/100, +$('sh_h').value/100, +$('sh_ss').value, false, null,
+    { frame:true, ar:CANVAS_AR });
+  return { png:cv.toDataURL('image/png'), w:cv.width, h:cv.height,
+    cells:[{ k:spec.k, x:0, y:0, w:cv.width, h:cv.height, gy:Math.round(r.gy*10000)/10000 }] };
+};
+
+window.__sheetPNG = () => {
+  const out = buildSheet(+$('sh_ss').value, false);
+  return { png:out.cv.toDataURL('image/png'), w:out.W, h:out.H, cells:out.rects };
+};
+
+const shellRef = { img:null, f:null, name:null, want:null };
+function renderShells(){
+  const WR = +$('sh_w').value/100, HR = +$('sh_h').value/100, ss = +$('sh_ss').value;
+  const guide = $('sh_guide').checked, host = $('shells');
+  host.innerHTML = '';
+  for(const spec of [...SLOTS, ...FREE]){
+    const box = document.createElement('div'); box.className = 's';
+    const cv = document.createElement('canvas');
+    const meta = document.createElement('div'); meta.className = 'm';
+    const dl = document.createElement('button'); dl.textContent = '⬇ 保存';
+    box.append(cv, meta); host.append(box);
+    // キャンバスの高さは中身から実測する(drawShell)。スライダは下限としてだけ効く
+    const ref = (shellRef.name && shellRef.name.endsWith('_' + spec.k)) ? shellRef : null;
+    const r = drawShell(cv, spec, WR, HR, 3, guide, ref);
+    const gw = Math.round(r.W2*ss), gh = Math.round(r.H2*ss);
+    meta.innerHTML = `<span><b>${spec.k}</b> ${r.n}×${r.m} / 枠 ${r.W2.toFixed(0)}×${r.H2.toFixed(0)}px`
+      + ` <span style="color:var(--fg)">→ 生成 ${gw}×${gh}</span></span>`;
+    meta.append(dl);
+    dl.onclick = () => {                                     // 保存は生成倍率・線なし・参考の絵なし
+      const out = document.createElement('canvas');
+      drawShell(out, spec, WR, HR, ss, false, null);
+      const a = document.createElement('a');
+      a.download = `prop-shell-${spec.k}-${gw}x${gh}.png`;
+      a.href = out.toDataURL('image/png'); a.click();
+    };
+  }
+}
+function setShellRef(name){
+  shellRef.want = name;
+  if(!name){ shellRef.img = null; shellRef.f = null; shellRef.name = null; renderShells(); return; }
+  const im = new Image();
+  im.onload = () => {
+    if(shellRef.want !== name) return;                 // 読んでいる間に選択が変わっていたら捨てる
+    shellRef.img = im; shellRef.f = FIT[name]; shellRef.name = name; renderShells();
+  };
+  im.src = `/assets/props/prop_${name}.png`;
+}
+{
+  const sel = $('sh_ref');
+  sel.innerHTML = '<option value="">（なし）</option>' + names.map(n => `<option>${n}</option>`).join('');
+  sel.value = names.includes('arb_lamp') ? 'arb_lamp' : '';
+  sel.onchange = () => setShellRef(sel.value);
+  for(const id of ['sh_h','sh_w','sh_ss','sh_guide']) $(id).oninput = () => {
+    $('sh_hV').textContent = (+$('sh_h').value/100).toFixed(2);
+    $('sh_wV').textContent = (+$('sh_w').value/100).toFixed(2);
+    renderShells();
+  };
+  $('bShell').onclick = () => {
+    const p = $('shellPanel'); p.hidden = !p.hidden;
+    $('bShell').classList.toggle('on', !p.hidden);
+    if(!p.hidden) setShellRef(sel.value);
+  };
+  $('bSheet').onclick = () => {
+    const box = $('sheetBox');
+    box.hidden = !box.hidden;
+    $('bSheet').classList.toggle('on', !box.hidden);
+    if(!box.hidden) renderSheet();
+  };
+  for(const id of ['sh_h','sh_w','sh_ss']) $(id).addEventListener('input', () => {
+    if(!$('sheetBox').hidden) renderSheet();
+  });
+  $('sh_guide').addEventListener('input', () => { if(!$('sheetBox').hidden) renderSheet(); });
+}
+
+/* シート殻の表示。実寸が大きいので画面では縮めて見せ、保存は原寸で出す */
+function renderSheet(){
+  const ss = +$('sh_ss').value, box = $('sheetBox');
+  const view = buildSheet(ss, $('sh_guide').checked);
+  const out  = buildSheet(ss, false);                  // 保存用(線なし)
+  box.innerHTML = '';
+  const wrap = document.createElement('div'); wrap.className = 's';
+  const img = document.createElement('img');
+  img.src = view.cv.toDataURL('image/png');
+  img.style.cssText = 'display:block;max-width:100%;image-rendering:pixelated';
+  const meta = document.createElement('div'); meta.className = 'm';
+  const dl = document.createElement('button'); dl.textContent = '⬇ シート殻を保存';
+  const dj = document.createElement('button'); dj.textContent = '⬇ 切り出し位置(JSON)';
+  // 1体あたりの解像度の目安。既存の原寸(assets/prop-src)は幅の中央値が236pxで、
+  // それで足りていたので 200〜300px あれば十分。生成側の上限に当たる方が問題になる
+  const per = Math.round(64*ss);
+  meta.innerHTML = `<span><b>シート殻</b> ${view.W}×${view.H}px / ${SHEET_ORDER.length}体 / 生成倍率 ${ss}倍`
+    + `（1×1のセルが ${per}px 幅）`
+    + (view.W > 2048 ? ' <span style="color:var(--warn)">大きすぎて生成側が受けない可能性</span>'
+                     : ' <span style="color:var(--fg)">1テーマ1枚で発注する</span>') + `</span>`;
+  meta.append(dj, dl);
+  wrap.append(img, meta); box.append(wrap);
+  dl.onclick = () => { const a = document.createElement('a');
+    a.download = `prop-shell-sheet-${out.W}x${out.H}.png`;
+    a.href = out.cv.toDataURL('image/png'); a.click(); };
+  dj.onclick = () => { const a = document.createElement('a');
+    a.download = `prop-shell-sheet-${out.W}x${out.H}.json`;
+    a.href = 'data:application/json;charset=utf-8,'
+      + encodeURIComponent(JSON.stringify({ sheet:[out.W,out.H], scale:ss, cells:out.rects }, null, 1));
+    a.click(); };
+}
+
+/* ===== 部屋に置いた見え方 =====
+   実機 game/scene/machine-art.mjs の propImage() の新規格パスと同じ計算をする:
+   焼き込み済みの絵は等倍で、接地点(cx,by)を「ブロックの菱形の中心x・手前角のy」に置く。 */
+const ROOM_LAYOUT = [   // どのスロットをどのマスに置くか
+  { slot:'rug',   c:2, r:7 }, { slot:'chair', c:3, r:3 }, { slot:'shelf', c:6, r:1 },
+  { slot:'lamp',  c:9, r:3 }, { slot:'plant', c:10, r:6 },
+  { slot:'table', c:4, r:6 }, { slot:'sofa',  c:7, r:7 },
+  { slot:'@landmark', c:1, r:1 },      // その テーマの名物(カスタム殻で1体ずつ作る物)
+];
+const LANDMARK = { jpn:'byobu', dno:'fossil', din:'jukebox', cab:'hearth', sus:'noren', stm:'helmet', ons:'rotenburo' };
+const load = (src) => new Promise(res => { const im=new Image(); im.onload=()=>res(im); im.onerror=()=>res(null); im.src=src; });
+
+async function renderRoom(){
+  const theme = $('rm_theme').value, cv = $('rm_cv'), g = cv.getContext('2d');
+  cv.width = W; cv.height = H;
+  g.imageSmoothingEnabled = false;
+  const bg = await load(`/assets/rooms/room-${theme.room}.png`);
+  if(bg) g.drawImage(bg, 0, 0, W, H); else { g.fillStyle='#101820'; g.fillRect(0,0,W,H); }
+  if($('rm_grid').checked){                       // マスの線(実機の ?grid=1 と同じ引き方)
+    g.strokeStyle='rgba(51,255,204,0.45)'; g.lineWidth=1;
+    for(let c=0;c<=GU;c++){ const a=uvXY(c/GU,0), b2=uvXY(c/GU,1);
+      g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b2.x,b2.y); g.stroke(); }
+    for(let r=0;r<=GV;r++){ const a=uvXY(0,r/GV), b2=uvXY(1,r/GV);
+      g.beginPath(); g.moveTo(a.x,a.y); g.lineTo(b2.x,b2.y); g.stroke(); }
+  }
+  const items = [];
+  for(const it of ROOM_LAYOUT){
+    const slot = it.slot === '@landmark' ? LANDMARK[theme.pre] : it.slot;
+    if(!slot) continue;
+    const name = `${theme.pre}_${slot}`, f = FIT[name];
+    const im = await load(`/assets/props/prop_${name}.png`);
+    if(!im || !f) continue;
+    // 形は焼き込み済みなら fit が持つ。コマ数の表(FURN_SPAN)は旧290体むけで lamp が 2コマ
+    const [n,m] = f.shape || shapeOf(name), b = block(n,m);
+    // block() は基準マス(0,0)で作られるので、置きたいマスぶん平行移動する
+    const off = uvXY(it.c/GU, it.r/GV), org = uvXY(0,0);
+    const dx = off.x-org.x, dy = off.y-org.y;
+    const cx = (b.back.x+b.front.x)/2 + dx, gy = b.front.y + dy;
+    items.push({ im, f, x:cx - f.cx*im.width, y:gy - f.by*im.height, depth:isFlat(name)?-1e6:gy, name });
+  }
+  items.sort((a,b2)=>a.depth-b2.depth);            // 奥から手前へ
+  for(const it of items) g.drawImage(it.im, Math.round(it.x), Math.round(it.y));
+  $('rm_note').textContent = `${items.length}体を配置 / ${items.filter(i=>FIT[i.name]&&FIT[i.name].baked).length}体が新規格`;
+}
+{
+  /* 焼き込み済み(baked)の絵があるテーマだけ出す */
+  const PRE2ROOM = { jpn:'japan', sus:'sushi', stm:'steampunk', din:'diner', cab:'cabin', dno:'dino', ons:'onsen', tky:'tokyo' };
+  const sel = $('rm_theme');
+  const pres = [...new Set(Object.entries(FIT).filter(([,v])=>v.baked).map(([k])=>k.split('_')[0]))];
+  const opts = (pres.length?pres:['jpn']).map(p=>({pre:p, room:PRE2ROOM[p]||'factory'}));
+  sel.innerHTML = opts.map((o,i)=>`<option value="${i}">${o.pre} (${o.room})</option>`).join('');
+  Object.defineProperty(sel, 'value', { get(){ return opts[+sel.selectedIndex||0]; } });
+  $('bRoom').onclick = () => { const p=$('roomPanel'); p.hidden=!p.hidden;
+    $('bRoom').classList.toggle('on', !p.hidden); if(!p.hidden) renderRoom(); };
+  sel.onchange = renderRoom; $('rm_grid').oninput = renderRoom;
+}
+
+for(const id of ['mode','shape','foot','maxw','maxh','zoom','find']) $(id).oninput = () => {
+  $('footV').textContent = (+$('foot').value/100).toFixed(2);
+  $('maxwV').textContent = (+$('maxw').value/100).toFixed(2);
+  $('maxhV').textContent = (+$('maxh').value/100).toFixed(2);
+  $('zoomV').textContent = (+$('zoom').value/10).toFixed(1);
+  render();
+  if(!$('shellPanel').hidden) renderShells();      // 参考の絵は占有率スライダに追従する
+};
+render();
+</script>
+</body>
+</html>

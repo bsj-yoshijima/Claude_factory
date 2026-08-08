@@ -128,6 +128,9 @@
   /* UI機能のドット絵アイコン（16×16・assets/ui/icons）。文字と並べるので少し下げる。
      lg は整数2倍の32px（#craft のロゴなど文字より大きく出す場所用） */
   .uic{width:16px;height:16px;image-rendering:pixelated;vertical-align:-3px}
+  /* 製品のアイコンは 32×32 が原寸（図鑑カード 28px・レシピ右 22px の枠に出る）。
+     原材料の .uic を2倍に伸ばしたものではないので、クラスを分けて 1/2 縮小を防ぐ。 */
+  .pic{width:32px;height:32px;image-rendering:pixelated;vertical-align:middle}
   /* 💰だけは金額のすぐ後ろに添える単位なので、他のアイコンと扱いを分ける。
      高さは数字の半分(0.5em)。px で固定すると、13px の行でも 19px の見出しでも
      同じ大きさになって片方で不釣り合いになるため em で追従させる。
@@ -148,6 +151,10 @@
      倍率は 1倍か2倍だけにすること */
   .micon{width:16px;height:16px;image-rendering:pixelated;vertical-align:middle}
   .rc .ic .micon{width:32px;height:32px}
+  /* 装飾品は盤面と同じ絵を一覧に出す（殻から作り直した個体だけ。旧290体は絵文字のまま）。
+     縦横の比は個体ごとに違うので、枠に収めて中央に置く。縮小はドット絵なので pixelated */
+  .propart{max-width:42px;max-height:40px;image-rendering:pixelated;display:block;object-fit:contain;margin:0 auto}
+  .rc .ic .propart{max-width:34px;max-height:34px}   /* ショップの行は枠が 34px */
   .rc .mid{flex:1;min-width:0}
   .rc .nm{font-size:13px;color:#eafff4;font-weight:700}
   .rc button{background:var(--gold);color:#243b34;font-weight:700;border:none;border-radius:7px;padding:8px 13px;cursor:pointer;font-family:inherit;font-size:12px}
@@ -171,11 +178,16 @@
   .pfil{max-height:84px;overflow-y:auto}
   .pfil .c{font-size:11px;padding:3px 8px}
   .pitems{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-height:120px;overflow-y:auto;align-content:flex-start}
-  .pitem{width:62px;height:64px;border:2px solid #2c3a38;border-radius:8px;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative;pointer-events:auto}
+  /* 名前は必ず同じ高さに出す。絵の高さは品目でまちまち（絵文字1行・サムネ38px・
+     装飾品の実画像は26〜40px）なので、中身に合わせて縦中央に置くと名前の行が
+     マスごとに上下してガタつく。名前は下端に貼り付け、その分の余白を padding で
+     確保して、絵はその上の余白の中で中央に置く。 */
+  .pitem{width:62px;height:64px;border:2px solid #2c3a38;border-radius:8px;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:13px;box-sizing:border-box;font-size:24px;cursor:pointer;position:relative;pointer-events:auto}
   .pitem:hover{border-color:#5f8a80}
   .pitem.on{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
   .pitem.cur{border-color:#7fe6ff}
-  .pitem small{font-size:8px;color:#cfeee0;margin-top:1px;max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pitem small{position:absolute;left:2px;right:2px;bottom:3px;font-size:8px;color:#cfeee0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
   .pitem .qn{position:absolute;top:1px;right:4px;font-size:9px;color:#7fe6ff;font-weight:700}
   .pitem.dim{opacity:.4;cursor:default}
   .phint{font-size:10px;color:#9fb0c0}
@@ -212,6 +224,9 @@
   .mrow .mslots{align-items:center;gap:5px}
   .mrow .mslot{width:40px;height:40px;border-radius:7px;border-width:1.5px}
   .mrow .mslot .e{font-size:19px}
+  /* 製造機のマスに入る原材料は 32×32 版（.pic）を原寸で出す。
+     .mrow の小さいマスもそのまま 32px（枠が40px あるので収まる）。 */
+  .mslot .e{display:flex;align-items:center;justify-content:center}
   .mrow .mslot .x{top:-3px;right:1px;font-size:10px}
   .mrow .dbtn{margin-left:auto;padding:6px 11px;font-size:11px;white-space:nowrap}
   /* 進捗はバーと数値だけを1行に */
@@ -260,7 +275,7 @@
   .rms i{font-style:normal;font-size:9px;color:#5d7078;padding:0 1px}
   .rrow .ra{font-style:normal;font-size:11px;color:#5d7078;margin-left:auto;padding-left:4px}
   .rp{display:flex;align-items:center;gap:5px}
-  .rp .e{font-size:22px;line-height:1}
+  .rp .e{font-size:22px;line-height:1;display:flex;align-items:center}
   /* 未製造は輪郭だけ。色も名前もレア度も伏せる（作る前に狙い目が分かってしまわないように） */
   .rp .e.sil{filter:brightness(0) saturate(0);opacity:.5}
   .rp .nm{font-size:10px;color:#eafff4}

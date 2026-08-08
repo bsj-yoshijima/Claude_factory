@@ -4,14 +4,16 @@ import { NET, applyFactory, saveGame } from '../net.mjs';
 import { G, availN, snapLayout } from '../state.mjs';
 import { toast } from './dialog.mjs';
 import { morphInto } from './morph.mjs';
-import { machIcon, themeIcon, uic, updateBadge } from './parts.mjs';
+import { machIcon, propArt, themeIcon, uic, updateBadge } from './parts.mjs';
 
-const ROOM_THEMES=['arabia','undersea','japan','china','diner','fantasy','scifi','cabin','dino','haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen'];
+const ROOM_THEMES=['arabia','undersea','japan','china','diner','fantasy','scifi','cabin','dino','haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen','tech'];
 const SKY_THEMES=['blue','sunset','night','space'];   // オーロラは星空・宇宙と同じ暗い夜空で見分けが付かないので外した
-/* 背景の表示名とフォールバックの絵文字。キーは空テーマ(SKY_THEMES)と部屋テーマ(ROOM_THEMES)の
+/* 背景の表示名と絵文字。絵文字はサムネが無い環境向けの控え（現在は全キーに 64×64 のサムネがある。
+   部屋テーマ=tools/assets/make_theme_thumbs.mjs / 空テーマ=tools/assets/make_sky_thumbs.py）。
+   キーは空テーマ(SKY_THEMES)と部屋テーマ(ROOM_THEMES)の
    両方をまとめて持つ。'space' は両方に属していて、以前はここで2回定義していた
    （後ろの「宇宙ステーション」が勝っていた）。二重定義はやめて1つにしてある。 */
-export const BG_META={auto:{e:'🕐',n:'標準'},blue:{e:'☀️',n:'快晴'},sunset:{e:'🌆',n:'夕焼け'},night:{e:'🌙',n:'星空'},arabia:{e:'🕌',n:'アラビア'},undersea:{e:'🐚',n:'海底'},japan:{e:'⛩️',n:'日本'},china:{e:'🐉',n:'中華'},diner:{e:'🍔',n:'ダイナー'},fantasy:{e:'🧙',n:'ファンタジー'},scifi:{e:'🚀',n:'SF宇宙'},cabin:{e:'🌲',n:'森コテージ'},dino:{e:'🦖',n:'ダイナソー'},haunted:{e:'👻',n:'幽霊屋敷'},pirate:{e:'🏴‍☠️',n:'海賊船'},circuit:{e:'🏁',n:'サーキット'},dwarf:{e:'⛏️',n:'ドワーフ鉱山'},hell:{e:'😈',n:'地獄'},steampunk:{e:'⚙️',n:'スチパン'},retrofuture:{e:'🛸',n:'レトロ未来'},tokyo:{e:'🌃',n:'Tokyo'},halloween:{e:'🎃',n:'ハロウィン'},western:{e:'🤠',n:'西部開拓時代'},sushi:{e:'🍣',n:'回転寿司'},beehive:{e:'🐝',n:'ミツバチの巣'},circus:{e:'🎪',n:'サーカス'},carnival:{e:'🎭',n:'カーニバル'},desert:{e:'🏜️',n:'砂漠'},jungle:{e:'🌴',n:'ジャングル'},egypt:{e:'🔺',n:'古代エジプト'},christmas:{e:'🎄',n:'クリスマス'},space:{e:'🚀',n:'宇宙ステーション'},ice:{e:'🧊',n:'氷の城'},mushroom:{e:'🍄',n:'森のキノコ'},onsen:{e:'♨️',n:'和風温泉'}};
+export const BG_META={auto:{e:'🕐',n:'標準'},blue:{e:'☀️',n:'快晴'},sunset:{e:'🌆',n:'夕焼け'},night:{e:'🌙',n:'星空'},arabia:{e:'🕌',n:'アラビア'},undersea:{e:'🐚',n:'海底'},japan:{e:'⛩️',n:'日本'},china:{e:'🐉',n:'中華'},diner:{e:'🍔',n:'ダイナー'},fantasy:{e:'🧙',n:'ファンタジー'},scifi:{e:'🚀',n:'SF宇宙'},cabin:{e:'🌲',n:'森コテージ'},dino:{e:'🦖',n:'ダイナソー'},haunted:{e:'👻',n:'幽霊屋敷'},pirate:{e:'🏴‍☠️',n:'海賊船'},circuit:{e:'🏁',n:'サーキット'},dwarf:{e:'⛏️',n:'ドワーフ鉱山'},hell:{e:'😈',n:'地獄'},steampunk:{e:'⚙️',n:'スチパン'},retrofuture:{e:'🛸',n:'レトロ未来'},tokyo:{e:'🌃',n:'Tokyo'},halloween:{e:'🎃',n:'ハロウィン'},western:{e:'🤠',n:'西部開拓時代'},sushi:{e:'🍣',n:'回転寿司'},beehive:{e:'🐝',n:'ミツバチの巣'},circus:{e:'🎪',n:'サーカス'},carnival:{e:'🎭',n:'カーニバル'},desert:{e:'🏜️',n:'砂漠'},jungle:{e:'🌴',n:'ジャングル'},egypt:{e:'🔺',n:'古代エジプト'},christmas:{e:'🎄',n:'クリスマス'},space:{e:'🚀',n:'宇宙ステーション'},ice:{e:'🧊',n:'氷の城'},mushroom:{e:'🍄',n:'森のキノコ'},onsen:{e:'♨️',n:'和風温泉'},tech:{e:'🖥️',n:'テクノロジー'}};
 /* 所持している背景。'space' は空テーマにも部屋テーマにも入っているので、
    両方所持していると同じマスが2つ並ぶ。重複は落とす（先に出たほうを残す）。 */
 function ownedBgs(){ const a=['auto'];
@@ -52,13 +54,15 @@ let selMode=false, selN=0;                       // 収納の複数選択モー�
 let propFilter=null;                             // 装飾の絞り込みテーマ(null=すべて / ''=汎用)
 let _paletteView=null;                           // 最後に描いた一覧の種類。切り替わったときだけスクロールを戻す
 export function renderPalette(){
-  const cats=[['bg',`${uic('sky')} 背景`],['prop',`${uic('sofa')} 装飾`],['machine',`${uic('factory')} 製造機`]];
+  // 製造機タブの絵は工場(uic('factory'))ではなく製造機そのもの。工場のアイコンは
+  // 🏭製造タブ(作るものを決める方)で使っていて、隣り合うと役割が紛らわしい
+  const cats=[['bg',`${uic('sky')} 背景`],['prop',`${uic('sofa')} 装飾`],['machine',`${machIcon('s2','uic')} 製造機`]];
   let items='', hint='', acts='', fil='';
   // key は差分適用でノードを持ち回すための識別子（在庫が増減しても他の項目が作り直されない）
   const cell=(key,dataAttr,e,n,extra,qn,on)=>`<div class="pitem ${on?'on':''}" data-key="${key}" ${dataAttr}>${e}<small>${n}</small>${qn!=null?`<span class="qn">${qn}</span>`:''}</div>`;
   if(editCat==='bg'){ hint='背景を選ぶと即適用（部屋ごと切替）';
     items=ownedBgs().map(k=>`<div class="pitem ${G.bg===k?'cur':''}" data-key="bg:${k}" data-bg="${k}">${
-      ROOM_THEMES.includes(k)?themeIcon(k):BG_META[k].e}<small>${BG_META[k].n}</small></div>`).join('');
+      themeIcon(k)}<small>${BG_META[k].n}</small></div>`).join('');
   } else if(editCat==='prop'){
     const s=window.__scene, placedN=s?s.stowables().length:0;
     if(selMode){ hint=`床の装飾をクリックで選択（もう一度クリックで解除）・ ${selN}個 選択中`;
@@ -68,7 +72,7 @@ export function renderPalette(){
         +`<br>設置済みはドラッグで移動 / ${uic('trash')}ゴミ箱へドラッグで撤去 ・ ラグは床の平物なので家具の下に敷けます`;
       // テーマ(=背景)で絞り込む。propFilter が null なら全部。DECO は汎用('')扱い
       const inFilter=(th)=> propFilter===null || (th||'')===propFilter;
-      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`prop:${t}`,`data-place="prop:${t}"`,PROP[t].e,PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.variant===t));
+      const P=Object.keys(PROP).filter(t=>availN('prop',t)>0&&inFilter(PROP[t].th)).map(t=>cell(`prop:${t}`,`data-place="prop:${t}"`,propArt(t,PROP[t].e),PROP[t].n,0,availN('prop',t),editSel&&editSel.kind==='prop'&&editSel.variant===t));
       const D=Object.keys(DECO).filter(t=>availN('deco',t)>0&&inFilter('')).map(t=>cell(`deco:${t}`,`data-place="deco:${t}"`,DECO[t].e,DECO[t].n,0,availN('deco',t),editSel&&editSel.kind==='deco'&&editSel.variant===t));
       items=(P.concat(D).join(''))||`<div class="phint" style="padding:8px">${propFilter===null?`在庫なし。${uic('shop')}ショップ→装飾 で購入してください。`:`このテーマの在庫がありません。「すべて」に戻すか、${uic('shop')}ショップで購入してください。`}</div>`;
       // 絞り込み行: 在庫のあるテーマだけ出す。適用中の背景と同じテーマには印を付ける
@@ -86,7 +90,8 @@ export function renderPalette(){
       ? `<span class="c ${selN?'on':''}" data-stow="sel">${uic('box')} 選択した${selN}個を収納</span><span class="c" data-selmode="0">✖ 選択をやめる</span>`
       : `<span class="c" data-stow="all">${uic('box')} すべて収納 (${placedN})</span><span class="c" data-selmode="1">☑️ 選んで収納</span>`;
   } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です')
-      +`<br>設置済みはドラッグで移動 / ${uic('trash')}ゴミ箱へドラッグで撤去 ・ クリックで設定パネル（↻回転・✥移動／素材は${uic('factory')}製造タブ）`;
+      +`<br>設置済みはドラッグで移動 / ${uic('trash')}ゴミ箱へドラッグで撤去 ・ クリックで選択（Rキーで回転）`
+      +`<br>製造機の素材は${uic('factory')}製造タブから（編集中はクリックしても設定パネルは開きません）`;
     const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`machine:${t}`,`data-place="machine:${t}"`,machIcon(t),MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.variant===t));
     items=M.join('')||`<div class="phint" style="padding:8px">在庫なし。${uic('shop')}ショップ→製造機 で購入してください。</div>`;
   }

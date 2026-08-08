@@ -5,6 +5,10 @@ _*
 # dev サーバの異常終了ログ
 dev-server.log
 
+# 検収ツールの出力（make_room_shell.py / check_machine_module.py）。
+# 先頭の / が無いと tools/preview まで無視されるので必ず付ける
+/preview/
+
 # OS / editor
 .DS_Store
 node_modules/

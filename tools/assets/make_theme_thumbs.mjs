@@ -37,7 +37,11 @@ if (os.platform() !== 'darwin') {
 
 fs.mkdirSync(OUT, { recursive: true });
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'theme-thumbs-'));
-const rooms = fs.readdirSync(SRC).filter((f) => /^room-.+\.png$/.test(f)).sort();
+// room-factory.png はデフォルト部屋。ショップでも編集パレットでも 'factory' というキーは
+// 存在せず（デフォルトは 'auto'）、作っても誰も参照しないので除く。
+// 以前は factory-room.png という名前でこの正規表現から自然に外れていた。
+const rooms = fs.readdirSync(SRC)
+  .filter((f) => /^room-.+\.png$/.test(f) && f !== 'room-factory.png').sort();
 
 for (const file of rooms) {
   const key = file.slice(5, -4);
