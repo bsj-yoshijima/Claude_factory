@@ -246,7 +246,9 @@ for(const [i,fr] of frames.entries()){
       if(frames.some(o=>o!==fr && x>=o.x0 && x<=o.x1 && y>=o.y0 && y<=o.y1)) continue;
       const c=get(x,y); if(!isBg(c)) spill++;
     }
-  /* 枠に対する物の入り方。1.00 を超えていたら線を越えている */
+  /* 枠に対する物の入り方。1.00 を超えていたら線を越えている。
+     ただし枠が足元より広い殻(カスタム)ではこれが緩くなるので、
+     本当に見たい「足元のマスに収まっているか」は下の maskW で別に出す。 */
   const wOver=bw/(fr.bw-2*lw), below=(y1-(byFrame-1))*s;
   /* 接地線と絵の下端の隙間。by>1.0 自体は正常(コンパクトな家具は自分の手前角がマスの
      手前角より上に来る)だが、それはマスの奥行きに対して小さい差のはず。マスの奥行きの
@@ -255,8 +257,13 @@ for(const [i,fr] of frames.entries()){
      lamp 32% / plant 31%。失敗した屏風(縦に中央寄せされた)は 57%。境目は 45% に置いた。 */
   const [sn,sm] = SHAPE[cellK] || [1,1];
   const gap = (byFrame - (y1+1)) * s, depth = (sn+sm)*CELL_W/4;
+  /* 足元のマス(接地菱形)に対する絵の幅。これが「マスに収まっているか」の本命。
+     枠に対する幅は枠の取り方で変わるが、こちらは盤面の寸法そのもの。
+     実測の目安: japan/dino の7点は 0.74〜0.97。1.05 を超えたら隣のマスへ食い込む。 */
+  const maskW = cw / ((sn+sm)*CELL_W/2);
   rows.push(`  ${(prefix+'_'+slot).padEnd(12)} ${String(cw).padStart(3)}x${String(chh).padStart(3)}px`
-    + `  枠に対する幅 ${wOver.toFixed(2)}` + (wOver>1 ? ' ⚠はみ出し' : '')
+    + `  マスに対する幅 ${maskW.toFixed(2)}` + (maskW>1.05 ? ' ⚠はみ出し' : '')
+    + `  枠に対する幅 ${wOver.toFixed(2)}` + (wOver>1 ? ' ⚠枠越え' : '')
     + `  接地線との隙間 ${(gap/depth*100).toFixed(0)}%` + (gap/depth>0.45 ? ' ⚠浮いている' : '')
     + `  枠外へ捨てた画素 ${spill>50 ? spill+' ⚠切れている' : spill}`
     + (specks ? `  孤立点 ${specks}px を除去` : ''));

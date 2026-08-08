@@ -305,9 +305,10 @@ const ROOM = { arabia:'arabia', beehive:'beehive', cabin:'cabin', circuit:'circu
 /* 生成側が返すキャンバスは 1200x896 / 1024x1024 / 896x1200 の3種類しかない(実測)。
    頼んだ寸法は無視され、いちばん近い比に丸めて描き直される。2x2 の殻は比が 0.903 と
    中途半端で、1.000 へ丸められた拍子に高さが1割減り、菱形が枠に対して8%太った。
-   殻の外側にマゼンタを足して比をこの3つに合わせてある(枠の比は変えていない)。 */
+   殻のキャンバスをこの3つの比に合わせてある。広げるのは横だけで、枠はキャンバスの縁に引く。
+   枠が足元の菱形より広くなるが、その比は殻のJSONに記録されるので縮尺は狂わない。 */
 const CUSTOM_SHELL = {
-  '1x1': { file:'prop-shell-custom-1x1-373x499.png', size:'373x499' },
+  '1x1': { file:'prop-shell-custom-1x1-372x499.png', size:'372x499' },
   '1x2': { file:'prop-shell-custom-1x2-423x567.png', size:'423x567' },
   '2x2': { file:'prop-shell-custom-2x2-617x617.png', size:'617x617' },
 };
@@ -332,8 +333,6 @@ THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes 
   to cut the object out, and it finds them by that exact colour. It works out the scale from
   the WIDTH of the rectangle, so THE RECTANGLE MUST KEEP ITS PROPORTIONS: same width against
   height as in the shell. Never use that cyan anywhere else in the image.
-- THE MAGENTA BAND AROUND THE RECTANGLE IS PART OF THE SHELL. Keep it. Do not grow the
-  rectangle to fill the image, and do not crop the band away.
 - THE DIAMOND KEEPS ITS EXACT SIZE, SHAPE AND POSITION. Do not enlarge it, do not stretch it,
   do not redraw it wider than it already is. Its front corner already touches the bottom line;
   that corner is where the object's lowest point goes.

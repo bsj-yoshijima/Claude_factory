@@ -17,8 +17,6 @@ THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes 
   to cut the object out, and it finds them by that exact colour. It works out the scale from
   the WIDTH of the rectangle, so THE RECTANGLE MUST KEEP ITS PROPORTIONS: same width against
   height as in the shell. Never use that cyan anywhere else in the image.
-- THE MAGENTA BAND AROUND THE RECTANGLE IS PART OF THE SHELL. Keep it. Do not grow the
-  rectangle to fill the image, and do not crop the band away.
 - THE DIAMOND KEEPS ITS EXACT SIZE, SHAPE AND POSITION. Do not enlarge it, do not stretch it,
   do not redraw it wider than it already is. Its front corner already touches the bottom line;
   that corner is where the object's lowest point goes.

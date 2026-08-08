@@ -355,7 +355,18 @@ function drawShell(cv, spec, WR, HR, ss, guide, ref, opt){
      広げる量は線幅ちょうど＝菱形の手前角が線の内側にぴったり接する。隙間を空けると
      「枠の下辺に立つ」という指示と絵が食い違って、生成側が迷う。 */
   const lw = Math.max(1, FRAME_W*DW), pad = opt.frame ? lw : 0;
-  const W2 = DW*WR + pad*2, H2 = Math.max((n+m)*SY, top + HR*U) + pad*2;
+  let W2 = DW*WR + pad*2;
+  const H2 = Math.max((n+m)*SY, top + HR*U) + pad*2;
+  /* opt.ar があれば、キャンバスをその縦横比のどれかに広げる(カスタムの殻で使う)。
+     生成側が返す画像は決まった比のものしかなく、外れた比で頼むと近い比へ丸めて
+     描き直され、そのぶん割り付けが変わるため(→ docs/prop-sprite-prompt.md)。
+     広げるのは横だけ。縦を詰めると背の高い名物が入らなくなる。
+     菱形は下端中央のままなので、足元の大きさは変わらない。 */
+  if(opt.ar && opt.ar.length){
+    const a0 = W2/H2;
+    const t = opt.ar.reduce((b,x)=> Math.abs(Math.log(x/a0)) < Math.abs(Math.log(b/a0)) ? x : b);
+    if(t > a0) W2 = H2*t;
+  }
 
   cv.width = Math.round(W2*ss); cv.height = Math.round(H2*ss);
   const g = cv.getContext('2d');
@@ -498,30 +509,19 @@ function buildSheet(ss, guide, order){
      sheet7  1.348 → 1.339  ずれ -0.6%   問題なし
      1x2     0.735 → 0.747  ずれ  1.5%   問題なし
      2x2     0.903 → 1.000  ずれ 10.8%   ← 高さが1割減り、菱形が枠に対して8%太った
-   そこで殻の比をこの3つのどれかに合わせておく。**枠の比は変えない**(枠の幅が
-   1マスの大きさの基準なので、ここを動かすと縮尺が崩れる)。足すのは枠の外のマゼンタだけ。
-   マゼンタは切り抜きで落ちるし、プロンプトで「枠の外は空のまま」と禁じてある。 */
+   そこでキャンバスの比をこの3つのどれかに合わせておく。広げるのは横だけで、
+   **枠はキャンバスの縁に引く**(枠の中に細いマゼンタの帯を作らない)。
+   枠が広がるぶん、枠の幅と足元の菱形の比は変わるが、それは JSON に記録されるので
+   縮尺は狂わない。菱形そのものの大きさは変えていないので、足元の規格は同じ。 */
 const CANVAS_AR = [1200/896, 1, 896/1200];
 window.__customPNG = (k) => {
   const spec = [...SLOTS, ...FREE].find(s => s.k === k);
   if(!spec) return null;
   const cv = document.createElement('canvas');
   const r = drawShell(cv, spec, +$('sh_w').value/100, +$('sh_h').value/100, +$('sh_ss').value, false, null,
-    { frame:true });
-  const a0 = cv.width/cv.height;
-  const ar = CANVAS_AR.reduce((b,x)=> Math.abs(Math.log(x/a0)) < Math.abs(Math.log(b/a0)) ? x : b);
-  let W3 = cv.width, H3 = cv.height;
-  if(ar > a0) W3 = Math.round(cv.height*ar); else H3 = Math.round(cv.width/ar);
-  const out = document.createElement('canvas');
-  out.width = W3; out.height = H3;
-  const g = out.getContext('2d'); g.imageSmoothingEnabled = false;
-  g.fillStyle = MAGENTA; g.fillRect(0,0,W3,H3);
-  const ox = Math.round((W3-cv.width)/2), oy = H3-cv.height;   // 枠は下端に寄せる(接地線が下辺)
-  g.drawImage(cv, ox, oy);
-  /* gy は「枠の高さのどこが接地線か」なので、キャンバスではなく枠の寸法で持つ。
-     焼き込みは見つけた枠の高さに掛ける(byFrame = fr.y0 + fr.bh*gy)。 */
-  return { png:out.toDataURL('image/png'), w:W3, h:H3,
-    cells:[{ k:spec.k, x:ox, y:oy, w:cv.width, h:cv.height, gy:Math.round(r.gy*10000)/10000 }] };
+    { frame:true, ar:CANVAS_AR });
+  return { png:cv.toDataURL('image/png'), w:cv.width, h:cv.height,
+    cells:[{ k:spec.k, x:0, y:0, w:cv.width, h:cv.height, gy:Math.round(r.gy*10000)/10000 }] };
 };
 
 window.__sheetPNG = () => {

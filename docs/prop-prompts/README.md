@@ -12,7 +12,7 @@
 |---|---|---|
 | `<theme>-sheet.txt` | **これが標準。** 全テーマ共通の7種を1枚で発注 | `docs/prop-shell-sheet7-1519x1127.png` |
 | `<theme>-sheet-room.txt` | 上と同じだが、部屋の絵をテーマの参照として2枚目に添える版 | 同上 ＋ `assets/rooms/room-<theme>.png` |
-| `<theme>-custom-1x1.txt` | 名物・一点物（床1マス） | `docs/prop-shell-custom-1x1-373x499.png` |
+| `<theme>-custom-1x1.txt` | 名物・一点物（床1マス） | `docs/prop-shell-custom-1x1-372x499.png` |
 | `<theme>-custom-1x2.txt` | 同（細長い物） | `docs/prop-shell-custom-1x2-423x567.png` |
 | `<theme>-custom-2x2.txt` | 同（大きい物） | `docs/prop-shell-custom-2x2-617x617.png` |
 
