@@ -17,18 +17,25 @@ THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes 
   to cut the object out, and it finds them by that exact colour. It works out the scale from
   the WIDTH of the rectangle, so THE RECTANGLE MUST KEEP ITS PROPORTIONS: same width against
   height as in the shell. Never use that cyan anywhere else in the image.
-- THE DIAMOND KEEPS ITS EXACT SIZE, SHAPE AND POSITION. Do not enlarge it, do not stretch it,
-  do not redraw it wider than it already is. Its front corner already touches the bottom line;
-  that corner is where the object's lowest point goes.
+- THE DIAMOND KEEPS ITS EXACT SIZE, SHAPE AND POSITION. It is ALREADY the right size in the
+  shell; you never draw a diamond. Do not enlarge it, do not stretch it, do not redraw it
+  wider, do not turn it into a square standing on its corner. Its front corner already
+  touches the bottom line; that corner is where the object's lowest point goes.
+  DRAWING A BIGGER DIAMOND AND STANDING THE OBJECT AT THE BACK OF IT is the single most
+  common way this job fails: in the game the object then hovers above its tile.
 - The magenta OUTSIDE the rectangle stays completely empty.
 
-THE NUMBERS. Measure them against the image; they are not approximations.
-- The CONTACT POINT of the object (its lowest pixel, on the centre line) sits at
-  50.0% across and 97.8% down from the top of the image.
-- The FOOTPRINT is 59.8% of the image width and 22.3% of its height. That is the cyan
-  diamond, and it is a true 2:1 diamond. Nothing that touches the floor is wider than it.
+THE NUMBERS. They describe THE OBJECT, not the shell. Measure them against the image.
+- Its CONTACT POINT is the lowest pixel OF THE OBJECT ITSELF, on the centre line. It sits at
+  50.0% across and 97.8% down from the top of the image. NOTHING goes below that
+  point: no ground, no water, no stones, no shadow, no extra floor of any kind. Below it
+  there is only magenta.
+- Its CONTACT AREA (the part that actually touches the floor) is 59.8% of the image width
+  and 22.3% of its height: twice as wide as it is deep.
 - Parts that do not touch the floor may overhang a little (a tail, foliage, a roof), but the
   overhang stays inside the cyan rectangle.
+- THE FOUR CORNERS OF THE IMAGE STAY MAGENTA. If you have filled them, you have drawn a
+  floor of your own and the object no longer fits its tile.
 
 THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW.
 This is a game object seen from the same overhead isometric camera as the room it will stand
