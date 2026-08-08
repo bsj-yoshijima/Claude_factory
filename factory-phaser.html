@@ -178,11 +178,16 @@
   .pfil{max-height:84px;overflow-y:auto}
   .pfil .c{font-size:11px;padding:3px 8px}
   .pitems{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-height:120px;overflow-y:auto;align-content:flex-start}
-  .pitem{width:62px;height:64px;border:2px solid #2c3a38;border-radius:8px;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24px;cursor:pointer;position:relative;pointer-events:auto}
+  /* 名前は必ず同じ高さに出す。絵の高さは品目でまちまち（絵文字1行・サムネ38px・
+     装飾品の実画像は26〜40px）なので、中身に合わせて縦中央に置くと名前の行が
+     マスごとに上下してガタつく。名前は下端に貼り付け、その分の余白を padding で
+     確保して、絵はその上の余白の中で中央に置く。 */
+  .pitem{width:62px;height:64px;border:2px solid #2c3a38;border-radius:8px;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:13px;box-sizing:border-box;font-size:24px;cursor:pointer;position:relative;pointer-events:auto}
   .pitem:hover{border-color:#5f8a80}
   .pitem.on{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold) inset}
   .pitem.cur{border-color:#7fe6ff}
-  .pitem small{font-size:8px;color:#cfeee0;margin-top:1px;max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pitem small{position:absolute;left:2px;right:2px;bottom:3px;font-size:8px;color:#cfeee0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
   .pitem .qn{position:absolute;top:1px;right:4px;font-size:9px;color:#7fe6ff;font-weight:700}
   .pitem.dim{opacity:.4;cursor:default}
   .phint{font-size:10px;color:#9fb0c0}
