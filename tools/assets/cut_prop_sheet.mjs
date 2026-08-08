@@ -31,7 +31,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
    表の方は旧290体むけの値で、たとえば lamp は 2コマ(1×2)になっている。新しい絵は 1×1 で
    描いてあるので、表に従うと 1×2 ブロックの中心へ置かれて半マスずれる。 */
 const SHAPE = { chair:[1,1], shelf:[1,1], lamp:[1,1], plant:[1,1],
-                table:[1,2], sofa:[1,2], rug:[1,2] };
+                table:[1,2], sofa:[1,2], rug:[1,2],
+                'free-1x1':[1,1], 'free-1x2':[1,2], 'free-2x2':[2,2] };
 /* 枠・菱形(シアン)と背景(マゼンタ)の判定。
    厳しめ(isMark/isMag)は「どこに枠があるか」を探すため。
    落とすときは緩め(killMark/killMag)を使う。線の縁にはマゼンタとシアンの中間色が
@@ -89,9 +90,13 @@ function writePNG(file,w,h,rgba){
 
 const args = process.argv.slice(2);
 const [sheetFile, cellsFile, prefix] = args;
-if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR]'); process.exit(1); }
+if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前]'); process.exit(1); }
 const oi = args.indexOf('--out');
 const outDir = oi>=0 ? args[oi+1] : path.join(ROOT,'assets','props');
+/* カスタムの殻はセル名が形(free-1x2)なので、そのままだと prop_jpn_free-1x2.png になる。
+   --slot でその物の名前(byobu など)に差し替える。 */
+const si = args.indexOf('--slot');
+const slotOverride = si>=0 ? args[si+1] : null;
 fs.mkdirSync(outDir, { recursive:true });
 
 const sh = readPNG(sheetFile);
@@ -122,33 +127,30 @@ for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++){
    占有率が下がり、枠と区別できなくなる（実測で枠が6個のはずが9個になった）。
    確実なのは包含関係。菱形は必ずどれかの枠の内側にあるので、
    「他のかたまりの外接矩形に収まっているものは枠ではない」で落とせる。 */
-let frames;
-if(spec.frame === false){
-  /* カスタム装飾品(1体ずつ発注)は仕切りの枠を描かない。キャンバスそのものが枠なので、
-     画像全体を1つの枠として扱う。中のシアンは接地菱形だけで、これは切り抜きで消える。 */
-  frames = [{ x0:0, y0:0, x1:sh.w-1, y1:sh.h-1, bw:sh.w, bh:sh.h }];
-} else {
-  const big = comps.slice().sort((a,b)=>(b.bw*b.bh)-(a.bw*a.bh));
-  frames = [];
-  for(const c of big){
-    const inside = frames.some(f => c.x0>=f.x0-2 && c.x1<=f.x1+2 && c.y0>=f.y0-2 && c.y1<=f.y1+2);
-    if(!inside) frames.push(c);
-  }
-  frames.sort((a,b)=>
-    (a.y1 > b.y1 + a.bh*0.5 ? 1 : b.y1 > a.y1 + b.bh*0.5 ? -1 : a.x0 - b.x0));
+/* 「1体だけならキャンバスの縁を枠とみなす」分岐が以前あったが消した。生成物は依頼した
+   寸法で返らない(384x533 で頼んで 848x1264、縦横比が7%違う)ので、縁は基準にならない。
+   1体でも枠は描く。カスタムの殻も枠つきに作り直してある。 */
+const big = comps.slice().sort((a,b)=>(b.bw*b.bh)-(a.bw*a.bh));
+const frames = [];
+for(const c of big){
+  const inside = frames.some(f => c.x0>=f.x0-2 && c.x1<=f.x1+2 && c.y0>=f.y0-2 && c.y1<=f.y1+2);
+  if(!inside) frames.push(c);
 }
+frames.sort((a,b)=>
+  (a.y1 > b.y1 + a.bh*0.5 ? 1 : b.y1 > a.y1 + b.bh*0.5 ? -1 : a.x0 - b.x0));
 const names = spec.cells.map(c=>c.k);
 console.log(`シアンの塊 ${comps.length}個 → 枠 ${frames.length}個 (期待 ${names.length})`);
 if(frames.length !== names.length) console.log('⚠ 枠の数が合いません。生成をやり直すか、枠が塗り替えられていないか確認してください');
 
 const fit={}, rows=[], crops=[];
 for(const [i,fr] of frames.entries()){
-  const slot = names[i] || `cell${i}`;
+  const cellK = names[i] || `cell${i}`;
+  const slot = (slotOverride && frames.length===1) ? slotOverride : cellK;
   const cell = spec.cells[i];
   const gameW = cell ? cell.w/spec.scale : 64;          // その枠がゲーム内で何pxになるか
   const s = gameW / fr.bw;                              // 枠の幅を合わせる倍率
 
-  const lw = spec.frame===false ? 0 : Math.max(2, Math.round(fr.bw*0.06));
+  const lw = Math.max(2, Math.round(fr.bw*0.06));
   /* 探す範囲は枠の外接矩形まで(線の帯も含める)。線の内側だけに限ると、線に触れた部分が
      黙って捨てられて絵が欠ける（畳の手前角が削れた）。線そのものはシアンなので拾わない。
      外側へは広げない: 線の外縁にはマゼンタとの中間色が出ていて、それを物と誤認する。 */
@@ -228,7 +230,7 @@ for(const [i,fr] of frames.entries()){
      小さい家具ほど手前へ押し出されてマスからずれる。 */
   const cxFrame=(fr.x0+fr.x1+1)/2, byFrame=fr.y0 + fr.bh*gy;   // 枠の中心x / 接地線
   fit[`${prefix}_${slot}`] = { cx:r4(((cxFrame-x0)*s-padL)/cw), by:r4(((byFrame-y0)*s-padT)/chh),
-    px:[cw,chh], shape:SHAPE[slot] || [1,1] };
+    px:[cw,chh], shape:SHAPE[cellK] || [1,1] };
   /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
      捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
   /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と

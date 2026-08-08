@@ -298,11 +298,14 @@ const ROOM = { arabia:'arabia', beehive:'beehive', cabin:'cabin', circuit:'circu
 
 
 /* カスタム装飾品(名物・一点物)の殻。形が決まっていないので殻にはダミーの箱が立っている。
-   1枠1体で、${OBJECT} にその物の説明を入れて発注する。 */
+   1枠1体で、${OBJECT} にその物の説明を入れて発注する。
+   1体だけでもシアンの枠は必ず要る。一度「キャンバスの縁が枠」として省いたら、生成物が
+   384x533 の依頼に対して 848x1264(縦横比が7%違う)で返り、大きさの基準が絵の中に
+   一つも残らなかった。縁は絵ではないので生成側は保てない。枠は描かれた線なので残る。 */
 const CUSTOM_SHELL = {
-  '1x1': { file:'prop-shell-custom-1x1-256x476.png', size:'256x476' },
-  '1x2': { file:'prop-shell-custom-1x2-384x533.png', size:'384x533' },
-  '2x2': { file:'prop-shell-custom-2x2-512x572.png', size:'512x572' },
+  '1x1': { file:'prop-shell-custom-1x1-278x499.png', size:'278x499' },
+  '1x2': { file:'prop-shell-custom-1x2-417x567.png', size:'417x567' },
+  '2x2': { file:'prop-shell-custom-2x2-557x617.png', size:'557x617' },
 };
 const buildCustom = (themeKey, shape, object) => {
   const t = THEMES[themeKey], sh = CUSTOM_SHELL[shape];
@@ -312,13 +315,17 @@ const buildCustom = (themeKey, shape, object) => {
   return `REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object. Paint your theme
 directly on top of it, like colouring in a line drawing. Output ${sh.size}.
 
-THE IMAGE ITSELF IS THE FRAME OF THE JOB. Keep its size exactly.
-- NOTHING crosses the edge of the image. If a design does not fit, make it smaller, not wider.
-- The object STANDS ON THE BOTTOM EDGE of the image: its lowest point touches it, and the
-  object is CENTRED left to right.
-- DO NOT REPAINT THE CYAN DIAMOND on the floor. Leave it exactly the cyan it already is
-  (#00E5FF). It is a registration mark that a script removes later, and it finds it by that
-  exact colour. Never use that cyan anywhere else in the image.
+THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes shape.
+- Repaint the object INSIDE the rectangle. NOTHING crosses a cyan line. If a design does not
+  fit, make it smaller, not wider.
+- The object STANDS ON THE BOTTOM LINE of the rectangle: its lowest point touches that line,
+  and the object is CENTRED left to right.
+- DO NOT REPAINT THE CYAN LINES, and DO NOT REPAINT THE CYAN DIAMOND on the floor. Leave them
+  exactly the cyan they already are (#00E5FF). They are registration marks that a script uses
+  to cut the object out, and it finds them by that exact colour. It reads the WIDTH of the
+  rectangle as one floor tile, so the rectangle must stay a rectangle of the same proportions.
+  Never use that cyan anywhere else in the image.
+- The magenta OUTSIDE the rectangle stays completely empty.
 
 THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW.
 This is a game object seen from the same overhead isometric camera as the room it will stand

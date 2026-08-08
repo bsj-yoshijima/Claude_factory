@@ -487,14 +487,17 @@ function buildSheet(ss, guide, order){
 }
 
 /* シート殻とその切り出し位置を取り出す口（保存ボタンと同じ中身を返す） */
-/* カスタム装飾品(名物・一点物)用の殻。1体ずつ発注するので、セルを仕切る枠は要らない。
-   キャンバスそのものが枠。菱形の手前角はキャンバスの下端に接する(pad=0)。
-   焼き込みは「枠＝画像全体」として扱う(cells の frame:false)。 */
+/* カスタム装飾品(名物・一点物)用の殻。1体ずつ発注するがシアンの枠は必ず描く。
+   一度「1体だけならキャンバスの縁が枠になる」として枠を省いたが、生成物は指定した寸法で
+   返らない(384x533 で頼んで 848x1264 が返り、縦横比が 7% ずれた)。縁は絵ではないので
+   生成側は保てず、枠を省くと大きさの基準が絵の中に一つも残らない。菱形まで縦に10%伸びた。
+   枠は「描かれた線」なので寸法が動いても一緒に動く。これが焼き込みの唯一の基準。 */
 window.__customPNG = (k) => {
   const spec = [...SLOTS, ...FREE].find(s => s.k === k);
   if(!spec) return null;
   const cv = document.createElement('canvas');
-  const r = drawShell(cv, spec, +$('sh_w').value/100, +$('sh_h').value/100, +$('sh_ss').value, false, null);
+  const r = drawShell(cv, spec, +$('sh_w').value/100, +$('sh_h').value/100, +$('sh_ss').value, false, null,
+    { frame:true });
   return { png:cv.toDataURL('image/png'), w:cv.width, h:cv.height,
     cells:[{ k:spec.k, x:0, y:0, w:cv.width, h:cv.height, gy:Math.round(r.gy*10000)/10000 }] };
 };
