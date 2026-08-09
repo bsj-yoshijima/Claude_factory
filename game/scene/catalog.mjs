@@ -126,6 +126,7 @@ export const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cu
 const PROP_SPAN = {
   sus_lane:4, sus_netacase:4, cir_popcorn:4, cir_cannon:4, wes_campfire:4, bee_throne:4, stm_boiler:4, stm_console:4,
   arb_table:4,   // 八角形のモロッコテーブルだけは他テーマのテーブル(1×2)より大きい2×2
+  cir_table:4, cir_rug:4,   // サーカスの太鼓の台と円形のラグは足元が正方形
 
   sus_tea:2, sus_sake:2, sus_oke:2, sus_neko:2, cir_trunks:2, cir_ringtoss:2, cir_ballstand:2,
   wes_barreltable:2, wes_horseshoe:2, wes_wheel:2, wes_assay:2,
