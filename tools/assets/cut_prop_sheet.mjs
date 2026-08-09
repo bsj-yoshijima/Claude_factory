@@ -72,6 +72,23 @@ const isBlend=(c)=> c[2]>190 && c[2]>=c[0]-10 && c[2]>=c[1]-10 && (c[0]+c[1])<34
    色名ではなく「印→マゼンタ を結ぶ線分にどれだけ近いか」で判定する。
    シアンの実測: rgb(107,177,255) は線分から 44、rgb(49,201,251) は 16。
    氷の淡い水色 rgb(200,235,250) は 185 で残る。 */
+/* 線の縁には「印 × 物の黒い輪郭」の中間色も出る。これは印とマゼンタの線分から外れるので
+   nearMarkLine では拾えず、足元に錆色の縁として残った(fantasy の棚・椅子・机の脚)。
+   明るさを捨てて色味だけで比べると、印と同じ色味のまま暗いだけだと分かる:
+     印 #FF6A00 → 正規化 (1.00, 0.42, 0.00)
+     残った錆色 rgb(150,60,10) → (1.00, 0.40, 0.07)   ← 印と同じ色味
+     テーマの金 rgb(214,168,80) → (1.00, 0.79, 0.37)  ← 別物、残す
+   印の近く(D px 以内)にあって色味が同じものだけを落とす。
+   **シアンの印には使わない。** シアンの側は cyanish / isBlend で既に調整済みで、
+   この規則を足すと採用済み10テーマのうち15体が1pxだけ縮んだ(淡い水色が削れる)。
+   印ごとに縁の落とし方を変える、で揃えてある。 */
+const norm=(c)=>{ const m=Math.max(c[0],c[1],c[2]); return m<30 ? null : [c[0]/m,c[1]/m,c[2]/m]; };
+let MARKN = null;
+const sameHueAsMark=(c)=>{
+  const n=norm(c); if(!n||!MARKN) return false;
+  let s=0; for(let k=0;k<3;k++){ const e=n[k]-MARKN[k]; s+=e*e; }
+  return s < 0.18*0.18;
+};
 const nearMarkLine=(c)=>{
   let num=0, den=0;
   for(let k=0;k<3;k++){ const d=MARK[k]-255*(k!==1?1:0); num += (c[k]-(k!==1?255:0))*d; den += d*d; }
@@ -198,8 +215,9 @@ for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++){
    ice(印をオレンジにした殻)で、氷の淡い水色 rgb(200,235,250) が cyanish に当てはまり、
    枠線に接した結晶の先が消えて平らに切れた。印がシアンのときだけ従来どおりにする。 */
 const markIsCyan = MARK[0]===0 && MARK[1]===229 && MARK[2]===255;
+MARKN = norm(MARK);
 const isBg = (x,y,c)=> markPx[y*sh.w+x]
-  || (markD[y*sh.w+x] && (nearMarkLine(c) || (markIsCyan && (cyanish(c)||isBlend(c)))))
+  || (markD[y*sh.w+x] && (nearMarkLine(c) || (markIsCyan ? (cyanish(c)||isBlend(c)) : sameHueAsMark(c))))
   || killMag(c);
 
 /* シアンの連結成分を拾う。枠と菱形の見分けは次のブロックでやる */
