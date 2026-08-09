@@ -100,7 +100,7 @@ function writePNG(file,w,h,rgba){
 
 const args = process.argv.slice(2);
 const [sheetFile, cellsFile, prefix] = args;
-if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--pad px]'); process.exit(1); }
+if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--pad px] [--bleed px]'); process.exit(1); }
 const oi = args.indexOf('--out');
 const outDir = oi>=0 ? args[oi+1] : path.join(ROOT,'assets','props');
 /* カスタムの殻はセル名が形(free-1x2)なので、そのままだと prop_jpn_free-1x2.png になる。
@@ -128,6 +128,13 @@ if(!(padBottom>=0)) { console.log('--pad は0以上の整数'); process.exit(1);
 const ki = args.indexOf('--scale');
 const manualScale = ki>=0 ? Number(args[ki+1]) : 1;
 if(!(manualScale>0)) { console.log('--scale は正の数'); process.exit(1); }
+/* --bleed は「枠の外 N px までを絵として拾う」。植物の葉のように枠から出て描かれた物の救済。
+   既定は0(＝従来どおり枠の中だけ)。外へ広げると線の外縁の中間色を物と誤認する恐れがあるが、
+   その帯は印から D px 以内なので isBg が落とす。隣の枠の内側は inOther が除く。
+   救済であって規格ではない: 使ったら fit に bleed として残す。 */
+const bi = args.indexOf('--bleed');
+const bleed = bi>=0 ? Math.round(Number(args[bi+1])) : 0;
+if(!(bleed>=0)) { console.log('--bleed は0以上の整数'); process.exit(1); }
 fs.mkdirSync(outDir, { recursive:true });
 
 const sh = readPNG(sheetFile);
@@ -181,6 +188,62 @@ for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++){
 /* 「1体だけならキャンバスの縁を枠とみなす」分岐が以前あったが消した。生成物は依頼した
    寸法で返らない(384x533 で頼んで 848x1264、縦横比が7%違う)ので、縁は基準にならない。
    1体でも枠は描く。カスタムの殻も枠つきに作り直してある。 */
+/* 外接矩形が重なる塊どうしは、同じ枠の断片とみなして併合する。
+   枠は1本の線なので普通は1つの連結成分になるが、**物が線を跨いで描かれると線が分断され**、
+   1枚の枠が2つ以上の塊として出てくる(jungle の植物。葉が枠の左右を横切って3つに割れた)。
+   そのまま数えると枠が8個になり、スロットの割り当てが1つずつ後ろへずれて、
+   椅子の枠から葉が出てきた。枠の中の菱形も外接矩形が枠に含まれるのでここで併合されるが、
+   併合しても矩形は枠のままなので影響はない。 */
+/* その塊だけで四辺が閉じているか(＝それ単体で1枚の枠か)。
+   閉じている塊は、隣とどれだけ端が揃っていても別の枠なので併合してはいけない。
+   これを見ないと、同じ行に並ぶ高さの揃った枠どうし(egypt の椅子と棚)が
+   「端が揃っていて隙間が小さい」に当てはまって1つに融合した。 */
+const isClosed = (c)=>{
+  const lw = Math.max(2, Math.round(Math.min(c.bw,c.bh)*0.06));
+  const has = (x,y)=> x>=0 && y>=0 && x<sh.w && y<sh.h && markPx[y*sh.w+x];
+  const band = (fix, from, to, horiz)=>{           // 帯の中に印がある割合
+    let n=0;
+    for(let v=from; v<=to; v++){
+      let hit=false;
+      for(let d=0; d<=lw && !hit; d++) hit = horiz ? has(v, fix+d) || has(v, fix-d) : has(fix+d, v) || has(fix-d, v);
+      if(hit) n++;
+    }
+    return n/(to-from+1);
+  };
+  return band(c.y0, c.x0, c.x1, true)  >= 0.9 && band(c.y1, c.x0, c.x1, true)  >= 0.9
+      && band(c.x0, c.y0, c.y1, false) >= 0.9 && band(c.x1, c.y0, c.y1, false) >= 0.9;
+};
+{
+  const m = comps.map(c=>({...c, closed:isClosed(c)}));
+  for(let again=true; again; ){
+    again=false;
+    for(let i=0;i<m.length && !again;i++) for(let j=i+1;j<m.length;j++){
+      const a=m[i], b=m[j];
+      /* 併合するのは次の2つだけ。緩めると連鎖して全部が1つの巨大な矩形に育つ
+         (「片方の軸でよく重なっていれば併合」にしたら 10個 → 1個 になった)。
+           1. 外接矩形が重なっている … 枠の中の菱形や、線に接した破片
+           2. 端が揃っていて隙間が小さい … 枠が上下(左右)に割れた場合。
+              割れると外接矩形は重ならないが、**割れた両片は同じ辺を共有する**ので
+              x(または y)の両端がほぼ一致する。jungle の植物は葉が左右の線を横切り、
+              枠が上下に割れて 30px の隙間ができた(枠の高さの22%)。
+              隣の枠は端が揃わない(同じ行なら y0 が30px違い、同じ列なら x1 が110px違う)。 */
+      const hit = !(a.x0>b.x1 || b.x0>a.x1 || a.y0>b.y1 || b.y0>a.y1);
+      const tol = Math.max(4, Math.round(Math.min(a.bw,b.bw,a.bh,b.bh)*0.03));
+      const gapY = Math.max(a.y0,b.y0) - Math.min(a.y1,b.y1) - 1;
+      const gapX = Math.max(a.x0,b.x0) - Math.min(a.x1,b.x1) - 1;
+      const split = !a.closed && !b.closed && (
+                    (Math.abs(a.x0-b.x0)<=tol && Math.abs(a.x1-b.x1)<=tol && gapY <= 0.35*Math.min(a.bh,b.bh))
+                 || (Math.abs(a.y0-b.y0)<=tol && Math.abs(a.y1-b.y1)<=tol && gapX <= 0.35*Math.min(a.bw,b.bw)));
+      if(!hit && !split) continue;
+      a.x0=Math.min(a.x0,b.x0); a.x1=Math.max(a.x1,b.x1);
+      a.y0=Math.min(a.y0,b.y0); a.y1=Math.max(a.y1,b.y1);
+      a.n+=b.n; a.bw=a.x1-a.x0+1; a.bh=a.y1-a.y0+1; a.fill=a.n/(a.bw*a.bh); a.closed=a.closed||b.closed;
+      m.splice(j,1); again=true; break;
+    }
+  }
+  if(m.length !== comps.length) console.log(`  分断された枠を併合: ${comps.length}個 → ${m.length}個`);
+  comps.splice(0, comps.length, ...m);
+}
 const big = comps.slice().sort((a,b)=>(b.bw*b.bh)-(a.bw*a.bh));
 const frames = [];
 for(const c of big){
@@ -191,7 +254,12 @@ frames.sort((a,b)=>
   (a.y1 > b.y1 + a.bh*0.5 ? 1 : b.y1 > a.y1 + b.bh*0.5 ? -1 : a.x0 - b.x0));
 const names = spec.cells.map(c=>c.k);
 console.log(`シアンの塊 ${comps.length}個 → 枠 ${frames.length}個 (期待 ${names.length})`);
-if(frames.length !== names.length) console.log('⚠ 枠の数が合いません。生成をやり直すか、枠が塗り替えられていないか確認してください');
+if(frames.length !== names.length){
+  console.log('⚠ 枠の数が合いません。生成をやり直すか、枠が塗り替えられていないか確認してください');
+  /* どれが余分(または欠け)なのか分からないと直しようがないので、見つけた枠を全部出す */
+  for(const [i,f] of frames.entries())
+    console.log(`   枠${i}: ${f.bw}x${f.bh}px @(${f.x0},${f.y0})-(${f.x1},${f.y1}) 塗り${(f.fill*100)|0}%`);
+}
 
 const fit={}, rows=[], crops=[];
 for(const [i,fr] of frames.entries()){
@@ -206,7 +274,8 @@ for(const [i,fr] of frames.entries()){
   /* 探す範囲は枠の外接矩形まで(線の帯も含める)。線の内側だけに限ると、線に触れた部分が
      黙って捨てられて絵が欠ける（畳の手前角が削れた）。線そのものはシアンなので拾わない。
      外側へは広げない: 線の外縁にはマゼンタとの中間色が出ていて、それを物と誤認する。 */
-  const ix0=fr.x0, ix1=fr.x1, iy0=fr.y0, iy1=fr.y1;
+  const ix0=Math.max(0,fr.x0-bleed), ix1=Math.min(sh.w-1,fr.x1+bleed),
+        iy0=Math.max(0,fr.y0-bleed), iy1=Math.min(sh.h-1,fr.y1+bleed);
   const inOther=(x,y)=>frames.some(o=>o!==fr && x>=o.x0 && x<=o.x1 && y>=o.y0 && y<=o.y1);
   let x0=ix1, x1=ix0, y0=iy1, y1=iy0, any=false;
   for(let y=iy0;y<=iy1;y++) for(let x=ix0;x<=ix1;x++){
@@ -294,13 +363,15 @@ for(const [i,fr] of frames.entries()){
   const byRatio = padBottom>0 ? 1 : ((byFrame-y0)*s-padT)/chh;
   fit[`${prefix}_${slot}`] = { cx:r4(((cxFrame-x0)*s-padL)/cw), by:r4(byRatio),
     px:[cw,chh], shape:[sn0,sm0],
-    ...(manualScale!==1 ? {scale:manualScale} : {}), ...(padBottom ? {pad:padBottom} : {}) };
+    ...(manualScale!==1 ? {scale:manualScale} : {}), ...(padBottom ? {pad:padBottom} : {}),
+    ...(bleed ? {bleed} : {}) };
   /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
      捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
   /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と
      数えて全件が「切れている」になるので、判定を緩めたうえで線から数px離す。 */
   let spill=0;
-  const dead=Math.max(4, Math.round(lw*0.8)), band=dead+Math.max(6, lw*2);
+  /* --bleed で拾うと決めた範囲は「はみ出し」ではないので、死角も同じだけ広げる */
+  const dead=Math.max(4, Math.round(lw*0.8))+bleed, band=dead+Math.max(6, lw*2);
   for(let y=Math.max(0,fr.y0-band); y<=Math.min(sh.h-1,fr.y1+band); y++)
     for(let x=Math.max(0,fr.x0-band); x<=Math.min(sh.w-1,fr.x1+band); x++){
       if(x>=fr.x0-dead && x<=fr.x1+dead && y>=fr.y0-dead && y<=fr.y1+dead) continue;
