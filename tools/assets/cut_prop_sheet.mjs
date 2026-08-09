@@ -48,15 +48,38 @@ const SHAPE = { chair:[1,1], shelf:[1,1], lamp:[1,1], plant:[1,1],
      露天風呂の湯 rgb(175,241,231) 距離182 / 影の湯 rgb(117,201,203) 距離131
    以前は「緑と青が赤より55以上高い」で見ていて、湯(231-175=56)が1ポイント差で
    印と判定され、焼き込みで湯が消えた。影の湯も同じ理由で奥側が欠けた。 */
-const MARK = [0,229,255];
+/* 印の色は殻の JSON の mark を正とする(既定 #00E5FF)。テーマの絵と印が同じ色域に
+   入ってしまうと、しきい値では絶対に分けられない。ice がその実例で、脚の間から覗く
+   菱形のスリット(距離37〜73)とラグの雪の結晶(距離40〜69)が完全に重なった。
+   そのテーマだけ印を別の色で刷った殻を使う(tools/assets/recolor_shell_mark.mjs)。 */
+let MARK = [0,229,255];
 const dist2 = (c,m)=> (c[0]-m[0])**2 + (c[1]-m[1])**2 + (c[2]-m[2])**2;
-const isMark = (c)=> dist2(c,MARK) < 70*70;
+/* しきい値は --mark-tol で下げられる。既定の70は線の縁のぼけた画素まで拾うための値だが、
+   テーマ側がシアンに近い色を絵に使うと、その絵まで印と判定して消してしまう
+   (ice のラグの雪の結晶。距離41)。しきい値を下げると線の縁が印から漏れるが、
+   縁は「印から D px 以内の青緑」として別途落とされるので実害は出ない。実測(ice):
+     枠線の芯   距離 6〜14      枠線の縁 距離 27〜57
+     ラグの結晶 距離 40〜69 */
+let markTol = 70;
+const isMark = (c)=> dist2(c,MARK) < markTol*markTol;
 const isMag  = (c)=> c[0]>170 && c[1]<110 && c[2]>170 && c[0]-c[1]>60 && c[2]-c[1]>60;
 const killMag =(c)=> c[0]>120 && c[2]>120 && c[0]-c[1]>45 && c[2]-c[1]>45; // 赤紫に寄った画素
 const cyanish=(c)=> c[2]>90 && c[1]-c[0]>18 && c[2]-c[0]>18;              // 青緑に寄った画素
 /* シアン(0,229,255)とマゼンタ(255,0,255)の中間色。線の縁に1〜2px出る。
    青が支配的で赤+緑が低い。これを落とさないと枠の縁が物として残り、切り出しが枠まで広がる。 */
 const isBlend=(c)=> c[2]>190 && c[2]>=c[0]-10 && c[2]>=c[1]-10 && (c[0]+c[1])<340;
+/* 線の縁は「印 と マゼンタ の混合」でできている。印の色を差し替えても効くように、
+   色名ではなく「印→マゼンタ を結ぶ線分にどれだけ近いか」で判定する。
+   シアンの実測: rgb(107,177,255) は線分から 44、rgb(49,201,251) は 16。
+   氷の淡い水色 rgb(200,235,250) は 185 で残る。 */
+const nearMarkLine=(c)=>{
+  let num=0, den=0;
+  for(let k=0;k<3;k++){ const d=MARK[k]-255*(k!==1?1:0); num += (c[k]-(k!==1?255:0))*d; den += d*d; }
+  const a = Math.min(1, Math.max(0, num/den));
+  let off=0;
+  for(let k=0;k<3;k++){ const base=(k!==1?255:0); const e = c[k]-(a*MARK[k]+(1-a)*base); off += e*e; }
+  return off < 60*60;
+};
 
 function readPNG(file){
   const b = fs.readFileSync(file);
@@ -100,7 +123,7 @@ function writePNG(file,w,h,rgba){
 
 const args = process.argv.slice(2);
 const [sheetFile, cellsFile, prefix] = args;
-if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--pad px] [--bleed px] [--flip]'); process.exit(1); }
+if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--pad px] [--bleed px] [--flip] [--mark-tol 距離]'); process.exit(1); }
 const oi = args.indexOf('--out');
 const outDir = oi>=0 ? args[oi+1] : path.join(ROOT,'assets','props');
 /* カスタムの殻はセル名が形(free-1x2)なので、そのままだと prop_jpn_free-1x2.png になる。
@@ -137,10 +160,19 @@ const bleed = bi>=0 ? Math.round(Number(args[bi+1])) : 0;
 if(!(bleed>=0)) { console.log('--bleed は0以上の整数'); process.exit(1); }
 /* --flip は絵を左右反転する。向きだけが他テーマと逆に描かれてきたときの手当て。 */
 const flip = args.includes('--flip');
+/* --mark-tol は印(#00E5FF)と判定する色の距離。既定70。絵がシアンに近い色を使うテーマで下げる。 */
+const mi = args.indexOf('--mark-tol');
+if(mi>=0){ markTol = Number(args[mi+1]);
+  if(!(markTol>0)) { console.log('--mark-tol は正の数'); process.exit(1); }
+  console.log(`  印の判定を #00E5FF から距離 ${markTol} 以内に絞る(既定70)`); }
 fs.mkdirSync(outDir, { recursive:true });
 
 const sh = readPNG(sheetFile);
 const spec = JSON.parse(fs.readFileSync(cellsFile,'utf8'));
+/* 印の色は殻が持っている。ice のように印を差し替えた殻でもそのまま焼ける */
+if(spec.mark){ const m=/^#?([0-9a-f]{6})$/i.exec(spec.mark);
+  if(m){ MARK=[parseInt(m[1].slice(0,2),16),parseInt(m[1].slice(2,4),16),parseInt(m[1].slice(4,6),16)];
+    if(m[1].toLowerCase()!=="00e5ff") console.log(`  印の色は殻の指定 #${m[1].toLowerCase()} を使う`); } }
 const get=(x,y)=>{const i=(y*sh.w+x)*sh.ch; return [sh.px[i],sh.px[i+1],sh.px[i+2]];};
 
 /* シアンの印(枠と菱形)のマスク。
@@ -161,7 +193,14 @@ for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++){
   for(let dy=-D;dy<=D;dy++){ const ny=y+dy; if(ny<0||ny>=sh.h) continue;
     for(let dx=-D;dx<=D;dx++){ const nx=x+dx; if(nx<0||nx>=sh.w) continue; markD[ny*sh.w+nx]=1; } }
 }
-const isBg = (x,y,c)=> markPx[y*sh.w+x] || (markD[y*sh.w+x] && (cyanish(c)||isBlend(c))) || killMag(c);
+/* 印から D px 以内の「線の縁」を落とす判定。
+   cyanish / isBlend はシアンの印むけに作った条件で、**印がシアンでないときは有害**。
+   ice(印をオレンジにした殻)で、氷の淡い水色 rgb(200,235,250) が cyanish に当てはまり、
+   枠線に接した結晶の先が消えて平らに切れた。印がシアンのときだけ従来どおりにする。 */
+const markIsCyan = MARK[0]===0 && MARK[1]===229 && MARK[2]===255;
+const isBg = (x,y,c)=> markPx[y*sh.w+x]
+  || (markD[y*sh.w+x] && (nearMarkLine(c) || (markIsCyan && (cyanish(c)||isBlend(c)))))
+  || killMag(c);
 
 /* シアンの連結成分を拾う。枠と菱形の見分けは次のブロックでやる */
 const seen=new Uint8Array(sh.w*sh.h), comps=[];
@@ -377,7 +416,7 @@ for(const [i,fr] of frames.entries()){
   fit[`${prefix}_${slot}`] = { cx:r4(flip ? 1-cxR : cxR), by:r4(byRatio),
     px:[cw,chh], shape:[sn0,sm0],
     ...(manualScale!==1 ? {scale:manualScale} : {}), ...(padBottom ? {pad:padBottom} : {}),
-    ...(bleed ? {bleed} : {}), ...(flip ? {flip:1} : {}) };
+    ...(bleed ? {bleed} : {}), ...(flip ? {flip:1} : {}), ...(markTol!==70 ? {markTol} : {}) };
   /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
      捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
   /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と
