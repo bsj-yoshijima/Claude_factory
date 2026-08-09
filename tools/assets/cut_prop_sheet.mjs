@@ -100,7 +100,7 @@ function writePNG(file,w,h,rgba){
 
 const args = process.argv.slice(2);
 const [sheetFile, cellsFile, prefix] = args;
-if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--pad px] [--bleed px]'); process.exit(1); }
+if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--pad px] [--bleed px] [--flip]'); process.exit(1); }
 const oi = args.indexOf('--out');
 const outDir = oi>=0 ? args[oi+1] : path.join(ROOT,'assets','props');
 /* カスタムの殻はセル名が形(free-1x2)なので、そのままだと prop_jpn_free-1x2.png になる。
@@ -135,6 +135,8 @@ if(!(manualScale>0)) { console.log('--scale は正の数'); process.exit(1); }
 const bi = args.indexOf('--bleed');
 const bleed = bi>=0 ? Math.round(Number(args[bi+1])) : 0;
 if(!(bleed>=0)) { console.log('--bleed は0以上の整数'); process.exit(1); }
+/* --flip は絵を左右反転する。向きだけが他テーマと逆に描かれてきたときの手当て。 */
+const flip = args.includes('--flip');
 fs.mkdirSync(outDir, { recursive:true });
 
 const sh = readPNG(sheetFile);
@@ -346,6 +348,16 @@ for(const [i,fr] of frames.entries()){
     const nh=chh+padBottom*2, nb=Buffer.alloc(cw*nh*4);
     cout.copy(nb, cw*padBottom*4); cout=nb; chh=nh; padT+=padBottom/s;
   }
+  /* --flip は絵を左右反転する。アイソメでは水平反転が90度回した向きに相当するので
+     (ゲーム側も dir==='v' を setFlipX で表している)、向きだけが他テーマと逆に
+     描かれてきたときの手当てになる。生成をやり直す必要はない。
+     反転すると接地点の x も鏡になるので、下の cx で 1-cx にする。 */
+  if(flip){
+    const nb=Buffer.alloc(cw*chh*4);
+    for(let y=0;y<chh;y++) for(let x=0;x<cw;x++)
+      cout.copy(nb, (y*cw+(cw-1-x))*4, (y*cw+x)*4, (y*cw+x)*4+4);
+    cout=nb;
+  }
   writePNG(path.join(outDir, `prop_${prefix}_${slot}.png`), cw, chh, cout);
   crops.push({slot, ow:cw, oh:chh, out:cout});
 
@@ -361,10 +373,11 @@ for(const [i,fr] of frames.entries()){
   /* --pad を使ったら「絵の下端 + padBottom」が接地線。上の余白は接地点より下には
      効かないので、by は (上の余白 + 絵 + 下の余白) 分の (上の余白 + 絵 + 下の余白) = 1 */
   const byRatio = padBottom>0 ? 1 : ((byFrame-y0)*s-padT)/chh;
-  fit[`${prefix}_${slot}`] = { cx:r4(((cxFrame-x0)*s-padL)/cw), by:r4(byRatio),
+  const cxR = ((cxFrame-x0)*s-padL)/cw;
+  fit[`${prefix}_${slot}`] = { cx:r4(flip ? 1-cxR : cxR), by:r4(byRatio),
     px:[cw,chh], shape:[sn0,sm0],
     ...(manualScale!==1 ? {scale:manualScale} : {}), ...(padBottom ? {pad:padBottom} : {}),
-    ...(bleed ? {bleed} : {}) };
+    ...(bleed ? {bleed} : {}), ...(flip ? {flip:1} : {}) };
   /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
      捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
   /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と
