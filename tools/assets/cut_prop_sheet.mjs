@@ -140,7 +140,7 @@ function writePNG(file,w,h,rgba){
 
 const args = process.argv.slice(2);
 const [sheetFile, cellsFile, prefix] = args;
-if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--pad px] [--bleed px] [--flip] [--mark-tol 距離]'); process.exit(1); }
+if(!prefix){ console.log('使い方: node tools/assets/cut_prop_sheet.mjs <sheet.png> <cells.json> <prefix> [--out DIR] [--slot 名前] [--scale 倍率] [--pad px] [--bleed px] [--flip] [--mark-tol 距離] [--mark-zone]'); process.exit(1); }
 const oi = args.indexOf('--out');
 const outDir = oi>=0 ? args[oi+1] : path.join(ROOT,'assets','props');
 /* カスタムの殻はセル名が形(free-1x2)なので、そのままだと prop_jpn_free-1x2.png になる。
@@ -320,6 +320,81 @@ if(frames.length !== names.length){
     console.log(`   枠${i}: ${f.bw}x${f.bh}px @(${f.x0},${f.y0})-(${f.x1},${f.y1}) 塗り${(f.fill*100)|0}%`);
 }
 
+/* --mark-zone: 印の色を「枠の線の帯」と「接地菱形の上」に限る。
+   既定では**使わない**。実在のシートは枠を塗りつぶしで返したり(arabia)、菱形を
+   少し大きく描いたりする。その状態でこの制限をかけると、はみ出した印が絵として残り、
+   切り出しが太る(実測: 採用済み13テーマ中9テーマで table/sofa が2〜5px太った)。
+   テーマが印と同じ色を絵に使ってしまったときだけ、その回に限って使う。 */
+/* 印の色は「枠の線の帯」と「接地菱形の上」にしか出ないはず。そこから離れた場所に
+   同じ色があれば、それは絵であって印ではない。ここまで見ないと、テーマが印と同じ色を
+   使ったときに絵ごと消える(dwarf の水晶。距離0の画素まであった)。
+   露天風呂の湯で「色 + 印への近さ」にしたのと同じ考えを、印そのものにも広げる。
+
+   菱形の位置は枠から出せる: 中心xは枠の中心、最下点は接地線(枠の下辺と gy)、
+   幅は枠の内幅の 1/1.15(セルの幅は菱形の1.15倍)。生成側が菱形を多少大きく描くことが
+   あるので 1.3倍の余裕を持たせる。判定を外した画素は絵として残る。 */
+const markZone = args.includes('--mark-zone');
+if(markZone){
+  /* 印の色をした「かたまり」ごとに、枠か菱形かを判定する。
+     菱形は必ず接地線に接している(それが接地線の定義)。枠は外周の帯にある。
+     どちらでもないかたまりは絵。dwarf の水晶がこれで、印と同じ色で描かれていた。
+
+     最初は「枠の帯 + 殻から計算した菱形の内側」という幾何で書いたが、これは両側に外した:
+       菱形を大きめに描くシートでは、はみ出した縁が絵として残って切り出しが太った
+       (table/sofa/rug に水色の縁。13テーマ中9テーマで2〜5px太る)
+       逆に鉢の上の水晶は、計算した菱形にわずかに掛かって消えた
+     かたまり単位で「接地線に接しているか」を見る方が、菱形の大きさに依存しないぶん強い。
+     枠が塗りつぶしで返るシート(arabia)でも、その塗りは下辺まで届くので菱形と同じ扱いになる。 */
+  const lab = new Int32Array(sh.w*sh.h).fill(-1);
+  const boxes = [];
+  for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++){
+    const k=y*sh.w+x; if(!markPx[k] || lab[k]>=0) continue;
+    const id=boxes.length, q=[k]; lab[k]=id;
+    let x0=x,x1=x,y0=y,y1=y,n=0;
+    while(q.length){
+      const c=q.pop(), cy=(c/sh.w)|0, cx=c%sh.w; n++;
+      if(cx<x0)x0=cx; if(cx>x1)x1=cx; if(cy<y0)y0=cy; if(cy>y1)y1=cy;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=cx+dx, ny=cy+dy; if(nx<0||ny<0||nx>=sh.w||ny>=sh.h) continue;
+        const nk=ny*sh.w+nx; if(lab[nk]>=0 || !markPx[nk]) continue;
+        lab[nk]=id; q.push(nk);
+      }
+    }
+    boxes.push({x0,x1,y0,y1,n});
+  }
+  const keep = new Uint8Array(boxes.length);
+  for(const [i,fr] of frames.entries()){
+    const cell = spec.cells[i];
+    const lw = Math.max(2, Math.round(fr.bw*0.06));
+    const gy = cell && cell.gy ? cell.gy : 1;
+    const by = fr.y0 + fr.bh*gy;                    // このセルの接地線
+    const tol = Math.max(4, Math.round(fr.bh*0.06));
+    for(const [bi,b] of boxes.entries()){
+      if(keep[bi]) continue;
+      const cx=(b.x0+b.x1)/2, cy=(b.y0+b.y1)/2;
+      if(cx<fr.x0-lw || cx>fr.x1+lw || cy<fr.y0-lw || cy>fr.y1+lw) continue;   // 別のセル
+      const isFrame = b.x0<=fr.x0+lw*2 && b.x1>=fr.x1-lw*2 && b.y0<=fr.y0+lw*2 && b.y1>=fr.y1-lw*2;
+      const onGround = b.y1 >= by-tol;              // 下端が接地線に届いている＝菱形
+      /* ラグのような平物は菱形を覆い、菱形を接地線に届かない破片に割る。その破片も菱形。
+         「菱形が入りうる箱にすっぽり収まっているか」で拾う。水晶のように箱より上へ
+         伸びるものは、はみ出すので拾われない(ここを画素単位でやると水晶が消えた)。 */
+      const [zn,zm] = SHAPE[names[i]] || [1,1];
+      const hw = fr.bw*(((zn+zm)*CELL_W/2)/((cell?cell.w:278)/spec.scale))/2*1.25, hh = hw/2;
+      const inDiaBox = b.x0>=cx-hw && b.x1<=cx+hw && b.y0>=by-hh-tol && b.y1<=by+tol;
+      if(isFrame || onGround || inDiaBox) keep[bi]=1;
+    }
+  }
+  let freed=0;
+  for(let i=0;i<markPx.length;i++){ const id=lab[i]; if(id>=0 && !keep[id]){ markPx[i]=0; freed++; } }
+  if(freed) console.log(`  枠でも菱形でもない印の色 ${freed}px は絵として残す`);
+  markD.fill(0);
+  for(let y=0;y<sh.h;y++) for(let x=0;x<sh.w;x++){
+    if(!markPx[y*sh.w+x]) continue;
+    for(let dy=-D;dy<=D;dy++){ const ny=y+dy; if(ny<0||ny>=sh.h) continue;
+      for(let dx=-D;dx<=D;dx++){ const nx=x+dx; if(nx<0||nx>=sh.w) continue; markD[ny*sh.w+nx]=1; } }
+  }
+}
+
 const fit={}, rows=[], crops=[];
 for(const [i,fr] of frames.entries()){
   const cellK = names[i] || `cell${i}`;
@@ -434,7 +509,7 @@ for(const [i,fr] of frames.entries()){
   fit[`${prefix}_${slot}`] = { cx:r4(flip ? 1-cxR : cxR), by:r4(byRatio),
     px:[cw,chh], shape:[sn0,sm0],
     ...(manualScale!==1 ? {scale:manualScale} : {}), ...(padBottom ? {pad:padBottom} : {}),
-    ...(bleed ? {bleed} : {}), ...(flip ? {flip:1} : {}), ...(markTol!==70 ? {markTol} : {}) };
+    ...(bleed ? {bleed} : {}), ...(flip ? {flip:1} : {}), ...(markTol!==70 ? {markTol} : {}), ...(markZone ? {markZone:1} : {}) };
   /* 枠の外へ絵が出ていないか。切り出しは枠の内側だけなので、出ていた分は黙って捨てられる。
      捨てた量を数えないと「収まっているように見えて実は切れている」を見逃す。 */
   /* 線の縁にはマゼンタとシアンの中間色が1〜2px出る。厳しい判定のままだとこれを「物」と
