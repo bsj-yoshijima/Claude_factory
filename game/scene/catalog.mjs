@@ -125,6 +125,8 @@ export const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cu
 // 素材PNGはこの表示サイズに合わせて縮小済み(tools/fit_props.py)。値を変えたら再実行が必要。
 const PROP_SPAN = {
   sus_lane:4, sus_netacase:4, cir_popcorn:4, cir_cannon:4, wes_campfire:4, bee_throne:4, stm_boiler:4, stm_console:4,
+  arb_table:4,   // 八角形のモロッコテーブルだけは他テーマのテーブル(1×2)より大きい2×2
+
   sus_tea:2, sus_sake:2, sus_oke:2, sus_neko:2, cir_trunks:2, cir_ringtoss:2, cir_ballstand:2,
   wes_barreltable:2, wes_horseshoe:2, wes_wheel:2, wes_assay:2,
   bee_combtable:2, bee_honeypots:2, bee_pollen:2, bee_candles:2, bee_frames:2,

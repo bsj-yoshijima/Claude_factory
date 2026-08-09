@@ -93,11 +93,14 @@ console.log(`  新規格(焼き込み済み) ${baked}体 / 旧規格: 足元ぴ�
 /* 細長いブロック(1×2)は、菱形の手前角と中心xが半マス(約14px)ずれる。
    手前角のxに置くと物が左へ寄るので、横は中心x・縦は手前角のy を使う。 */
 console.log('\n=== 1×2 の横位置 ===');
+/* 見本は「まだ焼き込んでいない 1×2」から選ぶ。名前を直に書くと、その物を
+   焼き込んだ瞬間にこの検査が旧規格の式で新規格の fit を見て落ちる(arb_sofa で起きた)。 */
+const legacy1x2 = names.find(k => !FIT[k].baked && !isFlatProp(k) && propShape(k)[1] === 2);
 {
   const b = blockIso(3, 4, 1, 2);
   const gap = Math.abs(b.front.x - (b.back.x+b.front.x)/2);
   ok(gap > 13 && gap < 15, `1×2 では手前角が菱形の中心から ${gap.toFixed(1)}px ずれている(=区別が要る)`);
-  const name = 'arb_sofa', f = FIT[name];
+  const name = legacy1x2, f = FIT[name];
   const o = scene.propImage({ kind:'prop', variant:name, cell:{c:3, r:4} }), R = rect(o);
   ok(Math.abs(R.x0 + f.cx*R.w - (b.back.x+b.front.x)/2) < EPS, `${name}(1×2): 足元が菱形の中心xに乗る`);
   const fw = f.bw*R.w;
@@ -146,8 +149,8 @@ console.log('\n=== 新規格の占有と回転 ===');
     if(n!==m) ok(u.some(q=>!v.some(w=>w.c===q.c&&w.r===q.r)),
       `${name}: 回すと占有マスが変わる (${n}×${m} → ${m}×${n})`);
   }
-  const legacy = S.cellsOf({ kind:'prop', variant:'arb_sofa', dir:'u', cell:{c:0,r:0} });
-  ok(legacy.length === 1, '旧規格の装飾品は1マスのまま(保存レイアウトの互換)');
+  const legacy = S.cellsOf({ kind:'prop', variant:legacy1x2, dir:'u', cell:{c:0,r:0} });
+  ok(legacy.length === 1, `旧規格の装飾品(${legacy1x2})は1マスのまま(保存レイアウトの互換)`);
   // v向きは絵を左右反転する
   const o = S.propImage({ kind:'prop', variant:'jpn_table', dir:'v', cell:{c:2,r:2} });
   ok(o.flipX === true, 'v向きは絵を左右反転する');
