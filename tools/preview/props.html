@@ -671,7 +671,7 @@ async function renderRoom(){
 }
 {
   /* 焼き込み済み(baked)の絵があるテーマだけ出す */
-  const PRE2ROOM = { jpn:'japan', sus:'sushi', stm:'steampunk', din:'diner', cab:'cabin', dno:'dino', ons:'onsen', tky:'tokyo', chn:'china', arb:'arabia', dst:'desert', egy:'egypt' };
+  const PRE2ROOM = { jpn:'japan', sus:'sushi', stm:'steampunk', din:'diner', cab:'cabin', dno:'dino', ons:'onsen', tky:'tokyo', chn:'china', arb:'arabia', dst:'desert', egy:'egypt', jgl:'jungle' };
   const sel = $('rm_theme');
   const pres = [...new Set(Object.entries(FIT).filter(([,v])=>v.baked).map(([k])=>k.split('_')[0]))];
   const opts = (pres.length?pres:['jpn']).map(p=>({pre:p, room:PRE2ROOM[p]||'factory'}));
