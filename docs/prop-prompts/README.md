@@ -19,6 +19,30 @@
 共通の7種は **chair / shelf / lamp / plant（1×1）と table / sofa / rug（1×2）**。
 名物は物ごとに特徴も大きさも違うので、共通シートには入れず1体ずつ発注する。
 
+### 絵にシアンを使うテーマは `-orange` 版
+
+印（枠と接地菱形）がシアンだと、**テーマ側の水色が印と見分けられなくなって絵ごと消える**。
+onsen の湯が丸ごと落ちたのがこれ（→ `docs/prop-sprite-prompt.md`）。氷・水晶・発光する
+シアンが主役のテーマは、印をオレンジ `#FF6A00` にした殻で発注する。
+
+| ファイル | 添付する殻 |
+|---|---|
+| `ice-sheet-orange.txt` / `fantasy-sheet-orange.txt` / `space-sheet-orange.txt` | `docs/shells/prop-shell-sheet7-1519x1127-ice.png` |
+| `dwarf-sheet-green.txt` | `docs/shells/prop-shell-sheet7-1519x1127-green.png` |
+
+焼き込み側は殻の JSON の `mark` を読むので、**渡す殻を差し替えるだけ**でよい:
+
+```
+node tools/assets/cut_prop_sheet.mjs <生成物.png> docs/shells/prop-shell-sheet7-1519x1127-ice.json <prefix>
+```
+
+scifi はこの殻で発注して、発光球・クリスタル・回路柄のラグが無傷で焼けた（2026-08）。
+逆に**印と同系色をテーマが持っているとき**は同じ罠にはまるので、その色を避けさせる一文を
+本文に足す（space はパレットに琥珀と赤があるので「暗く鈍く、純オレンジにするな」と書いてある）。
+
+これらは `prop_prompt.mjs` の出力ではなく**手で直した版**。ツールに `-orange` の口は無いので、
+再生成しても作り直されない。文面を直すときはこの3〜4本を個別に直すこと。
+
 ### `-room` 版は非推奨
 
 部屋の絵を2枚目に添えると**枠が塗りつぶしに描き替えられ、大きさが 20% ぶれた**（実測）。
