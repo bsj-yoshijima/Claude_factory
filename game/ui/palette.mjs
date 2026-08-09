@@ -90,7 +90,7 @@ export function renderPalette(){
       ? `<span class="c ${selN?'on':''}" data-stow="sel">${uic('box')} 選択した${selN}個を収納</span><span class="c" data-selmode="0">✖ 選択をやめる</span>`
       : `<span class="c" data-stow="all">${uic('box')} すべて収納 (${placedN})</span><span class="c" data-selmode="1">☑️ 選んで収納</span>`;
   } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です')
-      +`<br>設置済みはドラッグで移動 / ${uic('trash')}ゴミ箱へドラッグで撤去 ・ クリックで選択（Rキーで回転）`
+      +`<br>設置済みはドラッグで移動 / ${uic('trash')}ゴミ箱へドラッグで撤去 ・ クリックで選択（Rキーで回転 / Dキーで収納）`
       +`<br>製造機の素材は${uic('factory')}製造タブから（編集中はクリックしても設定パネルは開きません）`;
     const M=Object.keys(MACH).filter(t=>availN('machine',t)>0).map(t=>cell(`machine:${t}`,`data-place="machine:${t}"`,machIcon(t),MACH[t].n,0,availN('machine',t),editSel&&editSel.kind==='machine'&&editSel.variant===t));
     items=M.join('')||`<div class="phint" style="padding:8px">在庫なし。${uic('shop')}ショップ→製造機 で購入してください。</div>`;

@@ -95,6 +95,15 @@ export const Edit = {
           this._drawHover(po); return; } }
       this.placeDir=(this.placeDir==='v')?'u':'v';
       if(window.__toast) window.__toast('向き: '+(this.placeDir==='v'?'↙ 手前方向':'↘ 奥方向')); });
+    /* 選択中の装飾品を収納(Dキー)。ゴミ箱までドラッグしなくても在庫に戻せる。
+       製造機は収納の対象外(STOWABLE 参照)なので断る。 */
+    this.input.keyboard.on('keydown-D',()=>{ if(!this.editMode||this.selectMode||this.moveId) return;
+      const pk=this.pickId && this.placed.find(x=>x.id===this.pickId); if(!pk) return;
+      if(!STOWABLE.includes(pk.kind)){ if(window.__toast) window.__toast('これは収納できません'); return; }
+      this.removeItem(pk.id);
+      if(window.__layoutChanged) window.__layoutChanged();
+      if(window.__toast) window.__toast('収納しました');
+      this._drawHover(this.input.activePointer); });
     // 移動のキャンセル / 選択の解除(Escキー)
     this.input.keyboard.on('keydown-ESC',()=>{
       if(this.moveId){ this.cancelMove(); if(window.__toast) window.__toast('移動をやめました'); return; }
@@ -190,8 +199,8 @@ export const Edit = {
     for(const q of this.cellsOf(e)){ if(q.c<0||q.r<0||q.c>=GU||q.r>=GV) continue;
       g.fillStyle(0x00e5ff,0.22); this._diamond(g,q.c,q.r); g.fillPath();
       g.lineStyle(2,0x00e5ff,0.95); this._diamond(g,q.c,q.r); g.strokePath(); }
-    const rot=this._canRotate(e);
-    this.pickTipText.setText(rot ? '選択中 ・ R:回転 ・ Esc:解除' : '選択中 ・ この物は回せません ・ Esc:解除');
+    const rot=this._canRotate(e), stow=STOWABLE.includes(e.kind);
+    this.pickTipText.setText('選択中 ・ '+(rot?'R:回転 ・ ':'この物は回せません ・ ')+(stow?'D:収納 ・ ':'')+'Esc:解除');
     // Rectangle は width への代入では形が変わらない(geom を持っている)。setSize を使う
     this.pickTipBg.setSize(this.pickTipText.width + 22, 34);
     this.pickTip.setVisible(true); },
