@@ -122,7 +122,7 @@ export const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cu
   'ons_chair','ons_table','ons_sofa','ons_shelf','ons_rug','ons_lamp','ons_plant','ons_rotenburo',   // ♨️ 温泉
   'haw_chair','haw_table','haw_sofa','haw_shelf','haw_rug','haw_lamp','haw_plant','haw_surfboard','haw_jukebox','haw_shaveice',
   'thr_chair','thr_table','thr_sofa','thr_shelf','thr_rug','thr_lamp','thr_plant','thr_gramophone','thr_coatstand','thr_slotmachine',
-  'bch_sandcastle','bch_parasol','bch_lifeguard'];  // 🎩 アメリカン30s                  // 🌺 ハワイアン
+  'bch_chair','bch_table','bch_sofa','bch_shelf','bch_rug','bch_lamp','bch_plant','bch_sandcastle','bch_parasol','bch_lifeguard'];  // 🏖 ビーチ  // 🎩 アメリカン30s                  // 🌺 ハワイアン
 // プロップが使う床のコマ数(=見た目の大きさ)。1コマだと潰れて読めない描き込みの多い物を 2/4 に上げる。
 // 表示高 = 1.35*CELL*√コマ数（4コマなら縦横2倍 = 2x2マス相当）。未指定は1コマ。
 // 素材PNGはこの表示サイズに合わせて縮小済み(tools/fit_props.py)。値を変えたら再実行が必要。
