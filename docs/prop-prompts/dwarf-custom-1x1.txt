@@ -1,0 +1,73 @@
+# 添付する殻: docs/shells/prop-shell-custom-1x1-372x499.png
+# 出力サイズ: 372x499
+
+REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object. Paint your theme
+directly on top of it, like colouring in a line drawing. Output 372x499.
+
+THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes shape.
+- Repaint the object INSIDE the rectangle. NOTHING crosses a cyan line. If a design does not
+  fit, make it smaller, not wider.
+- The object STANDS ON THE BOTTOM LINE of the rectangle: its lowest point TOUCHES that line,
+  and the object is CENTRED left to right.
+- DO NOT CENTRE THE OBJECT VERTICALLY and DO NOT FLOAT IT. There must be NO magenta gap
+  between the lowest point of the object and the bottom line. Empty space belongs ABOVE the
+  object, never below it. Follow the placeholder: its lowest corner touches the line.
+- DO NOT REPAINT THE CYAN LINES, and DO NOT REPAINT THE CYAN DIAMOND on the floor. Leave them
+  exactly the cyan they already are (#00E5FF). They are registration marks that a script uses
+  to cut the object out, and it finds them by that exact colour. It works out the scale from
+  the WIDTH of the rectangle, so THE RECTANGLE MUST KEEP ITS PROPORTIONS: same width against
+  height as in the shell. Never use that cyan anywhere else in the image.
+- THE DIAMOND KEEPS ITS EXACT SIZE, SHAPE AND POSITION. It is ALREADY the right size in the
+  shell; you never draw a diamond. Do not enlarge it, do not stretch it, do not redraw it
+  wider, do not turn it into a square standing on its corner. Its front corner already
+  touches the bottom line; that corner is where the object's lowest point goes.
+  DRAWING A BIGGER DIAMOND AND STANDING THE OBJECT AT THE BACK OF IT is the single most
+  common way this job fails: in the game the object then hovers above its tile.
+- The magenta OUTSIDE the rectangle stays completely empty.
+
+THE NUMBERS. They describe THE OBJECT, not the shell. Measure them against the image.
+- Its CONTACT POINT is the lowest pixel OF THE OBJECT ITSELF, on the centre line. It sits at
+  50.0% across and 97.8% down from the top of the image. NOTHING goes below that
+  point: no ground, no water, no stones, no shadow, no extra floor of any kind. Below it
+  there is only magenta.
+- Its CONTACT AREA (the part that actually touches the floor) is 59.8% of the image width
+  and 22.3% of its height: twice as wide as it is deep.
+- Parts that do not touch the floor may overhang a little (a tail, foliage, a roof), but the
+  overhang stays inside the cyan rectangle.
+- THE FOUR CORNERS OF THE IMAGE STAY MAGENTA. If you have filled them, you have drawn a
+  floor of your own and the object no longer fits its tile.
+
+THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW.
+This is a game object seen from the same overhead isometric camera as the room it will stand
+in. It is NOT a catalogue illustration, NOT a product shot, NOT a side view, NOT an elevation.
+- True 2:1 isometric: every horizontal edge on the ground travels 2 pixels across for exactly
+  1 pixel down. Measure it against the cyan diamond in the shell.
+- Exactly TWO vertical faces of any box are visible: one facing lower-left, one facing
+  lower-right. Never one flat face facing the viewer.
+- IF THE OBJECT IS ROUND (a pool, a basin, a well, a ring of stones), its footprint is an
+  ELLIPSE INSCRIBED IN THE DIAMOND: exactly TWICE AS WIDE AS IT IS DEEP, touching the
+  diamond's four corners and going no further. A circle, or an ellipse flatter than 2:1,
+  means the camera has tipped towards a top view and the object will not sit on its tile.
+- You MUST SEE THE TOP FACES: the top of its base and the top of its tallest part.
+- The cyan diamond is the floor tile. The object's footprint matches it and its lowest point
+  sits on the diamond's FRONT corner. An object that stands at the BACK of the diamond, with
+  the floor showing in front of it, is WRONG: it will hover above its tile in the game.
+
+WHAT THIS IS: a FORGE with an anvil.
+The plain box in the shell is only a placeholder for the SIZE and the POSITION. Replace it
+with the real object, shaped however the theme wants. What you may NOT change is the
+FOOTPRINT: the object stands on the cyan diamond and covers no more floor than it.
+If the footprint grows, the object will not fit its tile on the game board.
+
+BACKGROUND: solid pure MAGENTA (#FF00FF) everywhere around the object, exactly as in the
+shell. The magenta is cut away later, so nothing may touch it except the object itself.
+NO floor, NO ground plane, NO cast shadow, NO border, NO frame of your own, NO grid, NO text.
+
+STYLE: VERY chunky lo-fi 8-bit Famicom pixel art, extreme high contrast, thick clean black
+outlines, flat colors, no gradients, no anti-aliasing. It is shown about 50 pixels tall in the
+game, so keep it BOLD: few large shapes, strong silhouette. No fine filigree, no thin hatching.
+
+THEME: a dwarven mine hall.
+Materials: granite, wrought iron, heavy studs, raw gemstones.
+Palette: cool grey granite, warm timber brown, iron black, glowing lava orange, gem blue, violet and gold.
+Keep the theme in the MATERIAL and the ORNAMENT, not in the shape.

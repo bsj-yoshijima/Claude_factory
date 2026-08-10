@@ -36,15 +36,16 @@
 
 投入口を検出できないテーマ(normal / arabia / diner)は、従来の幅合わせ(legacy_fit)のまま。
 """
-import os, re, math, itertools
+import os, re, sys, math, itertools
 from collections import deque
 import numpy as np
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SHEETS = os.path.join(ROOT, 'assets', 'mach-sheets')
-OUT = os.path.join(ROOT, 'assets')
+OUT = os.path.join(ROOT, 'assets', 'machines')      # game/scene/main.mjs が読む場所
 SIZES = [2, 3, 4, 5]          # 幅の小さい順に割り当てる
+SHELL_BODY = 0.346            # 側面の高さ / 接地菱形の幅。型(tools/assets/make_machine_shell.py)と同値
 ERODE = 2                     # マゼンタのハロー除去(alpha収縮 px)。帆綱のような細い線の縁に残る
 MIN_AREA = 2000               # これ未満の連結成分はゴミとして捨てる
 
@@ -103,12 +104,14 @@ SPOT_HINT = {
 
 
 def main_js_consts():
-    """game/main.js から W,H,GU,GV,ISO,MACH_GEO.inset を読む"""
-    src = open(os.path.join(ROOT, 'game', 'main.js'), encoding='utf-8').read()
-    m = re.search(r'const W = (\d+), H = (\d+), GU = (\d+), GV = (\d+)', src)
+    """W,H,GU,GV,ISO は game/scene/iso.mjs、MACH_GEO.inset と MACH_DRAW は
+    game/scene/catalog.mjs から読む(旧 game/main.js の分割後の置き場所)。"""
+    src = open(os.path.join(ROOT, 'game', 'scene', 'iso.mjs'), encoding='utf-8').read()
+    m = re.search(r'W = (\d+), H = (\d+), GU = (\d+), GV = (\d+)', src)
     W, H, GU, GV = map(int, m.groups())
     iso = dict(re.findall(r'(Bx|By|ux|uy|vx|vy):\s*(-?[\d.]+)', src)[:6])
     iso = {k: float(v) for k, v in iso.items()}
+    src = open(os.path.join(ROOT, 'game', 'scene', 'catalog.mjs'), encoding='utf-8').read()
     inset = float(re.search(r'MACH_GEO = \{ inset:([\d.]+)', src).group(1))
     # 製造機は他のオブジェクトに合わせて少し小さく描く。描画時に縮めると NEAREST で
     # ドットが間引かれて絵が壊れるので、ここで焼き込み時に縮めておく。
@@ -685,13 +688,17 @@ def module_fit(theme, sp, W, H, GU, GV, iso, draw=1.0):
     hc = hopper_center(mod, MODULE_TEST.get(theme, lambda p: p[3] > 128 and max(p[:3]) < 55))
     if hc is None:
         # 口が暗くないテーマ(真鍮・骨・ヒダなど)は色では拾えない。1マスモジュールでは
-        # 口は必ず天面の中央の真上にあるので、幾何から出す。
-        # 縦位置は検出できたテーマの実測(絵の高さの約11%)に合わせる。
+        # 口は必ず天面の中央にあるので、**接地菱形から**幾何で出す。
+        #   x = 接地菱形の中心／y = 手前角 - 菱形幅*(0.25 + 側面の高さ比)
+        # 絵の上端からの比では出せない(背面の飾りやレールで上端が動く)。
         a = np.asarray(mod.convert('RGBA')); op = a[:, :, 3] > 128
-        xs = [x for x in range(mod.width) if op[:, x].any()]
         ys = [y for y in range(mod.height) if op[y].any()]
-        hc = ((xs[0] + xs[-1]) / 2, ys[0] + 0.11 * (ys[-1] - ys[0] + 1))
-        print(f'   ※口を色で拾えないので幾何から算出 ({hc[0]:.1f}, {hc[1]:.1f})')
+        y0 = max(0, int(ys[-1] - 0.4 * (ys[-1] - ys[0])))       # 下から4割＝接地菱形の帯
+        band = op[y0:ys[-1] + 1]
+        xs = [x for x in range(mod.width) if band[:, x].any()]
+        dwm = xs[-1] - xs[0] + 1
+        hc = ((xs[0] + xs[-1]) / 2, ys[-1] - dwm * (0.25 + SHELL_BODY))
+        print(f'   ※口を色で拾えないので接地菱形から算出 ({hc[0]:.1f}, {hc[1]:.1f})')
     print(f'   モジュール {ow}x{oh}  1マス送り ({step_x:.3f}, {step_y:.3f})px  口の中心 ({hc[0]:.1f}, {hc[1]:.1f})')
     out = {}
     for n in SIZES:
@@ -720,7 +727,16 @@ def main():
     step_x = abs(iso['ux'] * W / GU)      # ゲームの1マス送り(u方向)
     step_y = abs(iso['uy'] * H / GU)
     print(f'ゲームの1マス送り = ({step_x:.4f}, {step_y:.4f})px  (game/main.js の ISO/W/H/GU より)')
+    # 引数でテーマを絞れる(例: `cut_machines.py normal`)。1テーマ差し替えるたびに
+    # 128枚を書き直さないため。mach-fit.json は既存を読んでから該当テーマだけ差し替える。
+    # 空白区切り1個で渡ってくることがある(zsh は変数を単語分割しない)ので、ここで割る
+    only = set(' '.join(sys.argv[1:]).replace(',', ' ').split())
     fit = {}
+    fit_path = os.path.join(OUT, 'mach-fit.json')
+    if only and os.path.exists(fit_path):
+        with open(fit_path, encoding='utf-8') as fp:
+            fit = json.load(fp)
+        print(f'テーマを {", ".join(sorted(only))} に絞る(他は既存のまま)')
     files = sorted(os.listdir(SHEETS))
     # `_module_<theme>.png` があるテーマは、そのモジュールを並べて作る方が確実なので
     # 同名の 4台シート `<theme>.png` は無視する(処理順で上書きされる事故を防ぐ)
@@ -733,6 +749,8 @@ def main():
         if not f.lower().endswith('.png'):
             continue
         theme = os.path.splitext(f)[0]
+        if only and theme.replace('_module_', '') not in only:
+            continue
         sheet = key_out(Image.open(os.path.join(SHEETS, f)))
         print(f'== {f} ({sheet.width}x{sheet.height})')
         picks = split_machines(sheet)

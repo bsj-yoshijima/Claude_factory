@@ -1,6 +1,7 @@
 /* 見た目のカタログ — 製造機/素材/プロップ/部屋/スキンの対応表。
    「何をどのテクスチャで描くか」だけを持ち、ゲームのルールは持たない。 */
 import { SKIN } from '../data/econ.mjs';
+import { MATS } from '../data/craft.mjs';
 
 /* ===== 製造機のスキン =====
    スキンは「テクスチャの命名規約 + パレット」の2段。
@@ -18,7 +19,7 @@ export const PART_PAL = {
 export const PART_SKIN_BY_THEME = {
   japan:'wood', onsen:'wood', cabin:'wood', sushi:'wood', western:'wood', pirate:'wood', jungle:'wood', mushroom:'wood',
   undersea:'aqua', ice:'aqua', beehive:'brass', steampunk:'brass', dwarf:'brass', hell:'brass', egypt:'brass', china:'brass', arabia:'brass',
-  scifi:'neon', space:'neon', circuit:'neon', tokyo:'neon', retrofuture:'neon', haunted:'neon',
+  scifi:'neon', space:'neon', circuit:'neon', tokyo:'neon', retrofuture:'neon', haunted:'neon', tech:'neon',
   circus:'candy', carnival:'candy', christmas:'candy', halloween:'candy', diner:'candy', fantasy:'candy', desert:'candy', dino:'candy',
 };
 // 製造機の見た目(セル比)。inset=マス境界からの余白 / height=筐体の高さ / slot=スロット穴の大きさ
@@ -50,6 +51,14 @@ const MAT_ART = {
   tomato:{e:'🍅', c:0xd9483f}, meat:  {e:'🥩', c:0xc05a5a}, veg:   {e:'🥬', c:0x6aa84f},
 };
 const MAT_G_C = { food:0xe8d9b0, mech:0x9fb6c8, life:0xd9c39a };   // ジャンル既定色
+/* 投入口に載せる素材のドット絵。盤面は Phaser なので <img> が使えず、
+   preload で登録したテクスチャしか描けない。キーの作り方をここに一本化して
+   main.mjs(登録) と machine-art.mjs(描画) がずれないようにする。
+   1マスは 27.8×13.9px、絵文字は CELL*0.5≒14px だったので 16×16 版を原寸で置く
+   （32×32 版は製造機ダイアログのマス用。盤面で縮めるとドットが濁る）。
+   盤面に出るのは素材だけ（製品は描いていない）ので32枚で足りる。 */
+export const matTexKey = (id)=>'mat_'+id;
+export const MAT_TEX = MATS.map(m=>({ key:matTexKey(m.id), file:`assets/ui/icons/mat-${m.id}.png` }));
 /* 素材id → {e,c}。上流が知っている素材なら MAT_ART に無くても描ける（= HTML だけで追加できる）。
    どちらも知らない素材は null（setSlot が弾く）。 */
 export function matArt(id){
@@ -70,7 +79,7 @@ export function recipeFor(slots, id){
 export const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_japan', china:'room_china',
   diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino',
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
-  retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen' };
+  retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen', tech:'room_tech' };
 // Stitch製 装飾プロップ(部屋画像と同じアイソメ視点で生成)。
 //   汎用12種 + テーマ別の「名物」6種×5テーマ + テーマ別の「基本家具」7種×テーマ
 // 基本家具は全テーマ共通のスロット(chair/table/sofa/shelf/rug/lamp/plant)で、材質と色だけテーマで差し替える。
@@ -116,6 +125,9 @@ export const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cu
 // 素材PNGはこの表示サイズに合わせて縮小済み(tools/fit_props.py)。値を変えたら再実行が必要。
 const PROP_SPAN = {
   sus_lane:4, sus_netacase:4, cir_popcorn:4, cir_cannon:4, wes_campfire:4, bee_throne:4, stm_boiler:4, stm_console:4,
+  arb_table:4,   // 八角形のモロッコテーブルだけは他テーマのテーブル(1×2)より大きい2×2
+  cir_table:4, cir_rug:4,   // サーカスの太鼓の台と円形のラグは足元が正方形
+
   sus_tea:2, sus_sake:2, sus_oke:2, sus_neko:2, cir_trunks:2, cir_ringtoss:2, cir_ballstand:2,
   wes_barreltable:2, wes_horseshoe:2, wes_wheel:2, wes_assay:2,
   bee_combtable:2, bee_honeypots:2, bee_pollen:2, bee_candles:2, bee_frames:2,
@@ -139,6 +151,21 @@ export const isFlatProp = (variant)=> /(^|_)rug$/.test(String(variant));
 // 手前のマスに敷いても家具やキャラの上に被らないようにする。
 export const RUG_DEPTH = -950;
 export const propSpan = (name)=> PROP_SPAN[name] || FURN_SPAN[String(name).split('_')[1]] || 1;
+/* 装飾品が乗るブロックの形 [列,行]。コマ数から決める。2コマは細長い物(ソファ・テーブル・
+   寿司レーン)なので正方形ではなく 1×2 に割り当てる。占有マス自体はまだ1マスのままで、
+   ここは「絵をどの大きさの菱形に合わせるか」だけに効く。 */
+export const propShape = (name)=>{ const s=propSpan(name); return s>=4?[2,2]:s>=2?[1,2]:[1,1]; };
+/* 装飾品の接地の規格。絵の側は assets/props/prop-fit.json に足元(中心cx・幅bw・接地の高さby)を
+   実測で持っていて、描画はそれをこの数値に合わせるだけ。大きさと位置が一意に決まる。
+   3つの倍率を出して一番小さいものを採る(=どれも超えない)。
+     foot … 足元の幅 / ブロック菱形の幅。基準になるのはこれ。マスに対する「どっしり具合」
+     maxW … 絵の全体幅 / ブロック菱形の幅 の上限。傘や枝が横に張り出す物のはみ出しを止める
+     maxH … 絵の高さ / ブロック菱形の幅 の上限。足元だけで大きさを決めると、脚の細い
+             フロアランプが青天井に伸びる(実測で最大398px=部屋の高さの7割)。高さは
+             「固定」しないが、天井は要る
+   値は tools/preview/props.html で290体を並べて決めた。foot=0.50 は「表示の大きさの中央値が
+   今と変わらない」点で、この変更で動くのは大きさのばらつきと位置だけになる。 */
+export const PROP_FIT = { foot:0.50, maxW:1.15, maxH:1.6 };
 window.PROP_SPAN = PROP_SPAN;   // ショップ表示(factory-phaser.html)から参照
 // 収納(=在庫に戻す)の対象。在庫を持つ種類だけ。絵文字装飾やガチャ景品は在庫が無く、
 // 戻すと復元できないので対象外にする。

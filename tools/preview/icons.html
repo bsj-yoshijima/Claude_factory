@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>アイコン検収 — 原寸で読めるか</title>
+<!-- 原材料・製品・ジャンルのドット絵アイコンを「原寸(16px)」で見るためのページ。
+     合否は 1x の列だけで決める（docs/task-mat-prod-icons.md の検収）。
+     原寸は種別で違う: 原材料・ジャンル=16px / 製品=32px（出る枠が 22〜28px あるため）。
+     2x / 4x は何が潰れたかを確かめるための参考。
+     ?g=food で1ジャンルに絞る / ?ids=milk,egg で個別に絞る。 -->
+<style>
+  body { background:#0C1014; color:#e6fff4; font:13px/1.6 system-ui, sans-serif; margin:24px; }
+  h1 { font-size:15px; }
+  h2 { font-size:12px; font-weight:600; color:#8fb0a4; margin:26px 0 8px;
+       border-top:1px solid #1d2a26; padding-top:10px; }
+  h3 { font-size:11px; font-weight:400; color:#5d7a70; margin:12px 0 6px; }
+  .row { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+  /* 製品は 32×32 が原寸。16px には縮めない（1ドット飛びに間引かれて濁る）ので
+     製品の節だけ 1x=32px / 2x=64px にする。 */
+  .p32 .z1 img { width:32px; height:32px; }
+  .p32 .z2 img { width:64px; height:64px; }
+  .p32 .z4 img { width:128px; height:128px; }
+  .p32 .cell { width:128px; }
+  .p32 .inline img { width:32px; height:32px; vertical-align:-9px; }
+  .cell { text-align:center; width:64px; }
+  img { image-rendering:pixelated; display:block; margin:0 auto; }
+  .z1 img { width:16px; height:16px; }
+  .z2 img { width:32px; height:32px; }
+  .z4 img { width:64px; height:64px; }
+  .name { font-size:9px; color:#7d9a90; margin-top:4px; }
+  /* 実際の出方に近い並び: 12px の文字と混ぜる */
+  .inline { font-size:12px; line-height:2; }
+  .inline img { width:16px; height:16px; display:inline-block; vertical-align:-3px; }
+  .chip { display:inline-block; border:1px solid #2a3a34; border-radius:4px; padding:1px 6px; margin:2px; }
+</style>
+<h1>アイコン検収 — 原寸で読めるか（原材料・ジャンル=16px / 製品=32px）</h1>
+<div id="out"></div>
+
+<script type="module">
+  import { MATS, PRODS, GENRES, SECRET_G } from '../../game/data/craft.mjs';
+  const q = new URLSearchParams(location.search);
+  const only = (q.get('ids') || '').split(',').filter(Boolean);
+  const g = q.get('g');
+  const keep = (x) => (!only.length || only.includes(x.id)) && (!g || x.g === g);
+  const src = (f) => `../../assets/ui/icons/${f}.png`;
+
+  /* 1x を先頭に置く。ここだけが合否なので、スクロールせずに見えるようにする */
+  const block = (title, list, big = false) => {
+    if (!list.length) return '';
+    const unit = big ? 32 : 16;            // 製品は 32×32 が原寸（出る枠が 22〜28px）
+    const rows = [1, 2, 4].map(z => `<h3>${z}x（${unit * z}px${z === 1 ? '・原寸 ★ここだけが合否' : ''}）</h3>
+      <div class="row z${z}">${list.map(x => `<div class="cell">
+        <img src="${src(x.file)}" alt="${x.n}">${z === 4 ? `<div class="name">${x.n}<br>${x.id}</div>` : ''}
+      </div>`).join('')}</div>`).join('');
+    const mix = `<h3>${big ? '図鑑カード（28px の枠）と同じ大きさ' : '12px の文字に混ぜたとき'}</h3>
+      <div class="inline">${list.map(x =>
+        `<span class="chip"><img src="${src(x.file)}"> ${x.n}</span>`).join('')}</div>`;
+    return `<div class="${big ? 'p32' : ''}"><h2>${title}（${list.length}）</h2>${rows}${mix}</div>`;
+  };
+
+  const genreName = { food: '🍳 食品', mech: '⚙️ 機械', life: '🧺 生活品', [SECRET_G]: '✨ シークレット' };
+  let html = block('ジャンル', GENRES.filter(keep).map(x => ({ ...x, file: `genre-${x.id}` })));
+  for (const gid of ['food', 'mech', 'life']) {
+    html += block(`原材料 — ${genreName[gid]}`,
+      MATS.filter(m => m.g === gid).filter(keep).map(x => ({ ...x, file: `mat-${x.id}` })));
+  }
+  for (const gid of ['food', 'mech', 'life', SECRET_G]) {
+    html += block(`製品 — ${genreName[gid]}`,
+      PRODS.filter(p => p.g === gid).filter(keep).map(x => ({ ...x, file: `prod-${x.id}` })), true);
+  }
+  document.getElementById('out').innerHTML = html;
+</script>
