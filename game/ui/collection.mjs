@@ -1,6 +1,5 @@
 /* 📖 図鑑 — 製造した製品の一覧。ジャンルごとのタブ。 */
-import { GENRE, GENRES, PRODS, SECRET_G } from '../data/craft.mjs';
-import { WP_PER_SLOT } from '../data/rules.mjs';
+import { GENRES, PRODS, SECRET_G } from '../data/craft.mjs';
 import { craftState } from '../state.mjs';
 import { openDialog } from './dialog.mjs';
 import { genreIcon, matRow, prodCard, uic } from './parts.mjs';
@@ -32,14 +31,15 @@ function collectionBody(){
   return `<div class="pgrid">${prodsOfGenre(_collectionGenre).map(p=>{ const n=c.collection[p.id]||0;
       // 発見済みにはレシピ（= m）をそのまま出す。製品ごとに組み合わせは1つだけなので断定して見せられる
       return prodCard(p, n ? {n:`×${n}`, rows:[matRow(p.m.join(','))]} : {miss:true});
-    }).join('')}</div>
-      <div class="rowline" style="font-size:11px;color:#9fb0c0">${_collectionGenre===SECRET_G
-        ? `シークレットは<b style="color:#ffd27a">ジャンルを跨いだ原材料</b>の特定の組み合わせでのみ、ごく低確率で出る。
-           跨いだ組み合わせのほとんどは 🪨 謎のカタマリ。`
-        : `同じ ${GENRE[_collectionGenre]?genreIcon(_collectionGenre)+GENRE[_collectionGenre].n:''} ジャンルの原材料の組み合わせを変えて未発見の製品を探そう。
-           発見済みカードの下に出る絵文字が<b style="color:#eafff4">その製品を作れる唯一の組み合わせ</b>。
-           同じ組み合わせから複数の製品が出ることはあるので、上位レア度は何度も試して狙う。
-           1製品 = マス数 × ${WP_PER_SLOT}WP。レシピに無い組み合わせだと 🪨 謎のカタマリ ができる。`}</div>`;
+    }).join('')}</div>${
+      // 通常ジャンルは一覧だけ。シークレットは「跨いだ組み合わせ」という前提が
+      // カードを見ても分からないので、ここだけ説明を残す。
+      _collectionGenre===SECRET_G
+        // 説明は .rowline に載せない（flex なので <b> の前後が別アイテムになり、
+        // 文の途中で折り返る）。1文につき1つの .cost を並べて、改行は文の区切りだけにする。
+        ? `<div class="cost" style="margin-top:8px">シークレットは<b style="color:#ffd27a">ジャンルを跨いだ原材料</b>の特定の組み合わせでのみ、ごく低確率で出る。</div>`
+          +`<div class="cost">跨いだ組み合わせのほとんどは 🪨 謎のカタマリ。</div>`
+        : ''}`;
 }
 export function openCollection(genre){
   const gs=collectionGenres();
