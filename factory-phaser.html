@@ -76,6 +76,9 @@
   #hud b{font-size:15px;color:var(--gold);font-variant-numeric:tabular-nums;line-height:1.6}
   #hud b.idle{color:#9fdcc6}
   #note{position:absolute;top:10px;left:12px;font-size:10px;color:#9fdcc6;background:var(--panel);padding:4px 9px;border-radius:6px;z-index:6}
+  /* ロゴは他の .uic(16px)より 1.5倍の 24px。原画 96px の整数4分の1なのでドットが崩れない。
+     文字(10px)より背が高いので、下端を文字に合わせるのではなく行の中央で揃える。 */
+  #note .uic{width:24px;height:24px;vertical-align:middle;margin-right:2px}
   /* エージェントの顔アイコン(体色＋被り物)。エージェント一覧ダイアログで使う */
   .lgAv{position:relative;width:22px;height:22px;border-radius:6px;flex:none;border:1px solid #0006;overflow:hidden;display:inline-block}
   .lgAv .eye{position:absolute;top:8px;width:3px;height:3px;background:#241713;border-radius:1px}
@@ -137,6 +140,10 @@
      vertical-align:baseline で画像の下端がベースラインに乗る = 数字の底と揃う
      （.uic の -3px はベースラインより下げる指定なので、そこだけ打ち消す）。 */
   .uic.yen{width:auto;height:0.5em;vertical-align:baseline;margin-left:2px}
+  /* 地の文字が小さい場所（ダイアログ副題 12px / ショップ等の行の価格 .cost 11px）は
+     0.5em(=5〜6px)では潰れて読めない。そこだけ文字と同じくらいの大きさにする
+     （金額を大きく出す完成品・マイページなどは 0.5em のまま）。 */
+  .dlgSub .uic.yen,.cost .uic.yen{height:0.9em}
   /* 金額とアイコンの間で行が折れないようにする。狭い桁（ショップの行など）で
      折れるとアイコンだけ次の行に落ち、「数字の後ろ」も底辺の揃えも崩れる */
   .yenv{white-space:nowrap}
@@ -257,7 +264,9 @@
   #doneBtn.show{display:block}
   #doneN{background:#243b34;color:var(--gold);border-radius:99px;padding:0 6px;margin-left:3px;font-size:10px}
   /* 完成品 / 製品図鑑 のグリッド */
-  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:7px}
+  /* NEW バッジはカードの左上へはみ出す。.pbody が overflow-x:hidden なので
+     左端の列が切れないよう、はみ出し分(上5px/左4px)の余白をグリッドに持たせる。 */
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:7px;padding:6px 0 0 6px}
   .pcard{position:relative;background:#10171b;border:1px solid #243036;border-radius:9px;padding:8px 4px;text-align:center}
   .pcard .e{font-size:28px;line-height:1.1}
   .pcard .nm{font-size:10px;color:#eafff4;margin-top:2px}
@@ -345,7 +354,8 @@
 <body>
 <div id="wrap">
   <div id="game"></div>
-  <div id="note"><img class="uic" src="assets/ui/icons/factory.png" alt=""> Claude Factory</div>
+  <!-- アイコンは favicon と同じ絵にする（タブとゲーム内で同じ顔にする）。96×16 の整数縮小 -->
+  <div id="note"><img class="uic" src="assets/ui/favicon.png" alt=""> Claude Factory</div>
   <div id="menuBtn" title="メニュー">☰</div>
   <div id="menu">
     <div class="mh">あなた</div>
