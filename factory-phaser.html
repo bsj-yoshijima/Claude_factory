@@ -137,6 +137,10 @@
      vertical-align:baseline で画像の下端がベースラインに乗る = 数字の底と揃う
      （.uic の -3px はベースラインより下げる指定なので、そこだけ打ち消す）。 */
   .uic.yen{width:auto;height:0.5em;vertical-align:baseline;margin-left:2px}
+  /* 地の文字が小さい場所（ダイアログ副題 12px / ショップ等の行の価格 .cost 11px）は
+     0.5em(=5〜6px)では潰れて読めない。そこだけ文字と同じくらいの大きさにする
+     （金額を大きく出す完成品・マイページなどは 0.5em のまま）。 */
+  .dlgSub .uic.yen,.cost .uic.yen{height:0.9em}
   /* 金額とアイコンの間で行が折れないようにする。狭い桁（ショップの行など）で
      折れるとアイコンだけ次の行に落ち、「数字の後ろ」も底辺の揃えも崩れる */
   .yenv{white-space:nowrap}
