@@ -35,9 +35,6 @@ function recipeBody(){
      未発見のシークレットは行ごと存在しない（残り何個かを悟らせないため）。 */
   const found=recipeRowsOf(SECRET_G,p=>secretMatsOf(p.id)).filter(x=>c.collection[x.p.id]);
   if(found.length) body+=sec('✨ シークレット',found);
-  return body+`<div class="rowline" style="font-size:11px;color:#9fb0c0">
-    左が原材料の組み合わせ、右がそれで作れる製品。1度も作っていない製品は
-    <b style="color:#eafff4">シルエット</b>だけ見える。作れば名前とレア度が出る。
-    作った数は ${uic('collection')} 図鑑 で見られる。</div>`;
+  return body;
 }
 export function openRecipes(){ return openDialog({ title:`${uic('recipe')} 製造レシピ`, body:recipeBody }); }
