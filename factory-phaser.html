@@ -257,7 +257,9 @@
   #doneBtn.show{display:block}
   #doneN{background:#243b34;color:var(--gold);border-radius:99px;padding:0 6px;margin-left:3px;font-size:10px}
   /* 完成品 / 製品図鑑 のグリッド */
-  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:7px}
+  /* NEW バッジはカードの左上へはみ出す。.pbody が overflow-x:hidden なので
+     左端の列が切れないよう、はみ出し分(上5px/左4px)の余白をグリッドに持たせる。 */
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:7px;padding:6px 0 0 6px}
   .pcard{position:relative;background:#10171b;border:1px solid #243036;border-radius:9px;padding:8px 4px;text-align:center}
   .pcard .e{font-size:28px;line-height:1.1}
   .pcard .nm{font-size:10px;color:#eafff4;margin-top:2px}
