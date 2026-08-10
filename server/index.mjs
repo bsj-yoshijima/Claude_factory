@@ -95,16 +95,21 @@ const page = (title, inner) => `<!doctype html><html lang="ja"><head><meta chars
 body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;
  background:radial-gradient(120% 120% at 50% 30%,#1b232b 0%,#0c1014 70%);color:var(--ink);
  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+/* ゲーム画面のダイアログ(#panel)と同じ考え方。カードは必ず画面内に収め、
+   溢れる分はカードの中でスクロールさせる（画面ごと伸びると下のボタンに気づけない） */
 .card{width:min(640px,100%);background:rgba(16,24,26,.9);border:1px solid var(--edge);
- border-radius:14px;padding:26px 24px}
+ border-radius:14px;padding:26px 24px;max-height:calc(100vh - 48px);overflow-y:auto;
+ overscroll-behavior:contain}
 h1{margin:0 0 6px;font-size:20px;color:var(--gold)} h2{font-size:14px;color:var(--mint);margin:22px 0 8px}
 p,li{font-size:13px;line-height:1.75;color:#cfe6dc} .dim{color:#9fb0c0;font-size:12px}
 button,.btn{background:var(--gold);color:#243b34;font-weight:700;border:0;border-radius:9px;
  padding:11px 18px;cursor:pointer;font-family:inherit;font-size:13px;text-decoration:none;display:inline-block}
 input{background:#0e1518;border:1px solid var(--edge);color:var(--ink);border-radius:9px;
  padding:11px 12px;font-family:inherit;font-size:13px;width:100%}
+/* 設定JSONは60行超あり、そのまま出すとカードの中身がこれだけになってしまう。
+   高さを画面の4割で止めて中でスクロールさせ、前後の手順とボタンを画面内に残す */
 pre{background:#0b1114;border:1px solid var(--edge);border-radius:10px;padding:13px;
- overflow:auto;font-size:11.5px;line-height:1.6;color:#bfe6d5;position:relative}
+ overflow:auto;max-height:40vh;font-size:11.5px;line-height:1.6;color:#bfe6d5;position:relative}
 ol{padding-left:20px} .row{display:flex;gap:9px;align-items:center;margin-top:12px;flex-wrap:wrap}
 .warn{border-left:3px solid var(--gold);padding-left:11px;color:#ffe6b8;font-size:12px;margin:14px 0}
 </style></head><body><div class="card">${inner}</div></body></html>`;
