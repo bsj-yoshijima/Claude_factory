@@ -63,7 +63,8 @@ const madeTodayRows = ()=> _madeToday||[];
    原材料の組み合わせも出すので、当たった組み合わせを見返す用途にも使える。 */
 export function openToday(){
   _madeToday=null;                                  // 開くたび取り直す（前回開いた内容を出さない）
-  const dlg=openDialog({ title:`${uic('chart')} 今日の製造`,
+  // アイコンは製造機（2マス）。中身は「今日つくった製品」なので、統計の絵よりも対象そのものの絵を出す
+  const dlg=openDialog({ title:`${machIcon('s2','uic')} 今日の製造`,
     subtitle:()=>`${madeToday()}個 / 売上 ${yen(Math.floor(salesToday()))}`,
     live:2000,
     body:()=>{
