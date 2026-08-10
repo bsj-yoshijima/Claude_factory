@@ -108,6 +108,15 @@ const THEMES = {
   haunted:{pre:'hnt', name:'a haunted mansion room', landmark:'a GRANDFATHER CLOCK',
     mat:'faded velvet, blackened timber, clouded mirror glass, dust',
     pal:'faded aubergine purple, dusty rose, tarnished gold, blackened timber, mould green.'},
+  hawaii:{pre:'haw', name:'a Hawaiian beach house lanai', landmark:'a TIKI TOTEM',
+    mat:'pale bamboo, woven lauhala matting, koa wood, hibiscus print cloth, black lava rock',
+    pal:'bamboo tan, warm koa brown, palm green, hibiscus red, sunset orange, sand cream.'},
+  thirties:{pre:'thr', name:'a 1930s American art deco lounge', landmark:'a GRAMOPHONE cabinet',
+    mat:'walnut veneer, polished brass, black lacquer, emerald green velvet, milk glass',
+    pal:'walnut brown, deep emerald green, black lacquer, polished brass gold, cream, oxblood red.'},
+  beach:{pre:'bch', name:'a sunny beach shack on the boardwalk', landmark:'a LIFEGUARD TOWER',
+    mat:'sun-bleached driftwood, weathered planks, canvas stripes, rope, seashells',
+    pal:'warm sand, driftwood grey, coral red, sun yellow, navy blue stripes, foam white.'},
   ice:{pre:'ice', name:'an ice palace hall', landmark:'an ice THRONE',
     mat:'clear ice, frost, polished silver, blue crystal',
     pal:'pale ice blue, white, deep glacier teal, silver, glowing cyan.'},
@@ -252,7 +261,7 @@ Keep the theme in the MATERIAL and the ORNAMENT, not in the shape.
 };;
 
 /* テーマ名 → 部屋の背景ファイル名。ほぼ同名だが undersea/retrofuture など一部だけ違う */
-const ROOM = { arabia:'arabia', beehive:'beehive', cabin:'cabin', circuit:'circuit', china:'china',
+const ROOM = { hawaii:'hawaii', beach:'beach', thirties:'thirties', arabia:'arabia', beehive:'beehive', cabin:'cabin', circuit:'circuit', china:'china',
   circus:'circus', carnival:'carnival', diner:'diner', dino:'dino', desert:'desert', dwarf:'dwarf',
   egypt:'egypt', fantasy:'fantasy', halloween:'halloween', hell:'hell', haunted:'haunted', ice:'ice',
   jungle:'jungle', japan:'japan', mushroom:'mushroom', onsen:'onsen', pirate:'pirate',

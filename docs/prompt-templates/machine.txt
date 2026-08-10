@@ -1,0 +1,74 @@
+========================================================
+製造機（1マスモジュール）用プロンプト雛形
+========================================================
+使い方:
+  1) Stitch で型スクリーン 17749629384854438909（製造機の殻）を選んで「編集」
+     ※ 自分でアップロードする場合は docs/mach-shell-1024.png を添付
+  2) 下の【本文】をそのまま貼る
+  3) ■THEME■ の中だけテーマに合わせて書き換える
+  4) 出来たら検収:
+       python3 tools/assets/check_machine_module.py <落とした画像>
+     「不採用」なら NG 項目を本文の該当ルールに足して再生成する
+注意:
+  - 全角ダッシュ（—）を入れると Stitch がエラーを返す
+  - 「1マス分」しか描かせない。2から5マスは同じ絵を並べて作るので、
+    煙突・看板・端の飾りなど「1個だけ付くもの」を描かせると全マスに出てしまう
+
+--------------------------------------------------------
+【本文】ここから
+--------------------------------------------------------
+REPAINT THIS EXACT SHELL. The image you are editing is the master shell for ONE machine tile. Paint your theme directly on top of it, like colouring in a line drawing. Output a square 1024x1024 image.
+
+RULE 1, THE BOTTOM EDGE. The machine ENDS at the ground diamond of the shell. Its lowest pixel is the FRONT corner of that diamond, and nothing whatsoever is painted below the diamond's two front edges: no legs, no feet, no posts, no skirt, no plinth, no base rim, no chute, no rope, no shadow, no stray pixels.
+
+RULE 2, THE SIDE EDGES. Nothing sticks out sideways past the LEFT corner or the RIGHT corner of the ground diamond, not even by one pixel. No bulge, no rim, no trim, no handle, no outline overshoot. If a shape does not fit, make it smaller, never wider. Copies of this tile are placed side by side, so anything that pokes out will bite into the next tile.
+
+RULE 3, SIZE AND HEIGHT. The painted machine occupies EXACTLY the same pixels as the shell.
+- The ground diamond is about 90 percent of the image width, and its width is exactly TWICE its height. Do not paint it bigger.
+- The side face is LOW: about one THIRD of the ground diamond width tall, exactly as in the shell. A low slab, never a tall cabinet, never a cube.
+- The whole silhouette, from the bottom corner to the top of the intake, is about 85 percent of the ground diamond width.
+
+BACKGROUND: solid pure MAGENTA (#FF00FF) everywhere around the machine. NO floor, NO ground plane, NO cast shadow, NO border, NO frame, NO grid lines.
+
+WHAT THIS IS: ONE TILE of an INDUSTRIAL PROCESSING MACHINE that manufactures things. It is NOT a bench, NOT a counter, NOT a table, NOT furniture.
+
+THIS TILE IS A REPEATING MODULE. The finished machines place 2 to 5 copies of this exact tile side by side along the diagonal. EVERYTHING you paint repeats on every tile. Do NOT paint anything that should appear only once, such as a chimney, a sign, an end cap or a control desk.
+
+STRICT GEOMETRY, copy from the shell:
+- Exactly TWO faces are visible below the top plate: the LONG SIDE facing lower LEFT and the SHORT END facing lower RIGHT.
+- True 2:1 isometric. No horizontal lines in the structure: every edge is vertical or at a 2:1 slope.
+Do NOT resize, rotate, re-center, crop or zoom.
+
+THE INTAKE: exactly at the centre of the top plate, about 0.44 of the tile width across, a 2:1 foreshortened ELLIPSE, dark and EMPTY inside, its top not rising above the BACK corner of the top plate.
+
+THE INSPECTION WINDOW: on the long side face, FLUSH in the face, a single small lit window. Nothing else is attached to the side faces or the end faces. Only shallow relief is allowed there: seams, small rivets or nail heads, a slightly recessed panel, a painted stripe band kept well clear of the bottom edge.
+
+NO WRITING OF ANY KIND ANYWHERE. No text, letters, numbers or inscriptions.
+
+CHANGE ONLY the surface materials and the decoration:
+
+■THEME■ ここから（テーマごとに書き換える）
+- BODY: <側面の素材。例: sun-bleached driftwood planks in pale grey and warm cream with a faded coral-red and cream painted stripe band and worn nail heads>.
+- TOP PLATE: <天面の素材。例: pale sand-dusted driftwood boards, flat>.
+- THE INTAKE looks like: <投入口の見た目。例: a wide driftwood-rimmed mouth wrapped in weathered rope with a few small seashells pressed into the rim>.
+- THE WINDOW looks like: <窓の見た目。例: a small round porthole glowing warm sunlight yellow behind a rope-wrapped brass ring>.
+- DECORATION on the BACK half of the top plate, behind the intake, small and low, never covering the intake, never extending sideways past the ends of the base, never rising above the intake: <小物1つか2つ。例: a small coil of rope and a red-and-white life ring lying flat>.
+- Palette: <5色から6色。例: warm pale sand, driftwood grey, coral red, sun yellow, navy blue, foam white>.
+■THEME■ ここまで
+
+STYLE: VERY chunky lo-fi 8-bit Famicom pixel art, extreme high contrast, thick clean black outlines, flat colors, no gradients, no anti-aliasing.
+--------------------------------------------------------
+【本文】ここまで
+--------------------------------------------------------
+
+よく出る NG と、追記する一文:
+  垂れ下がり   → RULE 1 の直後に "The two bottom edges are clean straight 2:1 diagonals with nothing below them." を足す
+  横はみ出し   → 原因はたいてい「天面が土台より広い（庇のように張り出す）」。
+                  次の一文で直った実例あり:
+                  "Make the TOP PLATE exactly the same size as the ground diamond, so the box is a
+                   plain straight-sided slab. The left and right corners of the top plate sit directly
+                   above the left and right corners of the base. No lip, no overhang, no flared rim."
+                  それでも出るなら RULE 2 の直後に
+                  "Leave a 3 pixel magenta gap inside the left and right corners of the ground diamond." を足す
+  総高オーバー → "The intake rim is FLUSH with the top plate. It does not rise above it at all." を足す
+  菱形の比     → "The ground diamond is exactly 2 wide for 1 tall. Do not make it rounder." を足す

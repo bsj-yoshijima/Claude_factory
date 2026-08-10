@@ -260,4 +260,7 @@ export const SERIES={
   mushroom:{n:'森のキノコ', price:6000, sky:'mushroom',floor:'wood', decos:[]},
   onsen:{n:'和風温泉', price:6000, sky:'onsen',floor:'wood', decos:[]},
   tech:{n:'テクノロジー', price:6000, sky:'tech',  floor:'wood',    decos:[]},
+  hawaii:{n:'ハワイアン', price:6000, sky:'blue', floor:'wood',    decos:[]},
+  thirties:{n:'アメリカン30s', price:6000, sky:'night', floor:'cool',  decos:[]},
+  beach:{n:'ビーチ', price:6000, sky:'blue', floor:'wood',    decos:[]},
 };
