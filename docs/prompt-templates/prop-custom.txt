@@ -1,0 +1,54 @@
+========================================================
+自由装飾品（テーマ独自の1点もの）用プロンプト雛形
+========================================================
+使い方:
+  1) 大きさに合う型スクリーンを選んで「編集」
+       1x1（正方・小）  4263700531060843034
+       1x2（細長・高）  2557222867215896306
+       2x2（大きい）    17544647967018932933
+  2) 下の【本文】をそのまま貼り、■SUBJECT■ だけ書き換える
+  3) 取り込み:
+       node tools/assets/cut_prop_sheet.mjs <画像> --single --name <theme>_<id>
+     はみ出して切れる場合だけ --scale 0.9 や --pad 4 で救済する（家具7点では使わない）
+注意:
+  - 全角ダッシュ（—）を入れると Stitch がエラーを返す
+  - シアンは「トンボ」であって背景ではない。ここを一番強く言わないと必ず塗り潰される
+
+--------------------------------------------------------
+【本文】ここから
+--------------------------------------------------------
+REPAINT THIS EXACT SHELL. Output the same image size as the reference.
+
+READ THESE THREE RULES FIRST. If any of them is broken the image is rejected.
+
+RULE A. THE CYAN RECTANGLE MUST STAY ONE UNBROKEN CLOSED LOOP of thin cyan (#00E5FF) line, exactly where it is in the reference. No part of the object may touch it, cross it or hide it.
+
+RULE B. THE CYAN DIAMOND ON THE FLOOR IS A THIN OUTLINE AND IT STAYS A THIN OUTLINE. Do NOT fill it. Do NOT paint a cyan mat, a cyan platform, cyan sand, cyan water or a cyan shadow under the object. There is NO cyan surface anywhere in the picture, only the two thin lines. Never use cyan, turquoise, aqua or sea-blue on the object itself; use navy blue when you need blue.
+
+RULE C. THE OBJECT IS SMALL. Draw it at about 70 percent of the frame width and about 70 percent of the frame height (for the tall 1x2 frame: 60 percent wide and 80 percent tall), so there is a WIDE band of pure magenta between the object and the cyan rectangle on the left, on the right and above. Only the bottom is tight: the lowest pixel of the object sits ON the bottom cyan line, centred left to right, with no magenta gap under it.
+
+Its FOOTPRINT matches the cyan diamond on the floor: not wider, not deeper.
+
+THE CAMERA IS FIXED AND IT IS NOT A FRONT VIEW. This is a game object seen from an overhead isometric camera.
+- True 2:1 isometric: every horizontal edge on the ground travels 2 pixels across for exactly 1 pixel down.
+- Exactly TWO vertical faces of any box are visible, one facing lower-left and one facing lower-right. Never one flat face facing the viewer.
+- YOU MUST SEE THE TOP FACES: the top of the base, the top of every upright, the top of the whole object.
+
+BACKGROUND: solid pure MAGENTA (#FF00FF) everywhere around the object. NO floor, NO ground plane, NO cast shadow, NO border, NO frame of your own, NO grid, NO text, NO letters, NO numbers.
+
+■SUBJECT■ ここから（作るものだけ書き換える）
+THE OBJECT: <何か。例: a LIFEGUARD TOWER: a small square hut of sun-bleached planks with a coral-red and cream striped canvas roof, an open window on the lower-left face, standing on four short driftwood legs with a ladder against the lower-right face>.
+Materials: <素材。例: sun-bleached driftwood, weathered planks, striped canvas, rope, woven straw>.
+Palette: <5色から6色。例: warm pale sand, driftwood grey, coral red, sun yellow, navy blue, foam white>.
+■SUBJECT■ ここまで
+
+STYLE: VERY chunky lo-fi 8-bit Famicom pixel art, extreme high contrast, thick clean black outlines, flat colors, no gradients, no anti-aliasing. It is shown about 50 to 100 pixels tall in the game, so keep it BOLD: few large shapes, a strong silhouette.
+--------------------------------------------------------
+【本文】ここまで
+--------------------------------------------------------
+
+よく出る NG と、追記する一文:
+  シアンを塗り潰した   → 冒頭に "The cyan lines must still be visible and unbroken in your output." を足す
+  枠からはみ出た       → "Shrink the object to 80 percent of the frame width." を足す
+  正面図になった       → "This is NOT a front view. Tilt it so the top face is visible." を足す
+  足元が浮いた         → "The lowest pixel of the object is ON the bottom cyan line." を足す

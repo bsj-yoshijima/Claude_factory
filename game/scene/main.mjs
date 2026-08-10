@@ -24,7 +24,7 @@ export class Main extends Phaser.Scene {
     this.load.image('room_scifi','assets/rooms/room-scifi.png');
     this.load.image('room_cabin','assets/rooms/room-cabin.png');
     this.load.image('room_dino','assets/rooms/room-dino.png');
-    for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen','tech']) this.load.image('room_'+n, `assets/rooms/room-${n}.png`);
+    for(const n of ['haunted','pirate','circuit','dwarf','hell','steampunk','retrofuture','tokyo','halloween','western','sushi','beehive','circus','carnival','desert','jungle','egypt','christmas','space','ice','mushroom','onsen','tech','hawaii','thirties','beach']) this.load.image('room_'+n, `assets/rooms/room-${n}.png`);
     for(const n of PROP_NAMES) this.load.image('prop_'+n, `assets/props/prop_${n}.png`);
     this.load.text('machfit','assets/machines/mach-fit.json');   // 投入口のアンカー。素材アイコンを絵の口に乗せる
     this.load.text('propfit','assets/props/prop-fit.json');   // 装飾品ごとの足元(中心・幅・接地の高さ)。絵から実測: tools/assets/measure_props.mjs

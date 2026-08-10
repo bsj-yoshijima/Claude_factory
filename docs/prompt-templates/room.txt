@@ -1,0 +1,64 @@
+========================================================
+部屋（背景）用プロンプト雛形
+========================================================
+使い方:
+  1) Stitch で型スクリーン 10817123175159454986（部屋の殻）を選んで「編集」
+     ※ 自分でアップロードする場合は docs/room-shell-thick-1376x768.png を添付
+  2) 下の【本文】をそのまま貼る
+  3) ■THEME■ の中だけテーマに合わせて書き換える
+注意:
+  - 全角ダッシュ（—）を入れると Stitch がエラーを返す。半角で書くこと
+  - 「屋外テーマで左の壁を無くしたい」場合は【本文】末尾の〈左壁なしオプション〉を差し替える
+
+--------------------------------------------------------
+【本文】ここから
+--------------------------------------------------------
+Repaint THIS EXACT room shell with a new theme.
+
+THE CANVAS IS WIDE LANDSCAPE 1376 x 768, exactly the same size and shape as the reference image. It is NOT square. Output 1376x768 and nothing else.
+
+STRICT GEOMETRY, copy from the reference image, do not change:
+the outline, the four corners of the floor diamond, the wall height, the camera angle.
+Every edge stays exactly where it is in the reference. Do NOT resize, rotate, re-center, crop, or zoom. Do not shrink it.
+Keep the four canvas corners as empty dark void margins, COMPLETELY EMPTY.
+
+THE MARGIN IS ONE PERFECTLY FLAT COLOUR: exactly #0C1014 in every pixel outside the diorama, right up to its outline. No gradient, no vignette, no glow, no haze, no dithering, no noise, no drop shadow. The silhouette is a hard, clean, aliased edge against that flat colour.
+
+The floor diamond is left-right symmetric: its left and right vertices are at the SAME height, its back and front vertices are on the SAME vertical center line.
+Floor = exactly 12 x 12 isometric tiles, true 2:1 isometric.
+Floor spans 65% of image width and 59% of image height.
+
+THE FLOOR DIAMOND IS THE TOP SURFACE. The floor is a SLAB about 25px thick, exactly as in the reference: its top face keeps the diamond exactly, and the slab's side faces are drawn BELOW the two front edges, never inside the diamond.
+
+THE RIGHT WALL is a slab about 10px thick: a thin top face along the top edge, and at the right corner the cut thickness shows. Every corner is closed and mitered. The wall thickness sits OUTSIDE the room.
+Wall height = 34% of image height, measured straight up from the floor edge; the wall top edge runs parallel to the floor edge.
+The RIGHT wall is SOLID from the floor to its top edge. No door, no archway, no passage, no dark gap. Any arch, sign or panel you paint is a FLAT SHAPE ON THE WALL SURFACE, never a hole you can see through.
+
+〈左壁ありの場合〉
+THE LEFT WALL is the same slab as the right one, and it has EXACTLY THREE openings that reveal the outside scenery, not two, not four. The three soft dark patches on the left wall mark WHERE they go: keep those three positions and roughly that size.
+
+〈左壁なしオプション。屋外テーマではこちらに差し替える〉
+THERE IS NO LEFT WALL AT ALL. The whole left wall area of the reference is DELETED and becomes flat empty void, exactly #0C1014, the same as the outer margin. Do not paint a fence, a railing, a low wall, a horizon, scenery or sky there. The room is open on that side: you simply see the bare left edge of the floor slab and the sky-less void behind it. The right wall still stands and still meets nothing at the back corner, so finish its left end as a clean mitered cut.
+
+CHANGE ONLY the surface materials and the decoration:
+
+■THEME■ ここから（テーマごとに書き換える）
+FLOOR: <床の素材。例: DRY PALE BEACH SAND, warm and bright, with fine wind ripples following the isometric grid, a scatter of tiny seashells and pebbles>. Completely clear and EMPTY, no furniture, no objects standing on it.
+WALL: <壁の素材。例: a sun-bleached driftwood and bamboo windbreak fence lashed with rope, with a driftwood top rail>.
+DECOR, ALL FLAT AGAINST THE WALL, nothing standing on the floor: <飾りを8個から12個。例: a fishing net with cork floats, a life ring, a surfboard leaning flat, crossed oars, a string of seashells, a small red surf flag, a straw hat on a peg, a coil of rope, a bundle of dried starfish>.
+Lighting: <光。例: bright midday summer sun, warm sand, crisp short shadows>.
+Palette: <5色から7色。例: warm pale sand, driftwood grey, coral red, sun yellow, navy blue, foam white, sea turquoise>.
+■THEME■ ここまで
+
+lo-fi 8-bit Famicom pixel art, chunky pixels, HIGH DETAIL on the wall.
+IMPORTANT: no characters, no people, no objects standing on the floor, no text, no letters, no numbers, no UI.
+--------------------------------------------------------
+【本文】ここまで
+--------------------------------------------------------
+
+検収:
+  python3 -c "…" ではなく、取り込み時に
+    tools/assets/ 以下の手順で床ダイヤの4頂点が
+    奥(688,275) 右(1137,499) 手前(688,724) 左(239,499)
+    壁上端      奥(688,15)  右(1137,239) 左(239,239)
+  に合っているかを確認する（1376x768 のとき）。

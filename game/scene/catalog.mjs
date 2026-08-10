@@ -17,10 +17,10 @@ export const PART_PAL = {
   candy:  { top:0x7a3d5c, side:0x321528, edge:0x1a0a14, rim:0xdd85ac, glow:0xfff0a0 },
 };
 export const PART_SKIN_BY_THEME = {
-  japan:'wood', onsen:'wood', cabin:'wood', sushi:'wood', western:'wood', pirate:'wood', jungle:'wood', mushroom:'wood',
+  japan:'wood', onsen:'wood', cabin:'wood', sushi:'wood', western:'wood', pirate:'wood', jungle:'wood', mushroom:'wood', hawaii:'wood', beach:'wood',
   undersea:'aqua', ice:'aqua', beehive:'brass', steampunk:'brass', dwarf:'brass', hell:'brass', egypt:'brass', china:'brass', arabia:'brass',
   scifi:'neon', space:'neon', circuit:'neon', tokyo:'neon', retrofuture:'neon', haunted:'neon', tech:'neon',
-  circus:'candy', carnival:'candy', christmas:'candy', halloween:'candy', diner:'candy', fantasy:'candy', desert:'candy', dino:'candy',
+  circus:'candy', carnival:'candy', thirties:'candy', christmas:'candy', halloween:'candy', diner:'candy', fantasy:'candy', desert:'candy', dino:'candy',
 };
 // 製造機の見た目(セル比)。inset=マス境界からの余白 / height=筐体の高さ / slot=スロット穴の大きさ
 export const MACH_GEO = { inset:0.10, height:0.42, slot:0.52 };
@@ -36,7 +36,7 @@ export const MACH_DRAW = 1.0;
 export const MACH_SIZES = [2,3,4,5];
 export const KINDS = ['machine','deco','prop','emoji'];   // 設置できる種類（belt/outlet/prize は廃止）
 const MACH_MIN = 2;
-export const MACH_ART = ['normal','arabia','diner','halloween','scifi','egypt','western','onsen','japan','pirate','steampunk','dwarf','china','sushi','haunted','tokyo','beehive','carnival','circus','desert','space','ice','mushroom','undersea','fantasy','christmas','jungle','circuit','retrofuture','cabin','dino','hell'];   // スプライトを用意したテーマ(assets/machines/mach-<theme>-s<N>.png)
+export const MACH_ART = ['normal','arabia','diner','halloween','scifi','egypt','western','onsen','japan','pirate','steampunk','dwarf','china','sushi','haunted','tokyo','beehive','carnival','circus','desert','space','ice','mushroom','undersea','fantasy','christmas','jungle','circuit','retrofuture','cabin','dino','hell','hawaii','thirties','beach'];   // スプライトを用意したテーマ(assets/machines/mach-<theme>-s<N>.png)
 export const machSize = (variant)=> Math.min(5, Math.max(MACH_MIN, parseInt(String(variant||'').replace(/\D/g,''))||MACH_MIN));
 
 /* ===== 素材の見た目 =====
@@ -79,7 +79,7 @@ export function recipeFor(slots, id){
 export const ROOM_TEX = { arabia:'room_arabia', undersea:'room_undersea', japan:'room_japan', china:'room_china',
   diner:'room_diner', fantasy:'room_fantasy', scifi:'room_scifi', cabin:'room_cabin', dino:'room_dino',
   haunted:'room_haunted', pirate:'room_pirate', circuit:'room_circuit', dwarf:'room_dwarf', hell:'room_hell', steampunk:'room_steampunk',
-  retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen', tech:'room_tech' };
+  retrofuture:'room_retrofuture', tokyo:'room_tokyo', halloween:'room_halloween', western:'room_western', sushi:'room_sushi', beehive:'room_beehive', circus:'room_circus', carnival:'room_carnival', desert:'room_desert', jungle:'room_jungle', egypt:'room_egypt', christmas:'room_christmas', space:'room_space', ice:'room_ice', mushroom:'room_mushroom', onsen:'room_onsen', tech:'room_tech', hawaii:'room_hawaii', thirties:'room_thirties', beach:'room_beach' };
 // Stitch製 装飾プロップ(部屋画像と同じアイソメ視点で生成)。
 //   汎用12種 + テーマ別の「名物」6種×5テーマ + テーマ別の「基本家具」7種×テーマ
 // 基本家具は全テーマ共通のスロット(chair/table/sofa/shelf/rug/lamp/plant)で、材質と色だけテーマで差し替える。
@@ -119,7 +119,10 @@ export const PROP_NAMES = ['vase','palm','rug','flantern','fountain','chest','cu
   'spc_chair','spc_table','spc_sofa','spc_shelf','spc_rug','spc_lamp','spc_plant','spc_console',      // 🛰️ 宇宙
   'ice_chair','ice_table','ice_sofa','ice_shelf','ice_rug','ice_lamp','ice_plant','ice_throne',       // ❄️ 氷の城
   'msh_chair','msh_table','msh_sofa','msh_shelf','msh_rug','msh_lamp','msh_plant','msh_bed',          // 🍄 森のキノコ
-  'ons_chair','ons_table','ons_sofa','ons_shelf','ons_rug','ons_lamp','ons_plant','ons_rotenburo'];   // ♨️ 温泉
+  'ons_chair','ons_table','ons_sofa','ons_shelf','ons_rug','ons_lamp','ons_plant','ons_rotenburo',   // ♨️ 温泉
+  'haw_chair','haw_table','haw_sofa','haw_shelf','haw_rug','haw_lamp','haw_plant','haw_surfboard','haw_jukebox','haw_shaveice',
+  'thr_chair','thr_table','thr_sofa','thr_shelf','thr_rug','thr_lamp','thr_plant','thr_gramophone','thr_coatstand','thr_slotmachine',
+  'bch_chair','bch_table','bch_sofa','bch_shelf','bch_rug','bch_lamp','bch_plant','bch_sandcastle','bch_parasol','bch_lifeguard'];  // 🏖 ビーチ  // 🎩 アメリカン30s                  // 🌺 ハワイアン
 // プロップが使う床のコマ数(=見た目の大きさ)。1コマだと潰れて読めない描き込みの多い物を 2/4 に上げる。
 // 表示高 = 1.35*CELL*√コマ数（4コマなら縦横2倍 = 2x2マス相当）。未指定は1コマ。
 // 素材PNGはこの表示サイズに合わせて縮小済み(tools/fit_props.py)。値を変えたら再実行が必要。
