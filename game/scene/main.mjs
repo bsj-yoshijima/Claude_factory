@@ -263,7 +263,8 @@ export class Main extends Phaser.Scene {
     const tx=this.add.text(p.x,p.y-CELL*1.2,emoji,{fontSize:Math.round(CELL*1.1)+'px'}).setOrigin(0.5,1).setDepth(9001);
     this.tweens.add({targets:tx,y:p.y-CELL*3.2,alpha:0,duration:1500,ease:'Cubic.easeOut',onComplete:()=>tx.destroy()}); }
   getLayout(){ return this.placed.map(e=>{ const o={id:e.id,kind:e.kind,variant:e.variant,lvl:e.lvl,c:e.cell.c,r:e.cell.r};
-    if(e.kind==='machine'){ o.dir=e.dir; o.slots=e.slots.slice(); } return o; }); }
+    if(e.dir) o.dir=e.dir;                            // 製造機だけでなく装飾品も向きを保存する
+    if(e.kind==='machine') o.slots=e.slots.slice(); return o; }); }
   /* 旧レイアウトの移行: コンベア/出荷口は廃止したので捨てる。旧4種の製造機(red等)は1マス機に読み替える。 */
   buildLayout(list){
     for(const e of this.placed.slice()){ this._detach(e); }
