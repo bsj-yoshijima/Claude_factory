@@ -25,6 +25,22 @@
   #game canvas{image-rendering:pixelated;border-radius:8px;box-shadow:0 24px 80px rgba(0,0,0,.6)}
   .tab{background:var(--panel);color:var(--mint);border:1px solid var(--edge);border-radius:8px;padding:5px 12px;cursor:pointer;backdrop-filter:blur(3px)}
   .tab:hover{border-color:var(--mint)}
+  /* ===== 起動中の目隠し（アセット読み込みのあいだ盤面を隠す） ===== */
+  #boot{position:absolute;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:14px;background:radial-gradient(120% 120% at 50% 30%,#1b232b 0%,#0c1014 70%);
+        transition:opacity .32s ease}
+  #boot.gone{opacity:0;pointer-events:none}
+  /* CSS のサイズは canvas の内部解像度の 1/2（boot.mjs の Z=2 と対応）。
+     1ドット=4px で描いているので等倍で置けばドットが崩れない。
+     大きさを変えるときは boot.mjs の DOT と canvas の width/height を一緒に直す
+     （CSS だけで伸ばすとドットが間引かれる）。 */
+  #boot .bmascot{width:160px;height:140px;image-rendering:pixelated}
+  #boot .btext{font-size:12px;color:#7f9a92;letter-spacing:.08em}
+  #boot .bbar{width:min(240px,52vw);height:4px;background:var(--edge);border-radius:2px;overflow:hidden}
+  #boot .bbar i{display:block;height:100%;width:0;background:var(--mint);border-radius:2px;transition:width .18s ease}
+  /* 動きが苦手な人向けの配慮は boot.mjs 側で見ている
+     （prefers-reduced-motion なら腕も火花も止めて、進捗バーだけで状況を伝える） */
+
   /* ===== ハンバーガーメニュー（主要機能以外はここに畳む） ===== */
   #menuBtn{position:absolute;top:10px;right:12px;z-index:11;cursor:pointer;font-size:16px;line-height:1;
            background:var(--panel);border:1px solid var(--edge);border-radius:8px;padding:7px 11px;color:var(--mint);backdrop-filter:blur(3px)}
@@ -39,7 +55,10 @@
      ドットが間引かれるので、大きさを変えるときは
      tools/assets/make_menu_icons.mjs のグリッドごと描き直すこと。 */
   #menu .mic{width:16px;height:16px;flex:none;image-rendering:pixelated}
+  /* ログアウトだけドット絵が無いので、同じ 16px 枠に記号を入れて行頭を揃える */
+  #menu .mig{display:grid;place-items:center;font-size:13px;color:#7f9a92}
   #menu .mi:hover{background:#1d262c;color:var(--gold)}
+  #menu .mi:hover .mig{color:var(--gold)}
   /* 役割ごとの小見出しと区切り（工場 / 仲間 / 記録） */
   #menu .mh{font-size:9px;letter-spacing:.14em;color:#7f9a92;text-transform:uppercase;padding:5px 11px 3px}
   #menu .msep{height:1px;background:var(--edge);margin:5px 6px}
@@ -369,6 +388,10 @@
     <div class="mh">記録</div>
     <div class="mi" id="collectionBtn"><img class="mic" src="assets/ui/icons/collection.png" alt="">図鑑</div>
     <div class="mi" id="lbBtn"><img class="mic" src="assets/ui/icons/leaderboard.png" alt="">リーダーボード</div>
+    <div class="msep"></div>
+    <!-- セッションは Cookie で30日保持される。アカウントを切り替える唯一の導線がここ。
+         GET でセッションを破棄して /login に戻る（server/index.mjs の /auth/logout） -->
+    <a class="mi" id="logoutBtn" href="/auth/logout"><span class="mic mig">⏏</span>ログアウト</a>
   </div>
   <div id="topwrap">
     <div id="board"></div>
@@ -379,7 +402,27 @@
   <div id="palette"></div>
   <div id="toast"></div>
   <div id="overlay"><div id="panel"></div></div>
+  <!-- ===== 起動中の目隠し =====
+       アセットは1100枚超・rooms だけで36MB あるので、初回は数秒かかる。
+       何も出ないと壊れて見えるため、読み込みの進捗を出してから盤面に入れ替える。 -->
+  <div id="boot">
+    <!-- 盤面で働いているときの Claude 君をそのまま出す（描画は game/ui/boot.mjs）。
+         内部解像度は 2倍で持って CSS では等倍に置く（ドットを補間させないため） -->
+    <canvas class="bmascot" width="320" height="280"></canvas>
+    <div class="btext">工場を読み込み中…</div>
+    <div class="bbar"><i></i></div>
+  </div>
 </div>
+<script>
+/* 目隠しの保険だけここに置く。module（game/app.mjs）が何かの理由で動かなくても、
+   目隠しが残って操作不能にはしない。中身の制御は app.mjs 側にある。 */
+(function(){
+  var el=document.getElementById('boot');
+  setTimeout(function(){ var t=el&&el.querySelector('.btext');
+    if(t && document.getElementById('boot')) t.textContent='読み込みに時間がかかっています…'; }, 12000);
+  setTimeout(function(){ if(el) el.remove(); }, 40000);
+})();
+</script>
 <script src="vendor/phaser.min.js"></script>
 <script type="module" src="game/scene/main.mjs"></script>
 <script type="module" src="game/app.mjs"></script>

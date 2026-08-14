@@ -15,9 +15,14 @@ export function makeMascot(scene, key, pal, pose){
   if(scene.textures.exists(key)) scene.textures.remove(key);
   scene.textures.addCanvas(key, cv);
 }
-// マスコットを描いた canvas を返す。Phaserテクスチャにも HUD用の <img> にも使う
-function mascotCanvas(pal, pose){
-  const P=3, w=26, h=28;
+// マスコットを描いた canvas を返す。Phaserテクスチャにも HUD用の <img> にも、
+// 起動中の目隠し(game/ui/boot.mjs)にも使う。assets を一切読まないので、
+// アセットのロードが終わる前＝Phaser が動き出す前でも描ける。
+// P はドット1個の辺の長さ。既定は盤面と同じ DOTP=3。
+// 半端な倍率で拡縮するとドットが間引かれるので、大きく出したいときは
+// CSS で伸ばさずにここへ整数を渡す（起動中の目隠しが 4 を使っている）。
+export function mascotCanvas(pal, pose, P = DOTP){
+  const w=26, h=28;
   const cv=document.createElement('canvas'); cv.width=w*P; cv.height=h*P;
   const g=cv.getContext('2d');
   const px=(x,y,c)=>{ g.fillStyle=c; g.fillRect(x*P,y*P,P,P); };
