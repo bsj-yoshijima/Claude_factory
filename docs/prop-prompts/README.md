@@ -29,6 +29,11 @@ onsen の湯が丸ごと落ちたのがこれ（→ `docs/prop-sprite-prompt.md`
 |---|---|
 | `ice-sheet-orange.txt` / `fantasy-sheet-orange.txt` / `space-sheet-orange.txt` | `docs/shells/prop-shell-sheet7-1519x1127-ice.png` |
 | `dwarf-sheet-green.txt` | `docs/shells/prop-shell-sheet7-1519x1127-green.png` |
+| `tokyo-custom-1x1-orange.txt` | `docs/shells/prop-shell-custom-1x1-372x499-orange.png` |
+
+tokyo はパレットに `electric cyan` があり、自販機のネオン管が純シアンで返った（印との距離が
+しきい値70を下回るので、焼き込むとネオンごと消える）。カスタムの殻にもオレンジ版が必要に
+なったのがこの一件（2026-08）。tokyo は逆に「純オレンジを絵に使うな」を本文に足してある。
 
 焼き込み側は殻の JSON の `mark` を読むので、**渡す殻を差し替えるだけ**でよい:
 
