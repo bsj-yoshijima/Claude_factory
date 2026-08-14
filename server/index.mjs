@@ -13,8 +13,8 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-import { waitForDb, migrate, pool } from './db.mjs';
-import { syncWeights } from './wp.mjs';
+import { waitForDb, one, pool } from './db.mjs';
+import { SCHEMA_VERSION } from '../db/version.mjs';
 import * as Auth from './auth.mjs';
 import { ingestLogs, ingestMetrics } from './ingest-otel.mjs';
 import { ingestHook, purgeOldSessions } from './ingest-hooks.mjs';
@@ -72,16 +72,39 @@ const MIME = {
   '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2', '.ico': 'image/x-icon',
 };
-function serveStatic(res, urlPath) {
+// 絵を何秒ブラウザに寝かせてよいか。既定1時間。
+// 絵を差し替えながら確認したいときは ASSET_MAX_AGE=0 で起動する（毎回 304 の問い合わせになる）。
+const ASSET_MAX_AGE = Number(process.env.ASSET_MAX_AGE ?? 3600);
+
+function serveStatic(req, res, urlPath) {
   const ext = path.extname(urlPath).toLowerCase();
   if (!ext || !MIME[ext]) return false;
   const safe = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
   const file = path.join(ROOT, safe);
-  if (!file.startsWith(ROOT) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+  let st = null;
+  try { st = fs.statSync(file); } catch { /* 無い */ }
+  if (!file.startsWith(ROOT) || !st || !st.isFile()) {
     res.writeHead(404); res.end('not found'); return true;
   }
-  // アセットは数百枚あるので、本番は CDN 前提。ローカルでは短めのキャッシュ
-  res.writeHead(200, { 'Content-Type': MIME[ext], 'Cache-Control': 'public, max-age=300' });
+  // 中身のハッシュではなく mtime+サイズで作る。assets は1100枚超あるので、
+  // 検証子を作るために毎回ファイルを読むわけにはいかない。
+  const etag = `W/"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+  // 絵は差し替え頻度が低いので寝かせる。コード(game/*.mjs)は常に検証する。
+  // 古い JS が残ったままだと、原因の分からない不具合として現れるため。
+  const isArt = /^\/?(assets|vendor)\//.test(safe);
+  const headers = {
+    'Content-Type': MIME[ext],
+    'Cache-Control': isArt ? `public, max-age=${ASSET_MAX_AGE}` : 'no-cache',
+    ETag: etag,
+    'Last-Modified': new Date(st.mtimeMs).toUTCString(),
+  };
+  // 期限切れ後の再読み込みは 304（本文なし）で済ませる。以前は検証子が無かったため、
+  // 5分経つたびに 82MB を丸ごと再ダウンロードしていた。
+  const inm = req.headers['if-none-match'];
+  if (inm && inm.split(/,\s*/).some((v) => v.trim() === etag)) {
+    res.writeHead(304, headers); res.end(); return true;
+  }
+  res.writeHead(200, headers);
   res.end(fs.readFileSync(file));
   return true;
 }
@@ -137,7 +160,9 @@ const setupPage = (user, token) => {
       OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json',
       OTEL_EXPORTER_OTLP_ENDPOINT: PUBLIC_URL,
       OTEL_EXPORTER_OTLP_HEADERS: `Authorization=Bearer ${token}`,
-      OTEL_METRIC_EXPORT_INTERVAL: '60000',
+      // メトリクスは DELTA（増分）で届くので、間隔を詰めても WP は水増しされない
+      // （生ログ実測: aggregationTemporality=1）。育成ゲームなので反映の速さを取る。
+      OTEL_METRIC_EXPORT_INTERVAL: '10000',
       OTEL_LOGS_EXPORT_INTERVAL: '5000',
       OTEL_LOG_USER_PROMPTS: '0',
       OTEL_LOG_ASSISTANT_RESPONSES: '0',
@@ -325,7 +350,7 @@ async function handle(req, res) {
   }
 
   /* ---------- 静的ファイル・ゲーム画面 ---------- */
-  if (serveStatic(res, decodeURIComponent(route))) return;
+  if (serveStatic(req, res, decodeURIComponent(route))) return;
   if (!user) { res.writeHead(302, { Location: '/login' }); return res.end(); }
   // マルチユーザー版は Phaser 画面のみ。/metrics（検証用）は本番に持ち込まない
   return sendHtml(res, fs.readFileSync(path.join(ROOT, 'factory-phaser.html'), 'utf8'));
@@ -363,11 +388,36 @@ const server = http.createServer((req, res) => {
   });
 });
 
+/**
+ * スキーマの世代が合っているか確かめるだけ。DB には一切書き込まない。
+ *
+ * DB が古い場合は起動を止める。新しい列を前提にしたコードが走ると、
+ * メンバーには原因の分からない SQL エラーとしてしか見えないため、
+ * 「オーナーの migrate 待ち」だとその場で分かるようにしている。
+ * 逆にコードが古い場合は、スキーマの変更が基本 additive で古いコードでも動くので、
+ * 警告だけ出してそのまま起動する。
+ */
+async function checkSchema() {
+  const r = await one(`SELECT version FROM schema_meta WHERE id = 1`).catch(() => null);
+  const db = r?.version ?? 0;                       // 表ごと無い＝まだ一度も migrate していない
+
+  if (db < SCHEMA_VERSION) {
+    console.error(
+      `\n  ⛔ DB のスキーマが古いため起動できません（DB: v${db || '未初期化'} / コード: v${SCHEMA_VERSION}）\n` +
+      `\n     オーナーが npm run db:migrate を実行するまでお待ちください。` +
+      `\n     手元の DB を自分で使っている場合は、自分で npm run db:migrate を実行してください。\n`);
+    process.exit(1);
+  }
+  if (db > SCHEMA_VERSION) {
+    console.warn(
+      `\n  ⚠️  コードが古いようです（DB: v${db} / コード: v${SCHEMA_VERSION}）` +
+      `\n     git pull で最新にしてください。このまま起動しますが、新しい機能は表示されません。\n`);
+  }
+}
+
 async function main() {
   await waitForDb();
-  await migrate();
-  await syncWeights();
-  await purgeOldSessions();
+  await checkSchema();
   server.listen(PORT, () => {
     console.log(`\n  🏭 Claude Factory (マルチユーザー版)`);
     console.log(`  → ${PUBLIC_URL}`);

@@ -6,8 +6,11 @@
 ## 起動
 
 ```bash
-npm install && docker compose up -d && npm run dev
+npm install && npm run db:up && npm run dev
 ```
+
+`db:up` は Postgres を起動したあと `db:migrate` まで流す。**スキーマを DB に当てるのは
+`npm run db:migrate` だけ**で、サーバの起動処理は DB を書き換えない（後述）。
 
 → http://localhost:4321 を開く。`GOOGLE_CLIENT_ID` が未設定のあいだは **dev ログイン**
 （メールアドレスを入れるだけ）が有効。ログインすると `/setup` に飛び、
@@ -18,9 +21,34 @@ npm install && docker compose up -d && npm run dev
 | コマンド | 内容 |
 |---|---|
 | `npm run dev` | サーバ |
-| `npm run db:psql` | DB に入る |
-| `npm run db:reset` | DB を作り直す（データも消える） |
+| `npm run db:up` | **手元の docker** を起動してスキーマを当てる（`.env` の共有DBは触らない） |
+| `npm run db:migrate` | **`.env` の向き先**にスキーマを当てる。共有DBではオーナーだけが実行する |
+| `npm run db:migrate:local` | 手元の docker にだけ当てる（`db:up` / `db:reset` が内部で使う） |
+| `npm run db:psql` | **手元の docker** の DB に入る（共有DBを見るなら `psql "$DATABASE_URL"`） |
+| `npm run db:reset` | 手元の docker を作り直す（データも消える。migrate まで流す） |
 | `npm test` | レシピ・製造機・サーバの全テスト |
+
+`db:up` / `db:reset` / `db:migrate:local` は必ず手元の docker を対象にする。
+共有DBを指す `.env` を持っている人が「手元を立ち上げるつもりで共有DBに DDL を流す」のを
+防ぐため、`--local` が渡されたときは `DATABASE_URL` を捨ててから DB に繋いでいる。
+
+### スキーマの世代管理
+
+複数人が 1 つの DB を共有する場合、サーバ起動のたびに DDL と `wp_weights` の
+上書きが走ると事故になる（`git pull` し忘れた人が 1 人起動しただけで、古い重みが
+全員ぶんを上書きする）。そのため **DB を書き換える操作は `db:migrate` に集約し、
+サーバは起動時にバージョンを読むだけ**にしてある。
+
+| 役割 | やること |
+|---|---|
+| オーナー（スキーマ変更時） | `db/version.mjs` の `SCHEMA_VERSION` を上げてコミット → `npm run db:migrate` |
+| メンバー（日常） | `git pull && npm run dev` だけ |
+
+チームで 1 つの DB を共有する手順は [phase1-setup.md](phase1-setup.md) にまとめてある。
+
+サーバは `db/version.mjs` と `schema_meta.version` を比べ、**DB が古ければ起動を止める**
+（「オーナーの migrate 待ち」だとメンバーに分かるようにするため）。逆に **コードが古い
+場合は警告だけ出して起動する**（スキーマの追加は基本 additive なので古いコードでも動く）。
 
 ## 実際に Claude Code を繋ぐ
 

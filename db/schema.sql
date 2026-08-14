@@ -407,3 +407,14 @@ CREATE TABLE IF NOT EXISTS ingest_seen (
   PRIMARY KEY (user_id, dedup_key)
 );
 CREATE INDEX IF NOT EXISTS ingest_seen_at ON ingest_seen(at);
+
+-- ============================ スキーマの世代 ============================
+-- 「この DB にどの世代のスキーマが当たっているか」を 1 行だけ持つ。
+-- 書き込むのは tools/migrate.mjs（オーナーが叩くコマンド）だけで、サーバは読むだけ。
+-- サーバはこの値と db/version.mjs の SCHEMA_VERSION を比べて、
+-- DB のほうが古ければ起動を止める（メンバーが原因不明の SQL エラーに悩まないように）。
+CREATE TABLE IF NOT EXISTS schema_meta (
+  id         int PRIMARY KEY DEFAULT 1 CHECK (id = 1),   -- 常に 1 行だけ
+  version    int NOT NULL,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);

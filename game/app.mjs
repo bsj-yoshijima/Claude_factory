@@ -6,6 +6,7 @@ import { openToday, pollWp, renderBoard, renderCraft, updateDoneBtn, wpState } f
 import { NET, loadGame, saveGame, unlockAll } from './net.mjs';
 import { G, availN, craftState, machState, machines, machinesSorted, reconcileStock, snapLayout } from './state.mjs';
 import { openAgents } from './ui/agents.mjs';
+import { bootDone, bootProgress, startBootMascot } from './ui/boot.mjs';
 import { openCollection } from './ui/collection.mjs';
 import { setCraftPick, bindMachRow, machRow, openCraft, openDone } from './ui/craft-dialog.mjs';
 import { closeOverlay, openDialog, overlay, toast } from './ui/dialog.mjs';
@@ -145,6 +146,14 @@ document.getElementById('hud').title='クリックでエージェント一覧';
 /* 💰 の増減は必ずサーバが決める（クライアントの申告を信じない） */
 document.getElementById('shopBtn').addEventListener('click',()=>openShop());
 
+/* ===== 起動中の目隠し（#boot）=====
+   中身は game/ui/boot.mjs。シーン側は window.__bootProgress に進捗を渡すだけで、
+   DOM のことは知らない。外すのは「絵が揃った」時点ではなく
+   「盤面と所持品が載り切った」時点にする（空の工場が一瞬見える方が不安になる）。 */
+window.__bootProgress=bootProgress;
+window.__bootDone=bootDone;
+startBootMascot();
+
 /* ===== 起動: ロード→オフライン生産→シーン待ち→所持品反映→生産tick ===== */
 function waitScene(){ return new Promise(res=>{ (function chk(){ if(window.__scene) res(); else setTimeout(chk,60); })(); }); }
 function applyOwned(){ const s=window.__scene; if(!s)return;
@@ -200,12 +209,14 @@ window.__openMachine=(id)=>{
    アニメ中だけ毎フレーム scale.refresh() を叩いて、描画も当たり判定もぬるっと追従させる。 */
 document.getElementById('editMenuBtn').addEventListener('click',toggleEditMode);
 loadGame().then(async (ok)=>{
-  if(!ok) return;                                    // サーバに繋がらない旨は loadGame が出している
+  if(!ok){ window.__bootDone?.(); return; }          // サーバに繋がらない旨は loadGame が出している
   G.lastT=Date.now();
   await waitScene(); applyOwned(); updateBadge();
   setInterval(syncEditMode, 1000); syncEditMode();   // Eキー・移動モードでの編集ON/OFFに追従
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
   updateDoneBtn(); renderCraft(); pollWp();
+  // 盤面と所持品が載り切ったのでここで目隠しを外す（絵だけ出て中身が空の瞬間を見せない）
+  window.__bootDone?.();
   /* 5秒ごと。OTLP の logs バッチがちょうど5秒間隔なので、
      これより速く叩いても新しい値は存在しない（＝同じ値を取り直すだけ）。
      裏に回っている間は pollWp 側で止まる。 */

@@ -14,6 +14,8 @@ import { DOTP, HAT_BASE_Y, HAT_CX, HAT_W_DOT, PRESETS, makeMascot, mascotIcons }
 
 export class Main extends Phaser.Scene {
   preload(){
+    // 起動中の目隠し(#boot)に進捗を渡す。初回は rooms だけで36MB あるので数秒かかる
+    this.load.on('progress', (p)=>{ if(window.__bootProgress) window.__bootProgress(p); });
     this.load.image('bg_room','assets/rooms/room-factory.png');   // ガラス透過(窓の後ろに空/月/太陽を置く)
     this.load.image('room_arabia','assets/rooms/room-arabia.png');   // Stitch製 テーマ部屋(壁/床/窓 焼き込み)
     this.load.image('room_undersea','assets/rooms/room-undersea.png');

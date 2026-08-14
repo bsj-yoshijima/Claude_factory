@@ -12,7 +12,16 @@ pg.types.setTypeParser(1700, (v) => (v === null ? null : Number(v)));
 export const DATABASE_URL =
   process.env.DATABASE_URL || 'postgres://factory:factory@localhost:55432/factory';
 
-export const pool = new Pool({ connectionString: DATABASE_URL, max: 10 });
+// 1プロセスが握る最大接続数。
+//
+// 下げると遅くなる。getState は12本のクエリを投げるので、接続数を絞ると往復が
+// 何波にも分かれる。DB がリモートだと効き方が大きい（Neon シンガポール、1往復
+// 約77ms での実測: max=10 で getState 約390ms、max=3 で約1080ms）。
+// 共有 DB でも絞る必要はまず無い（Neon 無料枠の実測は max_connections=901）。
+// DB 側の上限に実際にぶつかったときだけ PG_POOL_MAX で下げる。
+const POOL_MAX = Number(process.env.PG_POOL_MAX) || 10;
+
+export const pool = new Pool({ connectionString: DATABASE_URL, max: POOL_MAX });
 
 // アイドル中の接続が切れると pg は pool に 'error' を emit する。リスナが無いと
 // EventEmitter がそれを throw し、uncaughtException でプロセスごと落ちる

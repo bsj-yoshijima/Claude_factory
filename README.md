@@ -12,20 +12,62 @@
 
 ## 使い方
 
-サーバでホスティングし、**各ユーザーが自分の工場を持つ**構成（Postgres + Google SSO）。
-詳細は [docs/multiuser.md](docs/multiuser.md)。
+動かし方は2通りある。**どちらもコードは同じで、`.env` の有無だけが違う。**
+
+| | A. ローカル完結 | B. 共有DB + Google SSO |
+|---|---|---|
+| DB | 手元の docker（Postgres） | クラウドの Postgres（Neon など） |
+| 認証 | dev ログイン（メールを入れるだけ） | Google SSO |
+| リーダーボード | 自分だけ | **チーム全員が並ぶ** |
+| `.env` | **作らない** | 作る |
+| 手順 | 下記 A | 下記 B（[docs/phase1-setup.md](docs/phase1-setup.md)） |
+
+**普段の開発は A で足りる。** B は「チームで1つの DB を共有して順位を競う」「Google SSO を
+検証する」ときだけ必要。A → B は `.env` を置くだけ、B → A は消すだけで、何度でも往復できる。
+
+### A. ローカル完結で動かす
 
 ```bash
-npm install && docker compose up -d && npm run dev
+npm install && npm run db:up && npm run dev
 # → http://localhost:4321
 ```
 
-停止 / 再起動:
+`npm run db:up` は **手元の docker の起動とスキーマ適用をまとめて行う**（`.env` があっても
+共有DBは触らない）。`GOOGLE_CLIENT_ID` が未設定なので dev ログインが有効になる。
+
+**`git pull` したあと起動できないときは `npm run db:up` を実行する。** スキーマが変わると
+サーバは起動を止めて、そのことを日本語で伝える（勝手に DB を書き換えない設計のため）。
+
+```
+⛔ DB のスキーマが古いため起動できません（DB: v1 / コード: v2）
+```
+
+`server/wp.mjs` の WP の重みを書き換えたときも、DB 側へ反映するのに `npm run db:up` が必要。
+
+### B. 共有DB + Google SSO で動かす
+
+```bash
+cp env.example .env     # DATABASE_URL を書く。SSO も使うなら GOOGLE_CLIENT_* も
+npm install && npm run dev
+```
+
+**`docker compose` は起動しなくてよい**（DB はクラウドにある）。
+**`npm run db:migrate` も実行しない** — 共有DBにスキーマを当てるのはオーナーだけの操作。
+
+取得手順（Neon のプロジェクト作成、OAuth クライアント ID の作り方、メンバーへの配布）は
+[docs/phase1-setup.md](docs/phase1-setup.md) にまとめてある。設計は [docs/multiuser.md](docs/multiuser.md)。
+
+**取り込みトークンは DB ごとに別物**なので、A と B を行き来する人は `/setup` で
+`OTEL_EXPORTER_OTLP_HEADERS` を都度差し替える（トークンは DB のテーブルの行のため）。
+
+### 停止 / 再起動
 
 ```bash
 lsof -ti tcp:4321 | xargs kill        # 停止
 npm run dev                           # 再起動
 ```
+
+`.env` を書き換えたときは**再起動が必要**（起動時にしか読まない）。
 
 工場のデータ（💰 / 在庫 / 図鑑 / 製造）はすべてサーバが持つ唯一の真実で、ブラウザには保存しない。
 別のディレクトリで `claude` を起動して作業させると、その子が工場に現れて働き出します。
@@ -306,8 +348,9 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 
 ## 必要環境
 
-- Node.js 20 以上
-- Postgres（`docker compose up -d` で用意する）
+- **Node.js 20.12 以上**（`.env` を読む `--env-file-if-exists` が 20.12 で入ったフラグ。
+  20.11 以下だと `npm run dev` がフラグエラーで起動しない。`node -v` で確認する）
+- Postgres — ローカル完結なら `npm run db:up` で用意する。共有DBを使う場合は不要
 
 ---
 
