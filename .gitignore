@@ -10,10 +10,9 @@ dev-server.log
 /preview/
 
 # 接続文字列と OAuth の秘密。npm run dev / db:migrate が自動で読む。
-# 雛形は docs/phase1-setup.md にある（絶対にコミットしない）
+# 雛形は env.example（cp env.example .env）。絶対にコミットしない
 .env
 .env.*
-!.env.example
 
 # OS / editor
 .DS_Store

@@ -51,7 +51,7 @@ pooler 版はトランザクション単位で接続を貸す仕組みのため�
 
 ### 2. スキーマを流す
 
-自分の `.env` に接続文字列を入れて（雛形は後述）、
+`cp env.example .env` して `DATABASE_URL` に接続文字列を入れたあと、
 
 ```bash
 npm run db:migrate
@@ -116,21 +116,21 @@ Phase 1 で全員に OAuth クライアントシークレットを配る必要�
 
 ### 1. `.env` を作る
 
-リポジトリ直下に `.env` を作り、オーナーから渡された値を入れる。
-（`.gitignore` 済みなのでコミットされない）
+雛形をコピーして、オーナーから渡された値を埋める。
+（`.env` は `.gitignore` 済みなのでコミットされない）
+
+```bash
+cp env.example .env
+```
+
+埋めるのは `DATABASE_URL` だけでよい。`PG_POOL_MAX=3` は雛形に入っている。
 
 ```sh
-# 共有 DB。オーナーから渡された接続文字列をそのまま
 DATABASE_URL=postgres://USER:PASSWORD@ep-xxxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
-
-# 各自のサーバから繋ぐので、1人あたりの接続数を絞る
-PG_POOL_MAX=3
-
-# --- ここから下は SSO を検証する人だけ。無ければ dev ログインで動く ---
-#GOOGLE_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
-#GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxx
-#GOOGLE_HD=bravesoft.co.jp
 ```
+
+SSO も検証する人は、`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_HD` の
+コメントを外して埋める。各項目の意味と注意点は [env.example](../env.example) に書いてある。
 
 ### 2. 起動する
 
