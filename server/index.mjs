@@ -160,7 +160,9 @@ const setupPage = (user, token) => {
       OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json',
       OTEL_EXPORTER_OTLP_ENDPOINT: PUBLIC_URL,
       OTEL_EXPORTER_OTLP_HEADERS: `Authorization=Bearer ${token}`,
-      OTEL_METRIC_EXPORT_INTERVAL: '60000',
+      // メトリクスは DELTA（増分）で届くので、間隔を詰めても WP は水増しされない
+      // （生ログ実測: aggregationTemporality=1）。育成ゲームなので反映の速さを取る。
+      OTEL_METRIC_EXPORT_INTERVAL: '10000',
       OTEL_LOGS_EXPORT_INTERVAL: '5000',
       OTEL_LOG_USER_PROMPTS: '0',
       OTEL_LOG_ASSISTANT_RESPONSES: '0',
