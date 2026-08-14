@@ -16,9 +16,13 @@
 詳細は [docs/multiuser.md](docs/multiuser.md)。
 
 ```bash
-npm install && docker compose up -d && npm run dev
+npm install && npm run db:up && npm run dev
 # → http://localhost:4321
 ```
+
+`db:up` は Postgres の起動とスキーマ適用（`db:migrate`）をまとめて行う。
+スキーマを DB に当てるのは `npm run db:migrate` だけで、サーバの起動処理は
+DB の構造を書き換えない（[docs/multiuser.md](docs/multiuser.md) 参照）。
 
 停止 / 再起動:
 

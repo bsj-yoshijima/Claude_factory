@@ -13,8 +13,8 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-import { waitForDb, migrate, pool } from './db.mjs';
-import { syncWeights } from './wp.mjs';
+import { waitForDb, one, pool } from './db.mjs';
+import { SCHEMA_VERSION } from '../db/version.mjs';
 import * as Auth from './auth.mjs';
 import { ingestLogs, ingestMetrics } from './ingest-otel.mjs';
 import { ingestHook, purgeOldSessions } from './ingest-hooks.mjs';
@@ -363,11 +363,36 @@ const server = http.createServer((req, res) => {
   });
 });
 
+/**
+ * スキーマの世代が合っているか確かめるだけ。DB には一切書き込まない。
+ *
+ * DB が古い場合は起動を止める。新しい列を前提にしたコードが走ると、
+ * メンバーには原因の分からない SQL エラーとしてしか見えないため、
+ * 「オーナーの migrate 待ち」だとその場で分かるようにしている。
+ * 逆にコードが古い場合は、スキーマの変更が基本 additive で古いコードでも動くので、
+ * 警告だけ出してそのまま起動する。
+ */
+async function checkSchema() {
+  const r = await one(`SELECT version FROM schema_meta WHERE id = 1`).catch(() => null);
+  const db = r?.version ?? 0;                       // 表ごと無い＝まだ一度も migrate していない
+
+  if (db < SCHEMA_VERSION) {
+    console.error(
+      `\n  ⛔ DB のスキーマが古いため起動できません（DB: v${db || '未初期化'} / コード: v${SCHEMA_VERSION}）\n` +
+      `\n     オーナーが npm run db:migrate を実行するまでお待ちください。` +
+      `\n     手元の DB を自分で使っている場合は、自分で npm run db:migrate を実行してください。\n`);
+    process.exit(1);
+  }
+  if (db > SCHEMA_VERSION) {
+    console.warn(
+      `\n  ⚠️  コードが古いようです（DB: v${db} / コード: v${SCHEMA_VERSION}）` +
+      `\n     git pull で最新にしてください。このまま起動しますが、新しい機能は表示されません。\n`);
+  }
+}
+
 async function main() {
   await waitForDb();
-  await migrate();
-  await syncWeights();
-  await purgeOldSessions();
+  await checkSchema();
   server.listen(PORT, () => {
     console.log(`\n  🏭 Claude Factory (マルチユーザー版)`);
     console.log(`  → ${PUBLIC_URL}`);

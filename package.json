@@ -6,9 +6,10 @@
   "description": "Claude Code のセッションを工場として可視化する育成ゲーム（マルチユーザー版）",
   "scripts": {
     "dev": "node server/index.mjs",
-    "db:up": "docker compose up -d",
+    "db:migrate": "node tools/migrate.mjs",
+    "db:up": "docker compose up -d && npm run db:migrate",
     "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up -d",
+    "db:reset": "docker compose down -v && docker compose up -d && npm run db:migrate",
     "db:psql": "docker exec -it claude-factory-db psql -U factory -d factory",
     "test": "node test/test_craft.mjs && node test/test_machines.mjs && node test/test_props.mjs && node test/test_hats.mjs && node test/test_server.mjs"
   },
