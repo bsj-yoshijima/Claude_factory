@@ -72,16 +72,39 @@ const MIME = {
   '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2', '.ico': 'image/x-icon',
 };
-function serveStatic(res, urlPath) {
+// 絵を何秒ブラウザに寝かせてよいか。既定1時間。
+// 絵を差し替えながら確認したいときは ASSET_MAX_AGE=0 で起動する（毎回 304 の問い合わせになる）。
+const ASSET_MAX_AGE = Number(process.env.ASSET_MAX_AGE ?? 3600);
+
+function serveStatic(req, res, urlPath) {
   const ext = path.extname(urlPath).toLowerCase();
   if (!ext || !MIME[ext]) return false;
   const safe = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
   const file = path.join(ROOT, safe);
-  if (!file.startsWith(ROOT) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+  let st = null;
+  try { st = fs.statSync(file); } catch { /* 無い */ }
+  if (!file.startsWith(ROOT) || !st || !st.isFile()) {
     res.writeHead(404); res.end('not found'); return true;
   }
-  // アセットは数百枚あるので、本番は CDN 前提。ローカルでは短めのキャッシュ
-  res.writeHead(200, { 'Content-Type': MIME[ext], 'Cache-Control': 'public, max-age=300' });
+  // 中身のハッシュではなく mtime+サイズで作る。assets は1100枚超あるので、
+  // 検証子を作るために毎回ファイルを読むわけにはいかない。
+  const etag = `W/"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+  // 絵は差し替え頻度が低いので寝かせる。コード(game/*.mjs)は常に検証する。
+  // 古い JS が残ったままだと、原因の分からない不具合として現れるため。
+  const isArt = /^\/?(assets|vendor)\//.test(safe);
+  const headers = {
+    'Content-Type': MIME[ext],
+    'Cache-Control': isArt ? `public, max-age=${ASSET_MAX_AGE}` : 'no-cache',
+    ETag: etag,
+    'Last-Modified': new Date(st.mtimeMs).toUTCString(),
+  };
+  // 期限切れ後の再読み込みは 304（本文なし）で済ませる。以前は検証子が無かったため、
+  // 5分経つたびに 82MB を丸ごと再ダウンロードしていた。
+  const inm = req.headers['if-none-match'];
+  if (inm && inm.split(/,\s*/).some((v) => v.trim() === etag)) {
+    res.writeHead(304, headers); res.end(); return true;
+  }
+  res.writeHead(200, headers);
   res.end(fs.readFileSync(file));
   return true;
 }
@@ -325,7 +348,7 @@ async function handle(req, res) {
   }
 
   /* ---------- 静的ファイル・ゲーム画面 ---------- */
-  if (serveStatic(res, decodeURIComponent(route))) return;
+  if (serveStatic(req, res, decodeURIComponent(route))) return;
   if (!user) { res.writeHead(302, { Location: '/login' }); return res.end(); }
   // マルチユーザー版は Phaser 画面のみ。/metrics（検証用）は本番に持ち込まない
   return sendHtml(res, fs.readFileSync(path.join(ROOT, 'factory-phaser.html'), 'utf8'));
