@@ -14,6 +14,7 @@
 
 サーバでホスティングし、**各ユーザーが自分の工場を持つ**構成（Postgres + Google SSO）。
 詳細は [docs/multiuser.md](docs/multiuser.md)。
+チームで 1 つの DB を共有して Google SSO を検証する手順は [docs/phase1-setup.md](docs/phase1-setup.md)。
 
 ```bash
 npm install && npm run db:up && npm run dev

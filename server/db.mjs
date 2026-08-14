@@ -12,7 +12,12 @@ pg.types.setTypeParser(1700, (v) => (v === null ? null : Number(v)));
 export const DATABASE_URL =
   process.env.DATABASE_URL || 'postgres://factory:factory@localhost:55432/factory';
 
-export const pool = new Pool({ connectionString: DATABASE_URL, max: 10 });
+// 1プロセスが握る最大接続数。
+// サーバを1台に集約している間は 10 でよいが、「各自のPCでサーバを起動して1つの DB を
+// 共有する」構成では 人数 × この値 が DB の接続上限を食うので、PG_POOL_MAX で下げる。
+const POOL_MAX = Number(process.env.PG_POOL_MAX) || 10;
+
+export const pool = new Pool({ connectionString: DATABASE_URL, max: POOL_MAX });
 
 // アイドル中の接続が切れると pg は pool に 'error' を emit する。リスナが無いと
 // EventEmitter がそれを throw し、uncaughtException でプロセスごと落ちる

@@ -9,6 +9,12 @@ dev-server.log
 # 先頭の / が無いと tools/preview まで無視されるので必ず付ける
 /preview/
 
+# 接続文字列と OAuth の秘密。npm run dev / db:migrate が自動で読む。
+# 雛形は docs/phase1-setup.md にある（絶対にコミットしない）
+.env
+.env.*
+!.env.example
+
 # OS / editor
 .DS_Store
 node_modules/

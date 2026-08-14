@@ -38,6 +38,8 @@ npm install && npm run db:up && npm run dev
 | オーナー（スキーマ変更時） | `db/version.mjs` の `SCHEMA_VERSION` を上げてコミット → `npm run db:migrate` |
 | メンバー（日常） | `git pull && npm run dev` だけ |
 
+チームで 1 つの DB を共有する手順は [phase1-setup.md](phase1-setup.md) にまとめてある。
+
 サーバは `db/version.mjs` と `schema_meta.version` を比べ、**DB が古ければ起動を止める**
 （「オーナーの migrate 待ち」だとメンバーに分かるようにするため）。逆に **コードが古い
 場合は警告だけ出して起動する**（スキーマの追加は基本 additive なので古いコードでも動く）。
