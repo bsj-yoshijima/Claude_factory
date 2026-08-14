@@ -300,7 +300,10 @@ const buildCustom = (themeKey, shape, object) => {
   if(!t) throw new Error(`未知のテーマ: ${themeKey}`);
   if(!sh) throw new Error(`形は 1x1 / 1x2 / 2x2 のどれか: ${shape}`);
   const what = object || t.landmark;
-  const num = { ...shellNumbers(shape), w0:'50.0%' };
+  /* cw/ch は殻のキャンバスの寸法。生成側が近い比のキャンバスへ丸めて割り付けごと
+     描き直すこと(tokyo の自販機が 1024x1024 で返った)への歯止めに、本文で寸法を名指しする。 */
+  const [cw, ch] = sh.size.split('x');
+  const num = { ...shellNumbers(shape), w0:'50.0%', cw, ch };
   return `REPAINT THIS EXACT SHELL. You are editing a master shell for ONE object. Paint your theme
 directly on top of it, like colouring in a line drawing. Output ${sh.size}.
 
@@ -323,6 +326,14 @@ THE CYAN RECTANGLE IS THE FRAME OF THE JOB. It never moves and it never changes 
   touches the bottom line; that corner is where the object's lowest point goes.
   DRAWING A BIGGER DIAMOND AND STANDING THE OBJECT AT THE BACK OF IT is the single most
   common way this job fails: in the game the object then hovers above its tile.
+  In the FINISHED image the diamond must STILL measure ${num.w}% of the image width and
+  ${num.h}% of its height, with its front corner at ${num.w0} across and ${num.gy}% down. A
+  diamond wider than that means you have redrawn it. If the object does not fit inside the
+  diamond, SHRINK THE OBJECT. That is the only correct move. Never enlarge the diamond.
+- KEEP THE CANVAS AS IT IS: ${num.cw} wide by ${num.ch} tall, with the rectangle on its edges. Do not
+  change its proportions${num.cw===num.ch ? '' : ', do not move to a square canvas'} and do not re-lay-out the picture.
+  If your canvas must differ, scale the ENTIRE shell uniformly (rectangle, diamond and all)
+  and change nothing else.
 - The magenta OUTSIDE the rectangle stays completely empty.
 
 THE NUMBERS. They describe THE OBJECT, not the shell. Measure them against the image.
@@ -331,7 +342,8 @@ THE NUMBERS. They describe THE OBJECT, not the shell. Measure them against the i
   point: no ground, no water, no stones, no shadow, no extra floor of any kind. Below it
   there is only magenta.
 - Its CONTACT AREA (the part that actually touches the floor) is ${num.w}% of the image width
-  and ${num.h}% of its height: twice as wide as it is deep.
+  and ${num.h}% of its height: twice as wide as it is deep. ${num.w}% IS A CEILING, NOT A
+  TARGET. Measure the finished base against the image width before you call it done.
 - Parts that do not touch the floor may overhang a little (a tail, foliage, a roof), but the
   overhang stays inside the cyan rectangle.
 - THE FOUR CORNERS OF THE IMAGE STAY MAGENTA. If you have filled them, you have drawn a
