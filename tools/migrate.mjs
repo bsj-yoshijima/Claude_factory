@@ -19,9 +19,15 @@
 // agent_sessions の掃除はサーバ側の毎時タイマーに任せている（このコマンドを
 // 叩くまで掃除されない、という状態にしたくないため）。
 import fs from 'node:fs';
-import { pool, waitForDb, DATABASE_URL } from '../server/db.mjs';
 import { SCHEMA_VERSION } from '../db/version.mjs';
-import { syncWeights } from '../server/wp.mjs';
+
+// --local … 手元の docker を対象にする（npm run db:up / db:reset から渡される）。
+// これが無いと、共有 DB を指す DATABASE_URL を持っている人が db:up したときに、
+// 「手元の DB を立ち上げたつもりで共有 DB に DDL を流す」ことになる。
+// db.mjs は import 時に DATABASE_URL を読むので、消してから動的 import する。
+if (process.argv.includes('--local')) delete process.env.DATABASE_URL;
+const { pool, waitForDb, DATABASE_URL } = await import('../server/db.mjs');
+const { syncWeights } = await import('../server/wp.mjs');
 
 // 接続先を必ず見せる。共有 DB と手元の docker を取り違えたまま流すのが一番怖い
 const shown = DATABASE_URL.replace(/\/\/([^:]+):[^@]*@/, '//$1:****@');   // パスワードは伏せる

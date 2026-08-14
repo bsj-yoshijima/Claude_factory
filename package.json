@@ -7,9 +7,10 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env server/index.mjs",
     "db:migrate": "node --env-file-if-exists=.env tools/migrate.mjs",
-    "db:up": "docker compose up -d && npm run db:migrate",
+    "db:migrate:local": "node tools/migrate.mjs --local",
+    "db:up": "docker compose up -d && npm run db:migrate:local",
     "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up -d && npm run db:migrate",
+    "db:reset": "docker compose down -v && npm run db:up",
     "db:psql": "docker exec -it claude-factory-db psql -U factory -d factory",
     "test": "node test/test_craft.mjs && node test/test_machines.mjs && node test/test_props.mjs && node test/test_hats.mjs && node test/test_server.mjs"
   },
