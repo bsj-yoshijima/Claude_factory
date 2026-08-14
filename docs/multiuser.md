@@ -21,10 +21,16 @@ npm install && npm run db:up && npm run dev
 | コマンド | 内容 |
 |---|---|
 | `npm run dev` | サーバ |
-| `npm run db:migrate` | **スキーマを DB に当てる。共有 DB ではオーナーだけが実行する** |
-| `npm run db:psql` | DB に入る |
-| `npm run db:reset` | DB を作り直す（データも消える。migrate まで流す） |
+| `npm run db:up` | **手元の docker** を起動してスキーマを当てる（`.env` の共有DBは触らない） |
+| `npm run db:migrate` | **`.env` の向き先**にスキーマを当てる。共有DBではオーナーだけが実行する |
+| `npm run db:migrate:local` | 手元の docker にだけ当てる（`db:up` / `db:reset` が内部で使う） |
+| `npm run db:psql` | **手元の docker** の DB に入る（共有DBを見るなら `psql "$DATABASE_URL"`） |
+| `npm run db:reset` | 手元の docker を作り直す（データも消える。migrate まで流す） |
 | `npm test` | レシピ・製造機・サーバの全テスト |
+
+`db:up` / `db:reset` / `db:migrate:local` は必ず手元の docker を対象にする。
+共有DBを指す `.env` を持っている人が「手元を立ち上げるつもりで共有DBに DDL を流す」のを
+防ぐため、`--local` が渡されたときは `DATABASE_URL` を捨ててから DB に繋いでいる。
 
 ### スキーマの世代管理
 
