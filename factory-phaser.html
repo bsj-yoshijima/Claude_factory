@@ -131,8 +131,9 @@
   .cell{width:66px;height:80px;border-radius:8px;border:2px solid #333;background:#0e1417;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:28px;position:relative;cursor:pointer}
   .cell small{font-size:8px;margin-top:1px} .cell .qty{position:absolute;bottom:2px;right:5px;font-size:9px;color:#fff}
   .cell.own:hover{box-shadow:0 0 0 2px var(--gold) inset}
-  /* トーストは盤面の上に一瞬出るだけ。ドラッグ中に出てもポインタを奪わない */
-  #toast{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--ink);padding:8px 16px;border-radius:8px;z-index:7;display:none;font-size:12px;pointer-events:none}
+  /* トーストは盤面の上に一瞬出るだけ。ドラッグ中に出てもポインタを奪わない。
+     ダイアログ(#overlay z-index:20)より前に出す。後ろだと overlay のぼかしで読めなくなる。 */
+  #toast{position:absolute;bottom:70px;left:50%;transform:translateX(-50%);background:var(--panel);color:var(--ink);padding:8px 16px;border-radius:8px;z-index:30;display:none;font-size:12px;pointer-events:none}
   /* craft */
   .invbar{display:flex;gap:7px;flex-wrap:wrap;align-items:center;background:#0e1417;border:1px solid var(--edge);border-radius:8px;padding:7px 9px;margin:6px 0;font-size:12px}
   .chip{display:inline-flex;align-items:center;gap:3px;background:#1a2228;border-radius:6px;padding:2px 7px}
