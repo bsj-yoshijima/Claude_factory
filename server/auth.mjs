@@ -24,6 +24,23 @@ export const google = {
 /** ローカル検証用のログイン。本番では必ず false にする */
 export const DEV_LOGIN = process.env.DEV_LOGIN !== '0' && !google.enabled;
 
+/* 開発用の裏道（画面の ?unlockall）を使えるオーナー。
+   SSO を設定すると dev ログインが無効になり、裏道も一緒に閉じる。ただし共有DBでも
+   図鑑や製造機のバリエーションを見て回りたいので、ここに挙げた人にだけ開けておく。
+
+   名前の並びはコードに持たず、DEV_UNLOCK_EMAILS（カンマ区切り）だけを見る。
+   未設定なら誰も使えない（＝閉じているのが既定）。雛形は env.example にある。
+
+   裏道が触るのは factories の money / stock / 所持品だけで、リーダーボードが読む
+   scorecard_daily と wp_daily には一切触れない（＝順位には影響しない）。 */
+export const unlockEmails = new Set(
+  (process.env.DEV_UNLOCK_EMAILS || '').split(',')
+    .map((s) => s.trim().toLowerCase()).filter(Boolean));
+
+/** この人は ?unlockall を使えるか。dev ログイン中は誰でも（＝従来どおり） */
+export const canDevUnlock = (user) =>
+  DEV_LOGIN || unlockEmails.has(String(user?.email || '').toLowerCase());
+
 const rnd = (n = 32) => crypto.randomBytes(n).toString('base64url');
 
 /* ============================ ユーザー ============================ */
