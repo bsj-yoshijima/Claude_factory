@@ -26,20 +26,15 @@ export const DEV_LOGIN = process.env.DEV_LOGIN !== '0' && !google.enabled;
 
 /* 開発用の裏道（画面の ?unlockall）を使えるオーナー。
    SSO を設定すると dev ログインが無効になり、裏道も一緒に閉じる。ただし共有DBでも
-   図鑑や製造機のバリエーションを見て回りたいので、この人たちにだけ開けておく。
-   DEV_UNLOCK_EMAILS（カンマ区切り）で置き換えられる。空文字を渡せば全員閉じる。
+   図鑑や製造機のバリエーションを見て回りたいので、ここに挙げた人にだけ開けておく。
+
+   名前の並びはコードに持たず、DEV_UNLOCK_EMAILS（カンマ区切り）だけを見る。
+   未設定なら誰も使えない（＝閉じているのが既定）。雛形は env.example にある。
 
    裏道が触るのは factories の money / stock / 所持品だけで、リーダーボードが読む
    scorecard_daily と wp_daily には一切触れない（＝順位には影響しない）。 */
-const DEFAULT_UNLOCK_EMAILS = [
-  'k.hioki@bravesoft.co.jp',
-  'k.yoshijima@bravesoft.co.jp',
-  'n.konta@bravesoft.co.jp',
-];
 export const unlockEmails = new Set(
-  (process.env.DEV_UNLOCK_EMAILS === undefined
-    ? DEFAULT_UNLOCK_EMAILS
-    : process.env.DEV_UNLOCK_EMAILS.split(','))
+  (process.env.DEV_UNLOCK_EMAILS || '').split(',')
     .map((s) => s.trim().toLowerCase()).filter(Boolean));
 
 /** この人は ?unlockall を使えるか。dev ログイン中は誰でも（＝従来どおり） */
