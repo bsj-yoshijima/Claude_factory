@@ -293,7 +293,8 @@ async function handle(req, res) {
       master: GD.summary(),
       ingest: stats,
       auth: { google: Auth.google.enabled, devLogin: Auth.DEV_LOGIN, hd: Auth.google.hd || null },
-      dev: { unlockAll: Auth.DEV_LOGIN },
+      // 誰が使えるかは伏せる（認証不要のエンドポイントなのでメールは出さない）
+      dev: { unlockAll: Auth.DEV_LOGIN, unlockOwners: Auth.unlockEmails.size },
       thresholds: { publicUrl: PUBLIC_URL },
     });
   }
@@ -332,13 +333,14 @@ async function handle(req, res) {
         case 'PUT /api/factory/name': r = await API.putFactoryName(user, body); break;
         case 'GET /api/skins':        r = { status: 200, body: { skins: await API.skinsOf(user.id) } }; break;
         case 'GET /api/setup.json':   r = { status: 200, body: { note: '/setup の内容と同じ' } }; break;
-        /* 開発用の裏道（画面の ?unlockall）。dev ログインが有効なとき＝Google SSO を
-           設定していないローカル開発のときだけ通す。SSO を設定した本番相当の環境では
-           ルート自体が存在しない（未知のルートと見分けがつかない 404）。
-           これなら同僚は環境変数を足さずにクエリパラメータだけで使える。 */
+        /* 開発用の裏道（画面の ?unlockall）。dev ログイン中は誰でも（＝環境変数を足さずに
+           クエリパラメータだけで使える）、SSO を設定した環境ではオーナーだけ通す。
+           それ以外にはルート自体が存在しない（未知のルートと見分けがつかない 404）。
+           誰がいつ使ったかは残す。共有DBでは「自分で稼いだのか」が後から分からなくなるため。 */
         case 'POST /api/dev/unlockall':
-          r = Auth.DEV_LOGIN ? await API.postDevUnlockAll(user)
-                             : { status: 404, body: { error: `no route: ${method} ${route}` } };
+          if (!Auth.canDevUnlock(user)) { r = { status: 404, body: { error: `no route: ${method} ${route}` } }; break; }
+          console.log(`  [dev] unlockall by ${user.email}`);
+          r = await API.postDevUnlockAll(user);
           break;
         default: r = { status: 404, body: { error: `no route: ${method} ${route}` } };
       }
@@ -425,7 +427,8 @@ async function main() {
     console.log(`  認証  : ${Auth.google.enabled ? `Google SSO${Auth.google.hd ? ` (${Auth.google.hd} 限定)` : ''}`
       : 'dev ログイン（GOOGLE_CLIENT_ID 未設定のため）'}`);
     console.log(`  受信  : POST ${PUBLIC_URL}/v1/logs, /v1/metrics, /hooks/*`);
-    if (Auth.DEV_LOGIN) console.log(`  裏道  : ?unlockall で全解放できます（dev ログイン中のみ。SSO を設定すると消えます）`);
+    if (Auth.DEV_LOGIN) console.log(`  裏道  : ?unlockall で全解放できます（dev ログイン中は誰でも）`);
+    else if (Auth.unlockEmails.size) console.log(`  裏道  : ?unlockall はオーナー ${Auth.unlockEmails.size} 名だけ使えます（DEV_UNLOCK_EMAILS）`);
     console.log('');
   });
   setInterval(() => purgeOldSessions().catch(() => {}), 3600e3).unref();
