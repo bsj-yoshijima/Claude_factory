@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { waitForDb, one, pool } from './db.mjs';
 import { SCHEMA_VERSION } from '../db/version.mjs';
 import * as Auth from './auth.mjs';
-import { ingestLogs, ingestMetrics } from './ingest-otel.mjs';
+import { ingestLogs, ingestMetrics, purgeOldDedupKeys } from './ingest-otel.mjs';
 import { ingestHook, purgeOldSessions } from './ingest-hooks.mjs';
 import * as API from './api.mjs';
 import * as GD from './game-data.mjs';
@@ -431,7 +431,19 @@ async function main() {
     else if (Auth.unlockEmails.size) console.log(`  裏道  : ?unlockall はオーナー ${Auth.unlockEmails.size} 名だけ使えます（DEV_UNLOCK_EMAILS）`);
     console.log('');
   });
-  setInterval(() => purgeOldSessions().catch(() => {}), 3600e3).unref();
+  /* 掃除。どちらも「消えても困らない古い行」を落とすだけで、スキーマや重みのように
+     古いコードが壊すものではないので、起動処理から呼んでよい（migrate / syncWeights を
+     外したのとは事情が違う）。
+
+     起動時にも1回走らせるのが要点。Cloud Run はトラフィックがあってもインスタンスを
+     作り直すことがあり、そのたびにタイマーのカウントはゼロに戻る。起動時の1回があれば、
+     作り直された直後に必ず掃除される。 */
+  const sweep = () => Promise.all([
+    purgeOldSessions().catch(() => {}),      // 7日より古いセッション
+    purgeOldDedupKeys().catch(() => {}),     // 2日より古い重複排除キー
+  ]);
+  sweep().then(([, keys]) => { if (keys) console.log(`  掃除  : 古い重複排除キー ${keys} 行を削除しました`); });
+  setInterval(sweep, 3600e3).unref();
 }
 
 main().catch((e) => { console.error(`\n  起動に失敗しました:\n  ${e.message}\n`); process.exit(1); });

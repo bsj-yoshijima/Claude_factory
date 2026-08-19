@@ -1,0 +1,38 @@
+# gcloud に上げないもの（gcloud builds submit / gcloud run deploy --source）。
+#
+# ★ このファイルがあると gcloud は .gitignore を見なくなる。
+#    無視したいものは（node_modules や .env も含めて）全部ここに書く。
+#
+# 中身は .dockerignore と揃えてある（違うのは相手側のファイル名を除外する行だけ）。
+# 片方だけ直すと「ローカルの docker build では入らないのに Cloud Build では入る」
+# というズレが出る。
+
+# --- バージョン管理・秘密・生成物 ---
+.git/
+.gitignore
+node_modules/
+.env
+.env.*
+dev-server.log
+_*
+*.b64
+.DS_Store
+
+# --- 実行に要らないもの ---
+docs/                 # 11MB。設計メモとプロップ発注プロンプト
+test/
+tools/                # 絵の生成・検収スクリプト。Dockerfile も COPY していない
+.claude/
+docker-compose.yml
+README.md
+env.example
+Dockerfile
+.dockerignore
+
+# --- クライアントが読まない素材（合計 35MB）---
+# 参照しているのは assets/{rooms,props,objects,machines,ui,hats} だけ。
+# 下の3つは絵を作るための元画像とシートで、ゲームは一度も読まない。
+# 新しくアセットの種類を足したときは、ここに入っていないか確かめる。
+assets/prop-src/
+assets/prop-sheets/
+assets/mach-sheets/
