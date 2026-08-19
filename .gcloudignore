@@ -26,8 +26,13 @@ tools/                # 絵の生成・検収スクリプト。Dockerfile も CO
 docker-compose.yml
 README.md
 env.example
-Dockerfile
 .dockerignore
+
+# ★ Dockerfile は絶対に除外しない。
+#    Cloud Build はアップロードされたコンテキストの中の Dockerfile を読むので、
+#    ここに書くとビルドが
+#      unable to evaluate symlinks in Dockerfile path: lstat /workspace/Dockerfile
+#    で落ちる（一度やった）。
 
 # --- クライアントが読まない素材（合計 35MB）---
 # 参照しているのは assets/{rooms,props,objects,machines,ui,hats} だけ。
