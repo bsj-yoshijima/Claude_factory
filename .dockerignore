@@ -1,0 +1,26 @@
+# docker build のコンテキストに含めないもの。
+# 中身は .gcloudignore と揃えてある（片方だけ直すとローカルと Cloud Build でズレる）。
+
+.git/
+node_modules/
+.env
+.env.*
+dev-server.log
+_*
+*.b64
+.DS_Store
+
+docs/
+test/
+tools/
+.claude/
+docker-compose.yml
+README.md
+env.example
+Dockerfile
+.gcloudignore
+
+# クライアントが読まない素材（合計 35MB）
+assets/prop-src/
+assets/prop-sheets/
+assets/mach-sheets/

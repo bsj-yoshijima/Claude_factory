@@ -60,6 +60,18 @@ npm install && npm run dev
 **取り込みトークンは DB ごとに別物**なので、A と B を行き来する人は `/setup` で
 `OTEL_EXPORTER_OTLP_HEADERS` を都度差し替える（トークンは DB のテーブルの行のため）。
 
+### C. サーバでホスティングする（Cloud Run）
+
+B まで済んでいれば、あとはアプリを乗せるだけで**ローカルでサーバを立てる必要がなくなる**。
+DB は移さないのでデータもユーザーもそのまま引き継がれ、変わるのは `PUBLIC_URL` だけ。
+
+```bash
+gcloud run deploy claude-factory --source . --region asia-northeast1 --max-instances 1
+```
+
+`--max-instances 1` は必須（OAuth の state と直近の query_source をプロセス内に持っているため）。
+手順は [docs/deploy.md](docs/deploy.md)。
+
 ### 停止 / 再起動
 
 ```bash
