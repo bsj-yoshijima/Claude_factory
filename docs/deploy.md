@@ -137,11 +137,19 @@ curl -s "$URL/api/health"
 
 | # | 項目 | 影響 |
 |---|---|---|
-| 1 | **`ingest_seen` の刈り取り**（`docs/multiuser.md` の残件4） | 5日で36,000行・8MB。DB の約半分がこれ。毎時タイマーは `min-instances=0` だと動かないので、**リクエスト契機**にする |
-| 2 | `dev-server.log` への追記（[index.mjs](../server/index.mjs) の `recordDeath`） | Cloud Run では消えるだけだが、無意味にメモリを使う。標準出力に寄せる |
-| 3 | `oauthStates` / `lastQs` を DB か Cookie に移す | これができるまで `--max-instances 1` から出られない |
-| 4 | GitHub Actions での自動デプロイ | 手動 `gcloud run deploy` が通ってから。Workload Identity 連携で鍵ファイルを置かない |
-| 5 | dev / prod の2環境化 | Neon のブランチ機能で DB を分け、Cloud Run サービスを2つにする |
+| 1 | `dev-server.log` への追記（[index.mjs](../server/index.mjs) の `recordDeath`） | Cloud Run では消えるだけだが、無意味にメモリを使う。標準出力に寄せる |
+| 2 | `oauthStates` / `lastQs` を DB か Cookie に移す | これができるまで `--max-instances 1` から出られない |
+| 3 | GitHub Actions での自動デプロイ | 手動 `gcloud run deploy` が通ってから。Workload Identity 連携で鍵ファイルを置かない |
+| 4 | dev / prod の2環境化 | Neon のブランチ機能で DB を分け、Cloud Run サービスを2つにする |
+
+### 古い行の掃除について
+
+`agent_sessions`（7日）と `ingest_seen`（2日）は、**起動時に1回 + 毎時**で掃除される。
+
+`min-instances=0` でも、誰かが工場の画面を開いていればブラウザが5秒おきに叩くので
+インスタンスは起きたままで、毎時タイマーも回る。加えて Cloud Run はトラフィックが
+あってもインスタンスを作り直すことがあり、そのたびにタイマーのカウントは
+ゼロに戻るので、**起動時にも1回走らせて**取りこぼさないようにしてある。
 
 ## ロールバック
 

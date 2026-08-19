@@ -194,6 +194,21 @@ async function filterSeen(userId, keys) {
   return new Set(r.rows.map((x) => x.dedup_key));
 }
 
+/**
+ * 古い dedup_key を捨てる（起動時と定期実行）。
+ *
+ * ingest_seen は「もう数えたイベント」の印で、増える一方だと DB の大半を占める
+ * （実測: 5日で 43,000行 9.8MB。工場の実体データは合計1MB弱しかない）。
+ *
+ * 再送は送信側のリトライなので数秒〜数分のうちに来る。2日前のイベントが今さら
+ * 再送されてくることはないので、それより古い印は二度と参照されない。
+ * 保持を短くしすぎると「長時間の停止をまたいだ再送」を拾えなくなるので2日にしてある。
+ */
+export async function purgeOldDedupKeys() {
+  const r = await q(`DELETE FROM ingest_seen WHERE at < now() - interval '2 days'`);
+  return r.rowCount;
+}
+
 /* ================================ logs ================================ */
 export async function ingestLogs(userId, payload, audit) {
   const recs = [];
