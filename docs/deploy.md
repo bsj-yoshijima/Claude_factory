@@ -75,7 +75,16 @@ npm run db:migrate      # .env の DATABASE_URL = Neon を見る
 `PUBLIC_URL` は Cloud Run の URL だが、URL は作られるまで分からない。
 **1回目は仮で上げて、URL が出てから入れ直す。**
 
+秘密でない値も `.env` から読ませて、手でコピペしない（履歴に残さない）。
+
 ```bash
+CID=$(grep '^GOOGLE_CLIENT_ID=' .env | sed 's/^[^=]*=//')
+HD=$(grep '^GOOGLE_HD=' .env | sed 's/^[^=]*=//')
+UNLOCK=$(grep '^DEV_UNLOCK_EMAILS=' .env | sed 's/^[^=]*=//')
+# 先頭の ^|^ で区切り文字をパイプに変える。DEV_UNLOCK_EMAILS の値にカンマが
+# 入っているので、既定のカンマ区切りのままだと gcloud が別の変数として解釈して落ちる
+ENVS="^|^DEV_LOGIN=0|GOOGLE_CLIENT_ID=${CID}|GOOGLE_HD=${HD}|DEV_UNLOCK_EMAILS=${UNLOCK}"
+
 gcloud run deploy claude-factory \
   --source . \
   --region asia-northeast1 \
@@ -83,12 +92,16 @@ gcloud run deploy claude-factory \
   --max-instances 1 \
   --min-instances 0 \
   --memory 512Mi \
-  --set-env-vars 'GOOGLE_CLIENT_ID=…apps.googleusercontent.com,GOOGLE_HD=bravesoft.co.jp,DEV_LOGIN=0,DEV_UNLOCK_EMAILS=…' \
+  --set-env-vars "$ENVS" \
   --set-secrets 'DATABASE_URL=DATABASE_URL:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest'
 ```
 
 `--source .` は Dockerfile を見て Cloud Build 側でビルドしてくれる（ローカルに docker は不要）。
-上がる量は `.gcloudignore` が効いて **95MB → 49MB**。
+上がる量は `.gcloudignore` が効いて **95MB → 48MB**。
+
+> **`.gcloudignore` に `Dockerfile` を書かないこと。** Cloud Build はアップロードされた
+> コンテキストの中の Dockerfile を読むので、除外すると
+> `unable to evaluate symlinks in Dockerfile path: lstat /workspace/Dockerfile` で落ちる。
 
 ## 5. URL を確定させる
 
@@ -101,6 +114,12 @@ gcloud run services update claude-factory --region asia-northeast1 \
 
 `PUBLIC_URL` が `https://` になると Cookie に Secure が付き、`/setup` が配る OTLP の
 エンドポイントも自動でこの URL になる（[index.mjs](../server/index.mjs) の `SECURE`）。
+
+> **Cloud Run は URL を2形式発行する。** `status.url`（`claude-factory-<ハッシュ>-an.a.run.app`）と、
+> デプロイ出力に出る `claude-factory-<プロジェクト番号>.asia-northeast1.run.app`。どちらも同じ
+> サービスに届く。OAuth のリダイレクト先は `PUBLIC_URL` から組み立てられるので、
+> **`PUBLIC_URL` に入れたほうを正とし、そちらをリダイレクト URI に登録する**
+> （両方登録しておくとどちらで開いてもログインできる）。
 
 ## 6. OAuth のリダイレクト URI を足す
 
