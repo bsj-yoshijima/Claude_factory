@@ -82,9 +82,9 @@ npm install && npm run db:up && npm run dev
 | `server/craft.mjs` | 製造エンジン（サーバ権威） |
 | `server/api.mjs` | ゲーム API。💰・図鑑（`collection`）・在庫を書き換えるのはここだけ |
 | `server/auth.mjs` | Google SSO / dev ログイン / 取り込みトークン |
-| `server/db.mjs` | 接続プールと起動時のマイグレーション（`schema.sql` を流す） |
+| `server/db.mjs` | 接続プールとトランザクション。**スキーマは流さない**（`tools/migrate.mjs` の仕事） |
 | `server/names.mjs` | 表示名と工場の既定名。ここだけが「◯◯の工場」を組み立てる |
-| `db/schema.sql` | スキーマ。全部冪等なので起動のたびに流している |
+| `db/schema.sql` | スキーマ。全部冪等。流すのは `npm run db:migrate` だけで、サーバの起動時には流さない |
 
 ## 設計上の要点
 
@@ -101,7 +101,7 @@ npm install && npm run db:up && npm run dev
 - サイズは **数KB/日/人**。3桁減る
 - 旧実装の「ツールイベント20万件でサイレント打ち切り」が構造的に消える
 
-生ペイロードはデバッグ用に短期間だけオブジェクトストレージへ置く想定（本実装では未実装）。
+生ペイロードはデバッグ用に短期間だけオブジェクトストレージへ置く想定だったが、**PoC では不要と判断した**（2026-08）。取り込みの解釈を間違えたときに遡って直せなくなる点だけ承知しておく → [scale.md](scale.md)
 
 ### 2. 製造をサーバへ移した
 
