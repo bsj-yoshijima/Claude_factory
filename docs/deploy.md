@@ -157,7 +157,7 @@ curl -s "$URL/api/health"
 | # | 項目 | 影響 |
 |---|---|---|
 | 1 | `dev-server.log` への追記（[index.mjs](../server/index.mjs) の `recordDeath`） | Cloud Run では消えるだけだが、無意味にメモリを使う。標準出力に寄せる |
-| 2 | `oauthStates` / `lastQs` を DB か Cookie に移す | これができるまで `--max-instances 1` から出られない |
+| 2 | `oauthStates` / `lastQs` を DB か Cookie に移す | これができるまで `--max-instances 1` から出られない。**人数を増やすときの最初の前提**（→ [scale.md](scale.md)） |
 | 3 | dev / prod の2環境化 | Neon のブランチ機能で DB を分け、Cloud Run サービスを2つにする |
 
 自動デプロイ（GitHub Actions + Workload Identity）は**やらないことにした**。マージと
