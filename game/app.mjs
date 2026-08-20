@@ -217,10 +217,19 @@ loadGame().then(async (ok)=>{
   updateDoneBtn(); renderCraft(); pollWp();
   // 盤面と所持品が載り切ったのでここで目隠しを外す（絵だけ出て中身が空の瞬間を見せない）
   window.__bootDone?.();
-  /* 5秒ごと。OTLP の logs バッチがちょうど5秒間隔なので、
-     これより速く叩いても新しい値は存在しない（＝同じ値を取り直すだけ）。
+  /* 10秒ごと。以前は5秒だったが、この画面が見せている数字はどれも
+     「数十分〜数時間で動くもの」なので、5秒に速める意味がなかった。
+
+     製造の時間軸（実測）: 稼ぎは平均 34 WP/分・p90 71 WP/分、上限は 200 WP/分。
+     2マス機は 4000 WP なので、埋まるまで 0.3〜2時間かかる。バーが1回のポーリングで
+     進むのは 0.07〜0.83% で、幅200pxなら 0.1〜1.7px。5秒と10秒の差は見えない。
+     完成品の通知が最大10秒遅れるが、2時間待った末の10秒なので実害がない。
+     キャラの入退場も判定の閾値が 20秒〜5分なので、もともと誤差の範囲。
+
+     代わりに Cloud Run の課金対象 CPU 時間がほぼ半分になる（getState はクエリ12本で
+     約390ms かかる。無料枠は 18万 vCPU秒/月）。
      裏に回っている間は pollWp 側で止まる。 */
-  setInterval(pollWp, 5000);
+  setInterval(pollWp, 10000);
   document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollWp(); });
   const q=new URLSearchParams(location.search);
   /* ?unlockall … 開発用の裏道。全背景・全床・全シリーズ・全在庫・💰 を解放する。

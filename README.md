@@ -271,7 +271,7 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
                                         │  WP集計・製造判定(craft.mjs)・図鑑登録
                                         ▼
                               /api/state ほか（JSON）
-                                        │  5秒ポーリング
+                                        │  10秒ポーリング
                                         ▼
         factory-phaser.html（器）→ game/app.mjs → game/ui/*   画面
                                     game/scene/*.mjs（Phaser のシーン）

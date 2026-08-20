@@ -83,9 +83,11 @@ export function openToday(){
         }).join('')}</div>`;
     },
     actions:[{label:`${uic('collection')} 図鑑を見る`,kind:'ghost',on:()=>openCollection()}] });
-  // 開いている間だけ記録を取りに行く（閉じたら止める）
+  // 開いている間だけ記録を取りに行く（閉じたら止める）。
+  // 間隔は盤面のポーリング(app.mjs)と揃える。製造は数十分〜数時間の時間軸なので、
+  // ダイアログを開けているあいだに増える件数はたかだか1件
   const pull=()=>{ if(_dlg!==dlg){ clearInterval(t); return; } fetchMadeToday(dlg); };
-  const t=setInterval(pull, 5000); pull();
+  const t=setInterval(pull, 10000); pull();
   return dlg;
 }
 
