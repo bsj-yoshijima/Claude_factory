@@ -158,8 +158,11 @@ curl -s "$URL/api/health"
 |---|---|---|
 | 1 | `dev-server.log` への追記（[index.mjs](../server/index.mjs) の `recordDeath`） | Cloud Run では消えるだけだが、無意味にメモリを使う。標準出力に寄せる |
 | 2 | `oauthStates` / `lastQs` を DB か Cookie に移す | これができるまで `--max-instances 1` から出られない |
-| 3 | GitHub Actions での自動デプロイ | 手動 `gcloud run deploy` が通ってから。Workload Identity 連携で鍵ファイルを置かない |
-| 4 | dev / prod の2環境化 | Neon のブランチ機能で DB を分け、Cloud Run サービスを2つにする |
+| 3 | dev / prod の2環境化 | Neon のブランチ機能で DB を分け、Cloud Run サービスを2つにする |
+
+自動デプロイ（GitHub Actions + Workload Identity）は**やらないことにした**。マージと
+デプロイを切り離して「意図したタイミングで出す」ほうが運用に合うため、
+`bash tools/deploy.sh` とスキル（`.claude/skills/deploy`）から手元で叩く形にしている。
 
 ### 古い行の掃除について
 
@@ -169,6 +172,48 @@ curl -s "$URL/api/health"
 インスタンスは起きたままで、毎時タイマーも回る。加えて Cloud Run はトラフィックが
 あってもインスタンスを作り直すことがあり、そのたびにタイマーのカウントは
 ゼロに戻るので、**起動時にも1回走らせて**取りこぼさないようにしてある。
+
+## 費用の測り方（一度間違えたので手順を残す）
+
+リクエストログから測れる。ただし **レイテンシの単純合計は課金額の目安にならない。**
+Cloud Run は**同時に処理したぶんを1インスタンス時間として数える**ので、
+区間を重ね合わせて測る必要がある。
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="claude-factory" AND logName:"requests"' \
+  --freshness=90m --limit=5000 --format='csv[no-heading](timestamp,httpRequest.latency)'
+```
+
+`timestamp` は**完了時刻**なので、開始は `timestamp - latency`。この区間を
+マージした総和が課金対象に近い。
+
+実測（稼働88分・工場画面を1回開いた状態）:
+
+| | 値 |
+|---|---|
+| レイテンシの単純合計 | 464秒 |
+| **区間をマージした実時間** | **205秒**（単純合計の 2.3分の1） |
+| 月換算 | 約10万秒 / 無料枠 18万 vCPU秒 → **56%** |
+
+夜間・休日は claude も止まるので、実際はこれより小さい。
+
+### 静的ファイルの 304 が 189ms かかるのは正常
+
+同じ実測での内訳:
+
+| 種別 | 回数 | 1回 | 転送量 |
+|---|---|---|---|
+| assets 304 | 1,111 | 189ms | 0.2MB |
+| assets 200 | 43 | 471ms | 46.9MB |
+
+**304 は本文を読まずに返しているのに189ms**かかる。サーバの実装が遅いのではなく、
+**単一 vCPU（`--max-instances 1`）に500超のリクエストが同時に来て CPU を分け合う**ため。
+1件あたりの実処理は1ms未満でも、同時数で割られてレイテンシが膨らむ。
+
+課金は重ね合わせで数えるので、**この189msは費用にはほぼ影響しない**（上の205秒がその答え）。
+初回ロードが数秒遅くなるだけで、そこには起動中の目隠しが出る。直すなら
+アセットのリクエスト数自体を減らす（スプライトシート化）か Cloud CDN を前に置く。
 
 ## ロールバック
 
