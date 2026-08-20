@@ -29,6 +29,17 @@
 | ファイル | 中身 |
 |---|---|
 | [wp.md](wp.md) | WP（作業ポイント）の算出と経済バランス |
-| [multiuser.md](multiuser.md) | マルチユーザー版のデータ構造とAPI |
+| [multiuser.md](multiuser.md) | マルチユーザー版のデータ構造とAPI。設計の判断もここ |
 | [skin-system-contract.md](skin-system-contract.md) | マスコットの見た目（スキン）の取り決め |
 | [task-mat-prod-icons.md](task-mat-prod-icons.md) | 原材料・製品アイコンの作業メモ |
+
+## 運用（サーバに乗せて動かす）
+
+| ファイル | 中身 |
+|---|---|
+| [deploy.md](deploy.md) | **Cloud Run へのデプロイ**。手順 / 費用の測り方 / ロールバック |
+| [scale.md](scale.md) | **人数を増やしたときどこが先に詰まるか**（実測と優先順位） |
+| [phase1-setup.md](phase1-setup.md) | 共有 DB + Google SSO の準備（**完了済み**。Neon と OAuth の手順は今も有効） |
+
+デプロイは `bash tools/deploy.sh`（事前チェックのみ）→ `--deploy` で実行する。
+スキル（`.claude/skills/deploy`）から「デプロイして」でも同じものが走る。

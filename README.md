@@ -176,14 +176,20 @@ npm run dev                           # 再起動
 Claude Code から OpenTelemetry で送られてくる実績値を受けて WP（Work Point）を集計する。
 集計結果は 🏠マイページ・🏆リーダーボードで見る（検証用の `/metrics` ページは廃止した）。
 
-有効化するには `~/.claude/settings.json` の `env` に以下を入れて、**新しい** claude セッションを開始する（起動中のセッションには反映されない）。
+有効化するには **`/setup` に出る JSON** を `~/.claude/settings.json` にマージして、
+**新しい** claude セッションを開始する（起動中のセッションには反映されない）。
+
+**この JSON を手で書かないこと。** 取り込みトークンは DB のテーブルの行なので、
+`/setup` が自分のぶんを埋めて配る。ここに載せるのは中身の説明のためで、
+`…` の2つは `/setup` の出力をそのまま使う。
 
 ```json
 "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
 "OTEL_METRICS_EXPORTER": "otlp",
 "OTEL_LOGS_EXPORTER": "otlp",
 "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+"OTEL_EXPORTER_OTLP_ENDPOINT": "…",          // サーバの URL。ローカルなら http://localhost:4321
+"OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer cf_…",   // 取り込みトークン。無いと 401
 "OTEL_METRIC_EXPORT_INTERVAL": "10000",
 "OTEL_LOGS_EXPORT_INTERVAL": "5000",
 "OTEL_LOG_USER_PROMPTS": "0",
@@ -191,6 +197,9 @@ Claude Code から OpenTelemetry で送られてくる実績値を受けて WP�
 "OTEL_LOG_TOOL_DETAILS": "0",
 "OTEL_LOG_TOOL_CONTENT": "0"
 ```
+
+`/setup` は `hooks`（`SessionStart` / `UserPromptSubmit` / `Stop` / `SessionEnd`）も一緒に配る。
+工場のキャラの在/不在はそれで決まる。
 
 `http/json` が使えるので **OTel Collector は不要**。`server/ingest-otel.mjs` が OTLP を直接受ける。
 
@@ -303,7 +312,7 @@ Claude Code ──OTLP/JSON + hooks──▶ server/index.mjs ──▶ Postgres
 | `docs/archive/index.html` / `docs/archive/machine-concepts.html` | 初期のシンプル版（カードUI）／機械のコンセプトボード |
 | `docs/decks/proposal.html` | **企画書（現行）**。1枚もので画像を焼き込んであるので単体で配れる。数値は実装から拾っているので、経済バランスや素材数を変えたら直す |
 | `docs/decks/slides.html` / `docs/decks/Claude-Factory.pdf` | **発表スライド（現行・全10枚）**。← → で移動。PDFは印刷CSSからの書き出しで、`tools/make_slides_pdf.mjs` で作り直せる |
-| `tools/preview/rooms.html` | 素材ビューア。背景32にグリッドと床の規定枠を重ねて規格ずれを見る／製造機・プロップ・被り物・オブジェクトをタブで一覧（`http://localhost:4321/tools/preview/rooms.html`。表示専用） |
+| `tools/preview/rooms.html` | 素材ビューア。背景32にグリッドと床の規定枠を重ねて規格ずれを見る／製造機・プロップ・被り物・オブジェクトをタブで一覧（`http://localhost:4321/tools/preview/rooms.html`。表示専用。**ローカル限定** — `tools/` はデプロイに含めていないので本番URLでは404） |
 | `docs/archive/proposal.html` / `docs/archive/slides.html` / `docs/archive/slides-en.html` / `docs/archive/Claude-Factory.pdf` | 旧企画書（2026-07-08 ハッカソン版。`~/.claude/sessions` を読む単一ユーザーのダッシュボードだった頃）・発表スライド |
 | `docs/README.md` | **docs/ の索引**。どの資料がどこにあるか、絵の発注はどれを読むか |
 | `docs/shells/` | 絵を発注するときに添付する殻（下絵）。部屋・製造機・装飾品ぶん |
