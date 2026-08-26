@@ -7,6 +7,13 @@ import { G } from '../state.mjs';
 export function updateBadge(){ const m=document.getElementById('shopMoney');
   if(m) m.innerHTML=yen(Math.floor(G.money)); }
 
+/* ☰メニューのリーダーボード項目の出し分け。
+   リーダーボードは同じグループの人だけを並べるものなので、どのグループにも
+   入っていない人には項目そのものを出さない（開いて空の表を見せない）。
+   updateBadge と同じく pollWp から毎回呼ばれる冪等な同期。 */
+export function syncLbMenu(){ const el=document.getElementById('lbBtn');
+  if(el) el.style.display = G.hasGroup ? '' : 'none'; }
+
 /* UI機能のドット絵アイコン（16×16 を原寸。lg=true は整数2倍の32px）。
    ダイアログの見出し・タブ・ボタン・説明文など「HTMLを置ける場所」だけで使う。
    toast() は textContent、title 属性も文字列しか入らないので、そこは絵文字のまま。

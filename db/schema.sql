@@ -44,6 +44,46 @@ CREATE TABLE IF NOT EXISTS identity_mismatches (
   at          timestamptz NOT NULL DEFAULT now()
 );
 
+-- ============================== グループ ==============================
+-- リーダーボードは「自分と同じグループに居る人」だけを並べる。
+-- どのグループにも入っていない人にはリーダーボードそのものを出さない
+-- （☰メニューの項目ごと隠し、API 側も 403 で断る）。
+--
+-- ★ users に group_id を1列足すのではなく中間テーブルにしてある。
+--   いまの運用は「1人1グループ」だが、将来ひとりが複数グループに入る可能性があるため。
+--   下の UNIQUE 索引が「1人1グループ」を担保していて、複数所属を許す日は
+--   この索引を1つ落とすだけでよい（テーブルもクエリも作り直さなくて済む）。
+CREATE TABLE IF NOT EXISTS groups (
+  id         bigserial PRIMARY KEY,
+  -- 既定グループを名前で引くので一意にする。将来グループ作成・招待を作るときも、
+  -- 同名グループが並ぶと招待画面でどちらか判別できない
+  name       text NOT NULL UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+  group_id  bigint NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id   bigint NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+  joined_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, user_id)
+);
+-- 「1人1グループ」の制約。複数所属を許すときはこの索引を DROP するだけ
+CREATE UNIQUE INDEX IF NOT EXISTS group_members_one_per_user ON group_members(user_id);
+
+-- 既定グループ。アカウント作成時にここへ自動で入れる（server/auth.mjs の DEFAULT_GROUP）。
+-- 社外展開でグループ作成・招待を作るまでは、全員がこの1グループに入る。
+INSERT INTO groups(name) VALUES ('bravesoft') ON CONFLICT (name) DO NOTHING;
+
+-- グループを導入する前からいた人を既定グループへ入れる。
+-- ★ NOT EXISTS で「group_members がまだ空のときだけ」動くようにしてある。
+--   schema.sql は起動のたびに丸ごと流れるので、無条件で書くと将来グループから
+--   外した人が再起動のたびに戻ってしまう。1行でも入ればこの INSERT は二度と発火しない。
+INSERT INTO group_members(group_id, user_id)
+SELECT g.id, u.id FROM groups g, users u
+ WHERE g.name = 'bravesoft'
+   AND NOT EXISTS (SELECT 1 FROM group_members)
+ON CONFLICT DO NOTHING;
+
 -- ============================== 工場 ==============================
 CREATE TABLE IF NOT EXISTS factories (
   user_id      bigint PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

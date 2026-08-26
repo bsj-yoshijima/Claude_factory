@@ -388,7 +388,9 @@
     <div class="msep"></div>
     <div class="mh">記録</div>
     <div class="mi" id="collectionBtn"><img class="mic" src="assets/ui/icons/collection.png" alt="">図鑑</div>
-    <div class="mi" id="lbBtn"><img class="mic" src="assets/ui/icons/leaderboard.png" alt="">リーダーボード</div>
+    <!-- 既定は非表示。同じグループの人だけを並べるものなので、グループに入っている人にだけ
+         syncLbMenu() が出す（先に出しておくと未所属の人に一瞬見えてしまう） -->
+    <div class="mi" id="lbBtn" style="display:none"><img class="mic" src="assets/ui/icons/leaderboard.png" alt="">リーダーボード</div>
     <div class="msep"></div>
     <!-- セッションは Cookie で30日保持される。アカウントを切り替える唯一の導線がここ。
          GET でセッションを破棄して /login に戻る（server/index.mjs の /auth/logout） -->

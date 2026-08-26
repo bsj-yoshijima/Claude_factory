@@ -63,6 +63,7 @@ export async function loadGame(){
       actions:[{label:'🔄 再読み込み',kind:'primary',on:()=>location.reload()}] });
     return false;
   }
+  G.hasGroup=!!(NET.last.me&&NET.last.me.hasGroup);   // ☰メニューの出し分けに使う
   applyFactory(NET.last.factory);
   const d=await NET.call('GET','/api/collection');
   if(d){ const c=craftState();

@@ -9,4 +9,4 @@
 //
 // 逆に、コードが無くても困らない変更（コメント修正・インデックスの微調整など）では
 // 上げなくてよい。上げるほどメンバーの起動が止まる回数が増える。
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;

@@ -4,7 +4,11 @@ import { keyOfSlots } from './data/craft.mjs';
 
 export let G={ money:0, machines:[{variant:'s2',lvl:1}], decos:{},
         bg:'auto', floor:'wood', bgOwned:['auto'], floorOwned:['wood'], skins:{}, skinOwned:[], seriesOwned:[], emojiDecos:[], layout:[],
-        stock:{machine:{},prop:{},deco:{}}, lastT:null };
+        stock:{machine:{},prop:{},deco:{}}, lastT:null,
+        // グループに入っているか（/api/state の me.hasGroup）。
+        // false の間は ☰メニューからリーダーボードを隠す。既定は false ＝
+        // 状態を取れていないうちは出さない（一瞬出てから消えるのを防ぐ）
+        hasGroup:false };
 /* =========================================================================
    NET — データ層。工場のデータはすべてサーバ(server/index.mjs)が持つ。
      ・💰 / 図鑑 / 在庫 / 製造 はサーバが唯一の真実。G はその写し

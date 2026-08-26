@@ -64,7 +64,11 @@ export async function getState(user, query) {
 
   const [wpTotal, wpToday, agents, pending, head, sales, madeToday, live] = await Promise.all([
     totalWp(user.id), todayWp(user.id), activeAgents(user.id), pendingCount(user.id),
-    one(`SELECT rev, money FROM factories WHERE user_id=$1`, [user.id]),
+    // グループ所属の有無もここで一緒に引く（別クエリを増やさないため）。
+    // クライアントはこれを見て ☰メニューのリーダーボード項目を出し分ける。
+    one(`SELECT f.rev, f.money,
+                EXISTS (SELECT 1 FROM group_members g WHERE g.user_id=$1) AS has_group
+           FROM factories f WHERE f.user_id=$1`, [user.id]),
     one(`SELECT COALESCE(amount,0) AS a FROM sales_daily WHERE user_id=$1 AND day=$2`,
       [user.id, jstDay()]),
     one(`SELECT COUNT(*)::int AS n FROM products_made
@@ -78,7 +82,7 @@ export async function getState(user, query) {
   const body = {
     ts: Date.now(),
     rev,
-    me: { id: user.id, email: user.email, name: user.name },
+    me: { id: user.id, email: user.email, name: user.name, hasGroup: !!head?.has_group },
     wp: { total: wpTotal, today: wpToday },
     today: { made: Number(madeToday?.n || 0), sales: Number(sales?.a || 0) },
     money: Number(head?.money || 0),
@@ -301,7 +305,13 @@ const PERIODS = {
 const LB_METRICS = ['efficiency', 'prs', 'commits', 'lines', 'skill', 'agent',
   'customAgent', 'delegationPct', 'activeDays'];
 
-export async function getLeaderboard(_user, query) {
+export async function getLeaderboard(user, query) {
+  /* グループ未所属の人にはリーダーボードを出さない。
+     画面側は ☰メニューの項目ごと隠しているので通常ここには来ないが、
+     URL を直接叩かれても他人の成績が漏れないようサーバ側でも断る。 */
+  const mine = await one(`SELECT 1 AS x FROM group_members WHERE user_id=$1 LIMIT 1`, [user.id]);
+  if (!mine) return bad('グループに参加していないため、リーダーボードは表示できません', 403);
+
   const period = PERIODS[query.get('period')] ? query.get('period') : 'week';
   const [from, to] = PERIODS[period]();
   const rows = await all(
@@ -318,7 +328,14 @@ export async function getLeaderboard(_user, query) {
        FROM scorecard_daily s JOIN users u ON u.id = s.user_id
                               LEFT JOIN factories fa ON fa.user_id = u.id
       WHERE s.day BETWEEN $1 AND $2
-      GROUP BY u.id, fa.name`, [from, to]);
+        -- 自分と同じグループに居る人だけに絞る。
+        -- ★ JOIN group_members ではなく EXISTS で書くこと。JOIN にすると、
+        --   複数所属を許した将来に「2つのグループを共有している人」の行が
+        --   2重になり、SUM が倍になる（1人1グループの今は同じ結果に見えるので気づけない）。
+        AND EXISTS (SELECT 1 FROM group_members a
+                      JOIN group_members b ON b.group_id = a.group_id
+                     WHERE a.user_id = $3 AND b.user_id = u.id)
+      GROUP BY u.id, fa.name`, [from, to, user.id]);
 
   // 効率スコア。最低成果フィルタが無いと「3行しか書いていない人」が1位になる（docs/wp.md §9）
   const EFF = { removed: 0.3, prLines: 150, scale: 1000, minPrs: 1, minLines: 100 };
