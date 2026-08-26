@@ -24,6 +24,12 @@ export const google = {
 /** ローカル検証用のログイン。本番では必ず false にする */
 export const DEV_LOGIN = process.env.DEV_LOGIN !== '0' && !google.enabled;
 
+/* アカウントを作ったときに自動で入れるグループ。
+   いまは社内メンバーしか使っていないので、全員 bravesoft に入る。
+   社外展開でグループ作成・招待の機能を作ったら、ここを空にして自動追加を止める
+   （空文字 = 自動追加しない ＝ 招待されるまでリーダーボードは出ない）。 */
+export const DEFAULT_GROUP = (process.env.DEFAULT_GROUP ?? 'bravesoft').trim();
+
 /* 開発用の裏道（画面の ?unlockall）を使えるオーナー。
    SSO を設定すると dev ログインが無効になり、裏道も一緒に閉じる。ただし共有DBでも
    図鑑や製造機のバリエーションを見て回りたいので、ここに挙げた人にだけ開けておく。
@@ -53,7 +59,10 @@ export async function upsertUser({ email, googleSub = null, name = '' }) {
        ON CONFLICT (email) DO UPDATE
          SET google_sub = COALESCE(EXCLUDED.google_sub, users.google_sub),
              name       = CASE WHEN EXCLUDED.name <> '' THEN EXCLUDED.name ELSE users.name END
-       RETURNING *`,
+       RETURNING *, (xmax = 0) AS created`,
+      /* ★ xmax = 0 は「この行はいま INSERT された」の意味（更新された行には
+         書き換えたトランザクションIDが入るので 0 にならない）。upsertUser は
+         ログインのたびに走るため、これが無いと「新規作成のとき」を区別できない。 */
       [mail, googleSub, name])).rows[0];
     // 工場を1つ持たせる（最初の1台＝2マス機は在庫に入れておく）。
     // 工場名は作成時に「◯◯の工場」を入れておく。以後 DB の値がそのまま唯一の真実で、
@@ -62,6 +71,17 @@ export async function upsertUser({ email, googleSub = null, name = '' }) {
       `INSERT INTO factories(user_id, name, stock)
        VALUES ($1, $2, '{"machine":{"s2":1},"prop":{},"deco":{}}'::jsonb)
        ON CONFLICT (user_id) DO NOTHING`, [u.id, defaultFactoryName(u)]);
+    /* 既定グループへ入れる。★ アカウントを作った「そのとき」だけ。
+       ログインのたびに入れ直すと、グループから外した人が次のログインで戻ってしまい、
+       あとで招待制にしたときに「外せないメンバー」ができる。 */
+    if (u.created && DEFAULT_GROUP) {
+      await c.query(`INSERT INTO groups(name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
+        [DEFAULT_GROUP]);
+      await c.query(
+        `INSERT INTO group_members(group_id, user_id)
+         SELECT id, $2 FROM groups WHERE name=$1 ON CONFLICT DO NOTHING`,
+        [DEFAULT_GROUP, u.id]);
+    }
     return u;
   });
 }

@@ -14,7 +14,7 @@ import { openLb } from './ui/leaderboard.mjs';
 import { morphInto } from './ui/morph.mjs';
 import { openMyPage } from './ui/mypage.mjs';
 import { renderPalette, syncEditMode, toggleEditMode } from './ui/palette.mjs';
-import { uic, updateBadge } from './ui/parts.mjs';
+import { syncLbMenu, uic, updateBadge } from './ui/parts.mjs';
 import { openRecipes } from './ui/recipes.mjs';
 import { openShop } from './ui/shop.mjs';
 
@@ -212,6 +212,7 @@ loadGame().then(async (ok)=>{
   if(!ok){ window.__bootDone?.(); return; }          // サーバに繋がらない旨は loadGame が出している
   G.lastT=Date.now();
   await waitScene(); applyOwned(); updateBadge();
+  syncLbMenu();   // グループ未所属ならリーダーボードの項目を出さない（既定は非表示）
   setInterval(syncEditMode, 1000); syncEditMode();   // Eキー・移動モードでの編集ON/OFFに追従
   if(window.__scene&&window.__scene.refreshMachineBadges) window.__scene.refreshMachineBadges();
   updateDoneBtn(); renderCraft(); pollWp();

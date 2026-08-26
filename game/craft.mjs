@@ -7,7 +7,7 @@ import { G, craftState, machState, machines } from './state.mjs';
 import { openCollection } from './ui/collection.mjs';
 import { _dlg, openDialog, toast } from './ui/dialog.mjs';
 import { morphInto } from './ui/morph.mjs';
-import { machIcon, matRow, prodCard, uic, updateBadge, yen } from './ui/parts.mjs';
+import { machIcon, matRow, prodCard, syncLbMenu, uic, updateBadge, yen } from './ui/parts.mjs';
 
 export let wpState={ total:0, today:0, ok:false, scorecard:[] };
 export let pendingCount=0;
@@ -20,6 +20,9 @@ export async function pollWp(){
   const d=await NET.call('GET','/api/state?rev='+NET.rev);
   if(!d){ wpState.ok=false; return; }
   NET.last=d;
+  // グループ所属は滅多に変わらないが、後から追加された人がリロードなしで
+  // リーダーボードを使えるよう、毎回の状態取得で追従させる
+  G.hasGroup=!!(d.me&&d.me.hasGroup);
   wpState={ total:d.wp.total, today:d.wp.today, ok:true, scorecard:wpState.scorecard };
   pendingCount=d.pending;
   if(d.factory){ applyFactory(d.factory); }      // 版が変わったときだけ来る
@@ -30,7 +33,7 @@ export async function pollWp(){
     for(const m of (d.machines||[])) c.mach[m.id]={running:!!m.running, wp:m.wp};
   }
   if(window.__scene&&window.__scene.refreshMachines) window.__scene.refreshMachines();
-  updateDoneBtn(); updateBadge(); renderCraft(); renderBoard();
+  updateDoneBtn(); updateBadge(); syncLbMenu(); renderCraft(); renderBoard();
 }
 /* main.js の poll() はここからエージェント一覧を受け取る（二重ポーリングを避ける） */
 const madeToday = ()=> (NET.last&&NET.last.today.made)||0;

@@ -365,6 +365,55 @@ try {
     eq(bad.json.metric, 'efficiency', '未知の軸は既定（効率）に落とす');
   }
 
+  console.log('\n[7b] グループによる分離');
+  {
+    const { q, one } = await import('../server/db.mjs');
+    const GRP = `grp-${RUN}@example.com`;      // 途中で別グループへ移す人
+    const NOGRP = `nogrp-${RUN}@example.com`;  // どのグループにも入れない人
+    const c = makeClient(), d = makeClient();
+    await c('POST', '/auth/dev', { form: { email: GRP } });
+    await d('POST', '/auth/dev', { form: { email: NOGRP } });
+    const cid = (await one(`SELECT id FROM users WHERE email=$1`, [GRP])).id;
+    const did = (await one(`SELECT id FROM users WHERE email=$1`, [NOGRP])).id;
+
+    const joined = await one(
+      `SELECT g.name FROM group_members m JOIN groups g ON g.id = m.group_id
+        WHERE m.user_id=$1`, [cid]);
+    eq(joined?.name, 'bravesoft', 'アカウント作成時に既定グループへ自動で入る');
+
+    // 成績が無い人はそもそも一覧に出ないので、順位に載るだけの行を入れておく
+    await q(`INSERT INTO scorecard_daily(user_id, day, lines_added, commits)
+             VALUES ($1, CURRENT_DATE, 500, 5)
+             ON CONFLICT (user_id, day) DO UPDATE SET lines_added=500`, [cid]);
+    const same = await a('GET', '/api/leaderboard?period=all&limit=200');
+    ok(same.json.scorecard.some((x) => x.email === GRP), '同じグループの人は一覧に出る');
+
+    // 別グループへ移すと、成績はそのままでも一覧から消える
+    await q(`INSERT INTO groups(name) VALUES ($1) ON CONFLICT (name) DO NOTHING`, [`t-${RUN}`]);
+    await q(`DELETE FROM group_members WHERE user_id=$1`, [cid]);
+    await q(`INSERT INTO group_members(group_id, user_id) SELECT id, $2 FROM groups WHERE name=$1`,
+      [`t-${RUN}`, cid]);
+    const moved = await a('GET', '/api/leaderboard?period=all&limit=200');
+    ok(!moved.json.scorecard.some((x) => x.email === GRP), '別グループの人は一覧から消える');
+    ok(moved.json.scorecard.some((x) => x.email === EMAIL), '自分は引き続き載っている');
+    // 移された本人の側からは、自分だけが見えて元のグループの人は見えない
+    const cLb = await c('GET', '/api/leaderboard?period=all&limit=200');
+    ok(!cLb.json.scorecard.some((x) => x.email === EMAIL), '移った先からは元のグループの人が見えない');
+
+    // どのグループにも入っていない人には出さない（画面はメニュー項目ごと隠す）
+    await q(`DELETE FROM group_members WHERE user_id=$1`, [did]);
+    // 自動追加は「アカウント作成時」だけ。外した人が再ログインで戻らないこと
+    await d('POST', '/auth/dev', { form: { email: NOGRP } });
+    eq(await one(`SELECT count(*)::int AS n FROM group_members WHERE user_id=$1`, [did])
+      .then((r) => r.n), 0, '一度外した人は再ログインしても既定グループへ戻らない');
+    const st = await d('GET', '/api/state');
+    eq(st.json.me.hasGroup, false, 'グループ未所属は /api/state の me.hasGroup が false');
+    const lb = await d('GET', '/api/leaderboard?period=all');
+    eq(lb.status, 403, 'グループ未所属はリーダーボードを取れない（403）');
+    eq((await a('GET', '/api/state')).json.me.hasGroup, true,
+      '所属している人は me.hasGroup が true');
+  }
+
   console.log('\n[8] ポーリングの軽量化');
   {
     const full = await a('GET', '/api/state');
