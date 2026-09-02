@@ -50,7 +50,13 @@ function applyBg(k){
 }
 const paletteEl=document.getElementById('palette');
 let editCat='bg', editSel=null; window.__editSel=null;
-let selMode=false, selN=0;                       // 収納の複数選択モードと選択数
+/* 収納の複数選択モードの正はシーン(scene/edit.mjs の selectMode)。ここでは控えを持たない:
+   シーン側は編集モードを抜けるときに自分で選択モードも解除する(toggleEdit)ので、
+   こちらが別に true/false を覚えていると「パレットは選択モードのUI・シーンは解除済み」
+   という噛み合わない状態になり、床の装飾をクリックしても選べなくなる。
+   選択数(selN)だけは表示用にシーンから受け取って控える(__selChanged)。 */
+const inSelMode=()=>!!(window.__scene&&window.__scene.selectMode);
+let selN=0;
 let propFilter=null;                             // 装飾の絞り込みテーマ(null=すべて / ''=汎用)
 let _paletteView=null;                           // 最後に描いた一覧の種類。切り替わったときだけスクロールを戻す
 export function renderPalette(){
@@ -65,7 +71,7 @@ export function renderPalette(){
       themeIcon(k)}<small>${BG_META[k].n}</small></div>`).join('');
   } else if(editCat==='prop'){
     const s=window.__scene, placedN=s?s.stowables().length:0;
-    if(selMode){ hint=`床の装飾をクリックで選択（もう一度クリックで解除）・ ${selN}個 選択中`;
+    if(inSelMode()){ hint=`床の装飾をクリックで選択（もう一度クリックで解除）・ ${selN}個 選択中`;
       items=`<div class="phint" style="padding:8px">選択モード中です。戻したい装飾を床でクリックしてください。</div>`;
     } else {
       hint=(editSel?'床をクリックで設置':'在庫から選んで床をクリックで設置')
@@ -86,7 +92,7 @@ export function renderPalette(){
       fil=`<span class="c ${propFilter===null?'on':''}" data-pfil="*">すべて <span style="color:#9fb0c0">${allN}</span></span>`+chips.join('');
     }
     // 収納(設置済みを在庫に戻す)。位置は失われるが、在庫に戻るので置き直せる
-    acts = selMode
+    acts = inSelMode()
       ? `<span class="c ${selN?'on':''}" data-stow="sel">${uic('box')} 選択した${selN}個を収納</span><span class="c" data-selmode="0">✖ 選択をやめる</span>`
       : `<span class="c" data-stow="all">${uic('box')} すべて収納 (${placedN})</span><span class="c" data-selmode="1">☑️ 選んで収納</span>`;
   } else { hint=(editSel?'床をクリックで設置（Rキーで向き切替）':'在庫から選んで床をクリックで設置。マス数ぶんの空きが必要です')
@@ -101,7 +107,7 @@ export function renderPalette(){
     <div class="pitems">${items}</div>${acts?`<div class="pcat">${acts}</div>`:''}<div class="phint">${hint}</div>`);
   // 一覧そのものが別物になったとき（カテゴリ/絞り込み/選択モードの切替）だけ先頭に戻す。
   // 設置や購入での描き直しではスクロール位置を保つ
-  const view=`${editCat}/${propFilter}/${selMode?1:0}`;
+  const view=`${editCat}/${propFilter}/${inSelMode()?1:0}`;
   if(view!==_paletteView){ _paletteView=view; const it=paletteEl.querySelector('.pitems'); if(it) it.scrollTop=0; }
   paletteEl.querySelectorAll('[data-pclose]').forEach(el=>el.onclick=()=>toggleEditMode());
   paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; setSelMode(false); renderPalette(); });
@@ -112,9 +118,14 @@ export function renderPalette(){
   paletteEl.querySelectorAll('[data-place]').forEach(el=>el.onclick=()=>{ const p=el.dataset.place.split(':'); editSel={kind:p[0],variant:p[1]||null}; window.__editSel=editSel; renderPalette(); });
 }
 function setSelMode(on){ const s=window.__scene; if(!s) return;
-  selMode=!!on; selN=0; s.setSelectMode(selMode);
-  if(selMode){ editSel=null; window.__editSel=null; }   // 選択中は誤って設置しないように
+  selN=0; s.setSelectMode(!!on);                        // 正はシーン側(inSelMode で読み戻す)
+  if(on){ editSel=null; window.__editSel=null; }        // 選択中は誤って設置しないように
 }
+/* 床で選んだ数をシーンから受け取る(scene/edit.mjs の _notifySel)。選択の正はシーン側が持ち、
+   こちらは表示のために数だけ控える。__editSel と同じく、パレットの状態はパレットが持つ:
+   selN は このモジュールのローカル変数なので、外のファイルからは代入できない
+   (ESM は常に strict mode。app.mjs に置いていた頃は ReferenceError で毎回落ちていた)。 */
+window.__selChanged=(n)=>{ selN=n|0; renderPalette(); };
 // 収納 = 設置済みの装飾を在庫に戻す(位置は失われるが置き直せる)
 function stow(mode){ const s=window.__scene; if(!s) return;
   let n=0;
