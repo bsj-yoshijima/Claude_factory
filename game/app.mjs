@@ -167,8 +167,8 @@ function applyOwned(){ const s=window.__scene; if(!s)return;
   }
   reconcileStock(); saveGame();
   s.setSkyTheme(G.bg); s.setFloor(G.floor); s.applySkins(G.skins); }
-/* ===== 編集パレット: 大項目→在庫から選ぶ→床クリックで設置 ===== */
-window.__selChanged=(n)=>{ selN=n; renderPalette(); };
+/* ===== 編集パレット: 大項目→在庫から選ぶ→床クリックで設置 =====
+   __selChanged(収納の選択数)は ui/palette.mjs 側にある。数を持っているのがあちらなので。 */
 window.renderPalette=renderPalette;
 window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
   if(availN(sel.kind,sel.variant)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }

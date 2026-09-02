@@ -108,7 +108,7 @@ export class Main extends Phaser.Scene {
   }
   /* ===== 配置レジストリ（位置指定・移動・撤去に対応。編集画面の土台） =====
      製造機だけが複数マス(1〜5)を占有する。占有マスは cellsOf() が唯一の定義。 */
-  _remake(e){ this._detach(e); this._makeObjs(e); if(this.editMode) this._enableDrag(e); }
+  _remake(e){ this._detach(e); this._makeObjs(e); this._syncHit(e); }
 
   /* ---- 占有・設置可否 ---- */
   _syncOcc(){ this.occ.clear(); this.rugOcc.clear();
@@ -182,7 +182,7 @@ export class Main extends Phaser.Scene {
     const e={ id: extra.id||('o'+(this._oid=(this._oid||0)+1)), kind, variant, lvl:extra.lvl||1,
       cell:{c:cell.c,r:cell.r}, dir, slots:(kind==='machine'? (extra.slots||[]) : undefined) };
     this._makeObjs(e); this.placed.push(e); this._syncOcc();
-    if(this.editMode) this._enableDrag(e);
+    this._syncHit(e);
     if(!extra.silent){ const p=cellXY(cell.c,cell.r); this._spawnPop(p.x,p.y); }
     return e.id;
   }
@@ -204,7 +204,7 @@ export class Main extends Phaser.Scene {
   moveItem(id,c,r){ const e=this.placed.find(x=>x.id===id); if(!e)return false;
     if(!this.canPlace(e.kind,c,r,{variant:e.variant,dir:e.dir,ignoreId:id})) return false;
     this._detach(e); e.cell={c,r}; this._makeObjs(e); this._syncOcc();
-    if(this.editMode) this._enableDrag(e); return true; }
+    this._syncHit(e); return true; }
   /* 装飾品を90°回転。1×2 の物は占有マスも入れ替わる。絵は左右反転で向きが変わる
      (アイソメでは水平反転が90度回転に相当。machine-art.mjs の propImage 参照)。
      1×1 の物は形が変わらないので、絵の反転だけが効く。 */
@@ -212,13 +212,13 @@ export class Main extends Phaser.Scene {
     const nd=(e.dir==='v')?'u':'v';
     if(!this.canPlace('prop',e.cell.c,e.cell.r,{variant:e.variant,dir:nd,ignoreId:id})) return false;
     this._detach(e); e.dir=nd; this._makeObjs(e); this._syncOcc();
-    if(this.editMode) this._enableDrag(e); return true; }
+    this._syncHit(e); return true; }
   /* 製造機を90°回転(u軸⇔v軸)。回した先が空いていなければ何もしない */
   rotateMachine(id){ const e=this.placed.find(x=>x.id===id&&x.kind==='machine'); if(!e) return false;
     const nd=(e.dir==='v')?'u':'v';
     if(!this.canPlace('machine',e.cell.c,e.cell.r,{variant:e.variant,dir:nd,ignoreId:id})) return false;
     this._detach(e); e.dir=nd; this._makeObjs(e); this._syncOcc();
-    if(this.editMode) this._enableDrag(e); return true; }
+    this._syncHit(e); return true; }
   /* ===== 製造機の移動(掴んで置き直す) =====
      複数マスなのでドラッグは無効。設定パネルの「移動」から掴み、床クリックで確定する。
      移動モード中: カーソルに全マスのプレビューが追従 / R=回転 / Esc・本体クリック=キャンセル */

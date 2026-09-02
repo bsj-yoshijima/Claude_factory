@@ -278,7 +278,11 @@ export const MachineArt = {
         objs.push(im); e._lit.push(im); this.lit.push({sp:im,u,v});
       });
       artTop=imy-dh; artMidX=imx;
+      /* クリック/掴みの当たり判定に使う絵の置き場所(左上と大きさ)。筐体の箱だけで判定すると
+         箱より横に広い部分(天面の飾り・張り出したシュート)が押せない。edit.mjs _machHit 参照。 */
+      e._artHit={ key, x:L, y:artTop, w:dw, h:dh };
     } else {
+      e._artHit=null;   // 手続き描画は絵が無い。箱のシルエットがそのまま見た目
       HG = MACH_GEO.height*CELL;
       const up=(q)=>({x:q.x, y:q.y-HG});
       // 手続き描画もマスごとに分ける。継ぎ目に線や内壁が出ないよう、外周の面/辺/角だけ描く
