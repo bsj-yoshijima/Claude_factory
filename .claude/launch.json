@@ -7,6 +7,14 @@
       "runtimeArgs": ["run", "dev"],
       "port": 4321,
       "autoPort": true
+    },
+    {
+      "//": "ローカル検証用。dev は --env-file-if-exists=.env を通すので、.env がある環境では共有本番DB(Neon)に繋がる。こちらは .env を読まず、db.mjs 既定の localhost:55432(docker) に落ちる。",
+      "name": "dev-local",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/index.mjs"],
+      "port": 4321,
+      "autoPort": true
     }
   ]
 }
