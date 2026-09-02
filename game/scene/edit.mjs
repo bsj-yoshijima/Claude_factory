@@ -40,9 +40,12 @@ export const Edit = {
       const c=Phaser.Math.Clamp(Math.floor(uv.u*GU-OFF_U),0,GU-1), r=Phaser.Math.Clamp(Math.floor(uv.v*GV-OFF_V),0,GV-1);
       // 移動モード中は設定パネルも新規設置も抑止。床クリック=移動先の確定
       if(this.moveId){ this._placedPtr=true; this._moveDrop(c,r); return; }
-      // 床マスの外(筐体の高さぶん)を掴んだときも拾えるよう、当たり判定に出ている製造機も見る
+      /* 筐体そのものを指しているならそれを最優先で拾う。床のマスは当てにならない:
+         製造機は背が高く、絵は自分のマスよりずっと上に描かれるので、筐体を指しても
+         カーソル下の床は2〜3マス奥の別マス(空き、または後ろの製造機)になる。
+         床マス経由は、絵より横に広い接地菱形の端を突いたときの取りこぼし用に残す。 */
       const hit=(over&&over.length&&over[0]&&over[0]._e)||null;
-      const m=this.machineAtCell(c,r) || ((hit&&hit.kind==='machine')?hit:null);
+      const m=((hit&&hit.kind==='machine')?hit:null) || this.machineAtCell(c,r);
       /* 通常モードの製造機クリックは素材パネル(素材設定がコア機能なので)。
          編集モード中は「選択」だけにする。編集中にパネルが出ると、並べ替えの最中に
          別の作業のダイアログが割り込むことになる。 */
@@ -163,19 +166,57 @@ export const Edit = {
       if(window.__layoutChanged)window.__layoutChanged();
       if(this.pickId===e.id) this._drawPick(); });
   }
-  /* 製造機の掴み手。main は Graphics で当たり判定を持たないので、占有マスの外周＋筐体の高さぶんの
-     多角形(見た目のシルエット)を渡す。A(最奥) B C(最手前) D の上辺と手前2面を結んだ6角形。 */,
+  /* 製造機の掴み手。main は Graphics で当たり判定を持たないので、見た目そのものを渡す。
+     判定は「筐体の箱」と「絵の不透明なドット」の和(_machHitTest)。
+       箱 = 占有マスの外周＋筐体の高さぶんの6角形。A(最奥) B C(最手前) D の上辺と手前2面を結ぶ。
+     箱だけでは足りない: 絵は箱より横に広く(s2 で 84px 対 72px)、天面の飾りや張り出した
+     シュートが箱の外に出る。実測で絵の不透明ドットの 11% が箱から漏れていた。
+     逆に絵だけでも足りない: 透明なドットの隙間や、絵より広い接地菱形の端で空振りする。 */,
   _machHit(e){ const [A,B,C,D]=this._machFootprint(e), h=e._hgt||0;
-    return new Phaser.Geom.Polygon([A.x,A.y-h, B.x,B.y-h, B.x,B.y, C.x,C.y, D.x,D.y, D.x,D.y-h]); },
-  // 通常は「ドラッグで移動」、収納の選択モード中は「クリックで選択」に付け替える
-  _enableDrag(e){ const m=e.main; if(!m)return; m._e=e;
-    if(e.kind==='machine') m.setInteractive({ hitArea:this._machHit(e), hitAreaCallback:Phaser.Geom.Polygon.Contains, useHandCursor:true });
-    else m.setInteractive({useHandCursor:true});
+    return { box:new Phaser.Geom.Polygon([A.x,A.y-h, B.x,B.y-h, B.x,B.y, C.x,C.y, D.x,D.y, D.x,D.y-h]),
+      art:e._artHit||null }; },
+  /* main は素の Graphics(変形なし)なので、渡ってくる x,y はそのまま画面座標。 */
+  _machHitTest(hit,x,y){
+    if(Phaser.Geom.Polygon.Contains(hit.box,x,y)) return true;
+    const a=hit.art; if(!a) return false;
+    const px=Math.floor(x-a.x), py=Math.floor(y-a.y);
+    if(px<0||py<0||px>=a.w||py>=a.h) return false;
+    const mk=this._machMask(a.key);
+    return !!(mk && mk.m[py*mk.w+px]); },
+  /* 絵の不透明ドットの表。テクスチャ1枚につき1回だけ作って使い回す:
+     Phaser の getPixelAlpha は毎回 1×1 の canvas に描き直すので、
+     ポインタが動くたびに(=当たり判定のたびに)呼べる代物ではない。 */
+  _machMask(key){ this._mMask=this._mMask||{};
+    if(key in this._mMask) return this._mMask[key];
+    let out=null;
+    try{
+      const src=this.textures.get(key).getSourceImage(), w=src.width, h=src.height;
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      const cx=cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(src,0,0);
+      const d=cx.getImageData(0,0,w,h).data, m=new Uint8Array(w*h);
+      for(let i=0;i<m.length;i++) m[i]=(d[i*4+3]>16)?1:0;
+      out={w,h,m};
+    }catch(_){ out=null; }   // 読めなければ箱だけで判定する(今までどおり)
+    return (this._mMask[key]=out); },
+  /* 当たり判定の付け替え。今のモードを見て自分で決めるので、設置・移動・回転・
+     モード切替のあとは無条件にこれを呼べばよい。
+       製造機  … 常に筐体のシルエットで受ける(通常モード=素材パネル / 編集中=選択・ドラッグ)
+       装飾品等 … 編集中だけ(通常モードでは触れない物なので当たり判定も持たせない)
+     収納の選択モード中は「クリックで選択」に付け替える。 */
+  _syncHit(e){ const m=e.main; if(!m)return; m._e=e;
     m.removeAllListeners('pointerdown');
-    const selectable = this.selectMode && STOWABLE.includes(e.kind);
-    this.input.setDraggable(m, !this.selectMode);
-    if(selectable) m.on('pointerdown', ()=>this.toggleSelect(e.id)); },
-  _disableDrag(e){ const m=e.main; if(!m)return; this.input.setDraggable(m,false); m.removeAllListeners('pointerdown'); m.disableInteractive(); m._e=null; },
+    if(e.kind==='machine'){
+      /* 絵の見た目で受ける。床のマスから引くと、背の高い筐体は絵と押せる場所が食い違い、
+         本体をクリックしても反応しない。callback は this を渡してくれないので束ねる。 */
+      m.setInteractive({ hitArea:this._machHit(e), useHandCursor:true,
+        hitAreaCallback:(ha,x,y)=>this._machHitTest(ha,x,y) });
+    } else if(this.editMode){
+      m.setInteractive({useHandCursor:true});
+    /* setDraggable は m.input を無条件に触るので、一度も setInteractive していない絵
+       (通常モードで置いたばかりの装飾品)に投げると落ちる。存在を見てから外す。 */
+    } else { if(m.input) this.input.setDraggable(m,false); m.disableInteractive(); m._e=null; return; }
+    this.input.setDraggable(m, this.editMode && !this.selectMode);
+    if(this.selectMode && STOWABLE.includes(e.kind)) m.on('pointerdown', ()=>this.toggleSelect(e.id)); },
   /* ===== 編集中の「選択中」 =====
      置いてある物をクリックすると選ばれ、占有マスが光り、その上にキーの案内が出る。
      window.__editSel(パレットで選んだ品目)や sel(収納の複数選択)とは別物。 */
@@ -256,14 +297,14 @@ export const Edit = {
       if(this._mdrag){ const dg=this.placed.find(x=>x.id===this._mdrag.id); this._mdrag=null; if(dg) this._snapBack(dg); } }
     this.trash.setVisible(this.editMode && !this.selectMode);
     if(this.hoverGfx){ this.hoverGfx.clear(); this.hoverGfx.setVisible(false); }
-    for(const e of this.placed){ this.editMode?this._enableDrag(e):this._disableDrag(e); } return this.editMode; },
+    for(const e of this.placed) this._syncHit(e); return this.editMode; },
   /* ===== 収納(在庫に戻す) ===== */
   stowables(){ return this.placed.filter(e=>STOWABLE.includes(e.kind)); },
   stowAll(){ const list=this.stowables(); for(const e of list) this.removeItem(e.id); this._drawSel(); return list.length; },
   setSelectMode(on){ const v=!!on; if(v===!!this.selectMode) return v;
     this.selectMode=v; this.sel=new Set(); this._clearPick();
     this.trash.setVisible(this.editMode && !v);
-    for(const e of this.placed) if(this.editMode) this._enableDrag(e);
+    for(const e of this.placed) this._syncHit(e);
     this._drawSel(); this._notifySel(); return v; },
   toggleSelect(id){ if(!this.sel) this.sel=new Set();
     this.sel.has(id) ? this.sel.delete(id) : this.sel.add(id);

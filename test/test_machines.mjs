@@ -64,7 +64,11 @@ const Phaser = {
 };
 
 const grad = { addColorStop(){} };
-const ctx2d = new Proxy({}, { get:(t,k)=> k==='createRadialGradient' ? ()=>grad : ()=>{}, set:()=>true });
+/* 当たり判定のマスク(edit.mjs _machMask)は canvas から実データを読む。
+   スタブの絵は「全面不透明の矩形」として返す = 絵の矩形ぜんぶが掴める、という前提でテストできる。 */
+const ctx2d = new Proxy({}, { get:(t,k)=> k==='createRadialGradient' ? ()=>grad
+  : k==='getImageData' ? (x,y,w,h)=>({ data:new Uint8ClampedArray(Math.max(0,w*h*4)).fill(255) })
+  : ()=>{}, set:()=>true });
 const document = { createElement:()=>({ getContext:()=>ctx2d, width:0, height:0 }),
   getElementById:()=>null };
 const location = { search:'' };
@@ -86,7 +90,7 @@ sandbox.window = window; sandbox.globalThis = sandbox;
    import より先に globalThis へスタブを置いておく。 */
 Object.assign(globalThis, sandbox);
 const { Main } = await import('../game/scene/main.mjs');
-const { cellXY } = await import('../game/scene/iso.mjs');
+const { cellXY, screenToIso } = await import('../game/scene/iso.mjs');
 const s = new Main();
 // Scene の Phaser 提供メンバをスタブ
 s.load = new Proxy({}, { get:()=>()=>{} });
@@ -322,14 +326,27 @@ console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と�
   // -- 掴める(当たり判定) --
   ok(de.main && de.main._e===de, '製造機の main に掴み手(_e)がついている');
   const hit=s._machHit(de);
-  ok(hit.points.length===6, '当たり判定は占有マス外周＋高さの6角形');
+  const inHit=(x,y)=>s._machHitTest(hit,x,y);
+  ok(hit.box.points.length===6, '当たり判定の箱は占有マス外周＋高さの6角形');
   const c0=pt(1,1), c2=pt(3,1);
-  ok(Phaser.Geom.Polygon.Contains(hit,c0.x,c0.y), '先頭マスの中心を掴める');
-  ok(Phaser.Geom.Polygon.Contains(hit,c2.x,c2.y), '3マス目(占有の端)の中心も掴める');
-  ok(Phaser.Geom.Polygon.Contains(hit,c0.x,c0.y-de._hgt*0.6), '筐体の高さぶん(床の外)も掴める');
-  ok(!Phaser.Geom.Polygon.Contains(hit,pt(8,8).x,pt(8,8).y), '離れたマスは掴めない');
+  ok(inHit(c0.x,c0.y), '先頭マスの中心を掴める');
+  ok(inHit(c2.x,c2.y), '3マス目(占有の端)の中心も掴める');
+  ok(inHit(c0.x,c0.y-de._hgt*0.6), '筐体の高さぶん(床の外)も掴める');
+  ok(!inHit(pt(8,8).x,pt(8,8).y), '離れたマスは掴めない');
   const hit2=s._machHit({kind:'machine',variant:'s2',dir:'u',cell:{c:5,r:5},_hgt:de._hgt});
-  ok(!Phaser.Geom.Polygon.Contains(hit2,c0.x,c0.y), '別の製造機の当たり判定には入らない');
+  ok(!s._machHitTest(hit2,c0.x,c0.y), '別の製造機の当たり判定には入らない');
+  /* 箱だけでは絵の四隅が漏れる(絵は箱より横に広い)。絵の不透明ドットも当たり判定に入れる。
+     これが無いと、筐体そのものをクリックしても反応しない領域が絵の1割ほど残る。 */
+  ok(!!de._artHit, '絵で描く製造機は当たり判定用に絵の置き場所を控えている');
+  { const a=de._artHit;
+    ok(a.w > (hit.box.points[1].x - hit.box.points[4].x),
+      `絵は箱より横に広い(絵 ${a.w}px / 箱 ${Math.round(hit.box.points[1].x-hit.box.points[4].x)}px)`);
+    // 絵の左上・右上の角(箱の斜めの屋根から外れる場所)。箱だけの判定では漏れていた
+    const corners=[[a.x+1, a.y+1],[a.x+a.w-1, a.y+1]];
+    for(const [x,y] of corners){
+      ok(!Phaser.Geom.Polygon.Contains(hit.box,x,y), '絵の上の角は箱の外(前提の確認)');
+      ok(inHit(x,y), '絵の上の角も掴める(絵のドットで拾う)'); }
+    ok(!inHit(a.x-4, a.y-4), '絵の外(左上のさらに外)は掴めない'); }
 
   // -- 置ける先へドラッグして移動 --
   const l0=layoutN;
@@ -395,6 +412,24 @@ console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と�
     ok(cellOf(mm)==='1,8', '編集モード外ではドラッグで動かない'); }
   opened=null; { const a=pt(1,8); down(a.x,a.y); }
   ok(opened===mm, '編集モード外は押した時点で設定パネルが開く(従来どおり)');
+
+  /* -- 通常モードでも筐体そのものがクリックを受ける --
+     製造機は背が高く、絵は自分のマスよりずっと上に描かれる。以前は通常モードで
+     当たり判定を付けていなかったため、床のマスからしか引けず、筐体を指しても
+     カーソル下の床は奥の空きマスになって空振りしていた(実測で絵の 57%)。 */
+  { const e=ent(mm);
+    ok(!!(e.main&&e.main._e===e), '通常モードでも製造機の main に掴み手(_e)がついている');
+    // 筐体の高さぶん上=カーソル下の床は占有マスではない、という前提を確かめる
+    const own=new Set(s.cellsOf(e).map(q=>q.c+','+q.r));
+    const up={x:pt(1,8).x, y:pt(1,8).y - e._hgt*0.8};
+    const uv=screenToIso(up.x,up.y);
+    const c=Math.max(0,Math.min(11,Math.floor(uv.u*12))), r=Math.max(0,Math.min(11,Math.floor(uv.v*12)));
+    ok(!own.has(c+','+r), `筐体の上の方は床マス(${c},${r})が占有マスの外(前提の確認)`);
+    ok(s.machineAtCell(c,r)===null, 'その床マスには製造機が居ない(=床経由では引けない)');
+    opened=null; down(up.x,up.y,[]);
+    ok(opened===null, '床マス経由だけでは開かない(この点が空振りしていた)');
+    opened=null; down(up.x,up.y,[e.main]);
+    ok(opened===mm, '筐体を指していれば(当たり判定に出ていれば)設定パネルが開く'); }
 
   // -- 編集を抜けたらドラッグ中の見た目も戻る --
   s.toggleEdit(true);
