@@ -167,22 +167,33 @@ export const Edit = {
       if(this.pickId===e.id) this._drawPick(); });
   }
   /* 製造機の掴み手。main は Graphics で当たり判定を持たないので、見た目そのものを渡す。
-     判定は「筐体の箱」と「絵の不透明なドット」の和(_machHitTest)。
+     判定は「絵の不透明なドット」だけ(_machHitTest)。箱は絵が無いときの控え。
        箱 = 占有マスの外周＋筐体の高さぶんの6角形。A(最奥) B C(最手前) D の上辺と手前2面を結ぶ。
-     箱だけでは足りない: 絵は箱より横に広く(s2 で 84px 対 72px)、天面の飾りや張り出した
-     シュートが箱の外に出る。実測で絵の不透明ドットの 11% が箱から漏れていた。
-     逆に絵だけでも足りない: 透明なドットの隙間や、絵より広い接地菱形の端で空振りする。 */,
+
+     箱を主にしてはいけない。箱は絵より上に出る: 最奥の角を筐体の高さぶん持ち上げるので、
+     頂点が絵の上端より 22px 高くなる(s2 実測)。そこに描かれているのは稼働バッジ
+     (進捗バー・「素材未設定」)で、機械の本体ではない。製造機を隣同士に置くと、
+     手前の機械のこの空の三角が奥の機械の絵に重なり、奥の本体の 10.3% が押せなくなる
+     (s2 を2マス差で並べて実測。奪われた分は全部この空の三角で、絵同士の重なりぶんは0)。
+
+     絵のドットだけで見れば、押せる範囲は見えている本体と正確に一致する。
+     絵より広い接地菱形の端は edit.mjs の pointerdown が machineAtCell() で拾うので、
+     箱で補う必要はない。絵の内部に透明な穴があると空振りするが、用意されている
+     製造機の絵40枚には穴が無い(外周から辿れない透明ドットを数えて確認済み)。 */,
   _machHit(e){ const [A,B,C,D]=this._machFootprint(e), h=e._hgt||0;
     return { box:new Phaser.Geom.Polygon([A.x,A.y-h, B.x,B.y-h, B.x,B.y, C.x,C.y, D.x,D.y, D.x,D.y-h]),
       art:e._artHit||null }; },
-  /* main は素の Graphics(変形なし)なので、渡ってくる x,y はそのまま画面座標。 */
+  /* main は素の Graphics(変形なし)なので、渡ってくる x,y はそのまま画面座標。
+     絵があるならドットだけで判定する。箱に落ちるのは
+       ・手続き描画(絵が無い) … 箱がそのまま見た目
+       ・絵のドットが読めなかった … canvas が使えない環境での保険
+     の2つだけ。 */
   _machHitTest(hit,x,y){
-    if(Phaser.Geom.Polygon.Contains(hit.box,x,y)) return true;
-    const a=hit.art; if(!a) return false;
-    const px=Math.floor(x-a.x), py=Math.floor(y-a.y);
-    if(px<0||py<0||px>=a.w||py>=a.h) return false;
-    const mk=this._machMask(a.key);
-    return !!(mk && mk.m[py*mk.w+px]); },
+    const a=hit.art, mk=a && this._machMask(a.key);
+    if(mk){ const px=Math.floor(x-a.x), py=Math.floor(y-a.y);
+      if(px<0||py<0||px>=a.w||py>=a.h) return false;
+      return !!mk.m[py*mk.w+px]; }
+    return Phaser.Geom.Polygon.Contains(hit.box,x,y); },
   /* 絵の不透明ドットの表。テクスチャ1枚につき1回だけ作って使い回す:
      Phaser の getPixelAlpha は毎回 1×1 の canvas に描き直すので、
      ポインタが動くたびに(=当たり判定のたびに)呼べる代物ではない。 */

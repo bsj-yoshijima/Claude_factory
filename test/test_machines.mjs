@@ -335,8 +335,8 @@ console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と�
   ok(!inHit(pt(8,8).x,pt(8,8).y), '離れたマスは掴めない');
   const hit2=s._machHit({kind:'machine',variant:'s2',dir:'u',cell:{c:5,r:5},_hgt:de._hgt});
   ok(!s._machHitTest(hit2,c0.x,c0.y), '別の製造機の当たり判定には入らない');
-  /* 箱だけでは絵の四隅が漏れる(絵は箱より横に広い)。絵の不透明ドットも当たり判定に入れる。
-     これが無いと、筐体そのものをクリックしても反応しない領域が絵の1割ほど残る。 */
+  /* 絵があるときは「絵の不透明ドット」だけで判定する。箱は絵より横に狭く、かつ上に高い。
+     狭いぶんは絵の四隅(天面の飾りなど)を取りこぼし、高いぶんは本体でない場所を拾う。 */
   ok(!!de._artHit, '絵で描く製造機は当たり判定用に絵の置き場所を控えている');
   { const a=de._artHit;
     ok(a.w > (hit.box.points[1].x - hit.box.points[4].x),
@@ -346,7 +346,42 @@ console.log('\n[13] 製造機のドラッグ&ドロップ（他の設置物と�
     for(const [x,y] of corners){
       ok(!Phaser.Geom.Polygon.Contains(hit.box,x,y), '絵の上の角は箱の外(前提の確認)');
       ok(inHit(x,y), '絵の上の角も掴める(絵のドットで拾う)'); }
-    ok(!inHit(a.x-4, a.y-4), '絵の外(左上のさらに外)は掴めない'); }
+    ok(!inHit(a.x-4, a.y-4), '絵の外(左上のさらに外)は掴めない');
+    /* 箱の頂点は絵の上端より高い。そこには稼働バッジ(進捗バー・「素材未設定」)が
+       描かれていて機械の本体ではないので、押せてはいけない。
+       ここが押せると、製造機を隣同士に置いたとき手前の機械のこの空白が
+       奥の機械の絵に重なり、奥の本体をクリックしても手前が開く。 */
+    const boxTop=Math.min(...hit.box.points.map(p=>p.y));
+    ok(boxTop < a.y, `箱の頂点は絵の上端より高い(前提の確認: 箱 ${Math.round(boxTop)} / 絵 ${Math.round(a.y)})`);
+    const badgeY=(boxTop+a.y)/2;                          // 箱の中・絵の外(バッジが描かれる帯)
+    ok(Phaser.Geom.Polygon.Contains(hit.box, a.x+a.w/2, badgeY), 'バッジの帯は箱の中(前提の確認)');
+    ok(!inHit(a.x+a.w/2, badgeY), 'バッジの帯(絵より上)は押せない'); }
+
+  /* -- 隣同士に置いた製造機がお互いの本体を奪わない --
+     手前の機械の当たり判定が、奥の機械の「絵の外に出ている領域」まで伸びていると、
+     奥の本体をクリックしても手前が開く。絵のドットだけで判定していれば起きない。 */
+  { const bk=s.addPlaced('machine','s2',{cell:{c:6,r:2},dir:'u'});
+    const fr=s.addPlaced('machine','s2',{cell:{c:6,r:4},dir:'u'});
+    const eb=ent(bk), ef=ent(fr), ab=eb._artHit, af=ef._artHit;
+    const hb=s._machHit(eb), hf=s._machHit(ef);
+    ok(ef.main.depth > eb.main.depth, '手前の機械のほうが depth が大きい(前提の確認)');
+    // 奥の絵のうち「手前の絵と重なっていない」点 = 奥が見えている点。手前が拾ってはいけない
+    /* 「手前の絵の中か」は _machHitTest と同じ座標・同じ丸めで見ること。
+       絵の左上は整数座標に乗っていない(af.y=320.19 など)ので、標本点(x+0.5)ではなく
+       整数の x,y で比べると、絵の縁の1行が「絵の外」に見えて誤検出になる。 */
+    const inArt=(a,x,y)=>{ const qx=Math.floor(x-a.x), qy=Math.floor(y-a.y);
+      return qx>=0&&qy>=0&&qx<a.w&&qy<a.h; };
+    let probed=0, stolen=0;
+    for(let y=Math.floor(ab.y); y<ab.y+ab.h; y+=2) for(let x=Math.floor(ab.x); x<ab.x+ab.w; x+=2){
+      const sx=x+0.5, sy=y+0.5;
+      if(inArt(af,sx,sy)) continue;                       // そこは手前が見えているので手前で正しい
+      probed++;
+      if(s._machHitTest(hf,sx,sy)) stolen++;
+    }
+    ok(probed>0, `奥だけが見えている点がある(前提の確認: ${probed}点)`);
+    ok(stolen===0, `奥だけが見えている点を手前が奪わない(奪われた数 ${stolen}/${probed})`);
+    ok(s._machHitTest(hb, ab.x+ab.w/2, ab.y+ab.h/2), '奥の機械は自分の本体で掴める');
+    s.removeItem(bk); s.removeItem(fr); }
 
   // -- 置ける先へドラッグして移動 --
   const l0=layoutN;
