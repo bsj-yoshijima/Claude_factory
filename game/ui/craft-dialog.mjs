@@ -6,7 +6,7 @@ import { renderBoard, renderCraft, setPending, toggleMachine, updateDoneBtn, wpS
 import { NET, applyFactory } from '../net.mjs';
 import { craftState, machState, machines, machinesSorted, runningCount, snapLayout } from '../state.mjs';
 import { openCollection } from './collection.mjs';
-import { openDialog, toast } from './dialog.mjs';
+import { _dlg, openDialog, toast } from './dialog.mjs';
 import { genreIcon, matIcon, prodCard, rarChips, uic, updateBadge, yen } from './parts.mjs';
 
 export let _craftPick=null;                       // {mid, idx} = いま原材料を選んでいるマス
@@ -81,25 +81,46 @@ function setMat(machineId, slotIdx, matId){
   toast(matId ? `${MAT[matId].e} ${MAT[matId].n} をセット` : '原材料を外しました');
 }
 // main.js から呼ばれる: 機械の上に出す原材料バッジ / 機械クリック
-export async function openDone(){
-  const r=await NET.call('POST','/api/claim'); if(!r) return;
-  setPending(0); updateDoneBtn();
-  const st=await NET.call('GET','/api/state'); if(st){ NET.last=st; applyFactory(st.factory); }
-  const d=await NET.call('GET','/api/collection');
-  if(d){ const c=craftState(); c.collection=Object.fromEntries(
-    Object.entries(d.collection||{}).map(([k,v])=>[k,v.owned]));
-    c.collectionMeta=d.collection||{}; }
-  updateBadge(); renderBoard();
+/* 🎁完成品の中身。r=null は「まだ /api/claim の返事が来ていない」 */
+function doneBody(r){
+  if(!r) return '<div class="cost" style="padding:12px">読み込み中…</div>';
   const byRar={}; for(const it of r.items) byRar[it.r]=(byRar[it.r]||0)+1;
   const cards=[...r.items].reverse().slice(0,200).map(p=>prodCard(p,{isNew:p.isNew})).join('');
-  const bd=rarChips(byRar);
-  openDialog({ title:`${uic('gift')} 完成品`, subtitle:`${r.items.length}個`,
-    body:`${r.gain?`<div class="invbar" style="font-size:12px">
+  return `${r.gain?`<div class="invbar" style="font-size:12px">
           <span style="color:#9fb0c0">今回の売上<small style="opacity:.75">（加算済み）</small></span>
-          <b style="color:#ffd27a;font-size:19px">${yen(r.gain)}</b>${bd}</div>`
+          <b style="color:#ffd27a;font-size:19px">${yen(r.gain)}</b>${rarChips(byRar)}</div>`
         :`<div class="rowline" style="font-size:11px;color:#9fb0c0">新しく完成した製品はありません。</div>`}
       <div class="rowline" style="font-size:11px;color:#9fb0c0">
         ${r.registered?`${r.registered}個を${uic('collection')}図鑑に登録しました。`:''}NEW は初めて作られた製品です。</div>
-      <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`,
-    actions:[{label:`${uic('collection')} 図鑑を見る`,kind:'ghost',on:()=>openCollection()}] });
+      <div class="pgrid">${cards||'<div class="cost">まだありません</div>'}</div>`;
+}
+/* 二重回収の防止。ホスティング環境では claim の往復に数百msかかるので、
+   その間にもう一度押されると「2回目の空の claim」で中身が消えて見えた。 */
+let _claiming=false;
+export async function openDone(){
+  if(_claiming) return;
+  _claiming=true;
+  /* サーバの返事を待たずに先に枠を出す。押した瞬間に画面が変わらないと
+     「反応していない」と思ってもう一度押されるため、往復の待ちは中で見せる。 */
+  let res=null;
+  const d=openDialog({ title:`${uic('gift')} 完成品`,
+    subtitle:()=>res?`${res.items.length}個`:'',
+    body:()=>doneBody(res),
+    actions:()=>res?[{label:`${uic('collection')} 図鑑を見る`,kind:'ghost',on:()=>openCollection()}]:[] });
+  const r=await NET.call('POST','/api/claim').finally(()=>{ _claiming=false; });
+  if(!r){ if(_dlg===d) d.close(); return; }   // 通信エラーは toast が出る。空の枠は残さない
+  setPending(0); updateDoneBtn();
+  if(_dlg!==d) return;                        // 待っている間に別の画面へ移っていたら描かない
+  res=r; d.refresh();                         // ここまでで中身が出る（往復1回ぶん）
+  /* 💰と図鑑の取り直しは表示に間に合わせる必要がないので、
+     ダイアログを出したあとに並列で回す（直列に待つと開くのがそのぶん遅れる）。 */
+  const [st,col]=await Promise.all([
+    NET.call('GET','/api/state?rev='+NET.rev),
+    NET.call('GET','/api/collection'),
+  ]);
+  if(st){ NET.last=st; applyFactory(st.factory); }
+  if(col){ const c=craftState(); c.collection=Object.fromEntries(
+    Object.entries(col.collection||{}).map(([k,v])=>[k,v.owned]));
+    c.collectionMeta=col.collection||{}; }
+  updateBadge(); renderBoard();
 }
