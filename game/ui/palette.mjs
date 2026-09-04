@@ -50,6 +50,11 @@ function applyBg(k){
 }
 const paletteEl=document.getElementById('palette');
 let editCat='bg', editSel=null; window.__editSel=null;
+/* 在庫から選んだもの(editSel)の解除。selN と同じ理由でここに置く:
+   editSel はこのモジュールのローカル変数なので、外のファイルからは代入できない
+   (ESM は常に strict mode。app.mjs に `editSel=null` と書いてあった頃は
+   在庫を使い切った瞬間に ReferenceError で落ちていた)。解除はこの関数を通す。 */
+export function clearEditSel(){ editSel=null; window.__editSel=null; }
 /* 収納の複数選択モードの正はシーン(scene/edit.mjs の selectMode)。ここでは控えを持たない:
    シーン側は編集モードを抜けるときに自分で選択モードも解除する(toggleEdit)ので、
    こちらが別に true/false を覚えていると「パレットは選択モードのUI・シーンは解除済み」
@@ -110,7 +115,7 @@ export function renderPalette(){
   const view=`${editCat}/${propFilter}/${inSelMode()?1:0}`;
   if(view!==_paletteView){ _paletteView=view; const it=paletteEl.querySelector('.pitems'); if(it) it.scrollTop=0; }
   paletteEl.querySelectorAll('[data-pclose]').forEach(el=>el.onclick=()=>toggleEditMode());
-  paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; editSel=null; window.__editSel=null; setSelMode(false); renderPalette(); });
+  paletteEl.querySelectorAll('.c[data-cat]').forEach(el=>el.onclick=()=>{ editCat=el.dataset.cat; clearEditSel(); setSelMode(false); renderPalette(); });
   paletteEl.querySelectorAll('[data-pfil]').forEach(el=>el.onclick=()=>{ propFilter=el.dataset.pfil==='*'?null:el.dataset.pfil; renderPalette(); });
   paletteEl.querySelectorAll('[data-selmode]').forEach(el=>el.onclick=()=>{ setSelMode(el.dataset.selmode==='1'); renderPalette(); });
   paletteEl.querySelectorAll('[data-stow]').forEach(el=>el.onclick=()=>stow(el.dataset.stow));
@@ -119,7 +124,7 @@ export function renderPalette(){
 }
 function setSelMode(on){ const s=window.__scene; if(!s) return;
   selN=0; s.setSelectMode(!!on);                        // 正はシーン側(inSelMode で読み戻す)
-  if(on){ editSel=null; window.__editSel=null; }        // 選択中は誤って設置しないように
+  if(on) clearEditSel();                                // 選択中は誤って設置しないように
 }
 /* 床で選んだ数をシーンから受け取る(scene/edit.mjs の _notifySel)。選択の正はシーン側が持ち、
    こちらは表示のために数だけ控える。__editSel と同じく、パレットの状態はパレットが持つ:
@@ -156,7 +161,7 @@ export function syncEditMode(){ const on=!!(window.__scene&&window.__scene.editM
   if(_editOn===on) return;                                   // 変化したときだけ描き直す
   _editOn=on; paletteEl.classList.toggle('show',on);
   wrapEl.classList.toggle('editing',on); slideGame();
-  if(on) renderPalette(); else { editSel=null; window.__editSel=null; } }
+  if(on) renderPalette(); else clearEditSel(); }
 export function toggleEditMode(){ if(!window.__scene){ toast('準備中…'); return; }
   const on=window.__scene.toggleEdit(); syncEditMode();
   toast(on?'🔧 編集: パレットで選ぶ→床クリックで設置（Rで向き）/ 設置済みはドラッグで移動・🗑へドラッグで撤去':'編集モードを終了'); }

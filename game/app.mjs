@@ -13,7 +13,7 @@ import { closeOverlay, openDialog, overlay, toast } from './ui/dialog.mjs';
 import { openLb } from './ui/leaderboard.mjs';
 import { morphInto } from './ui/morph.mjs';
 import { openMyPage } from './ui/mypage.mjs';
-import { renderPalette, syncEditMode, toggleEditMode } from './ui/palette.mjs';
+import { clearEditSel, renderPalette, syncEditMode, toggleEditMode } from './ui/palette.mjs';
 import { syncLbMenu, uic, updateBadge } from './ui/parts.mjs';
 import { openRecipes } from './ui/recipes.mjs';
 import { openShop } from './ui/shop.mjs';
@@ -168,12 +168,13 @@ function applyOwned(){ const s=window.__scene; if(!s)return;
   reconcileStock(); saveGame();
   s.setSkyTheme(G.bg); s.setFloor(G.floor); s.applySkins(G.skins); }
 /* ===== 編集パレット: 大項目→在庫から選ぶ→床クリックで設置 =====
-   __selChanged(収納の選択数)は ui/palette.mjs 側にある。数を持っているのがあちらなので。 */
+   __selChanged(収納の選択数)と clearEditSel(選択の解除)は ui/palette.mjs 側にある。
+   状態を持っているのがあちらなので。 */
 window.renderPalette=renderPalette;
 window.__editPlaceAt=(c,r)=>{ const sel=window.__editSel; if(!sel)return;
-  if(availN(sel.kind,sel.variant)<=0){ editSel=null; window.__editSel=null; renderPalette(); return; }
+  if(availN(sel.kind,sel.variant)<=0){ clearEditSel(); renderPalette(); return; }
   const s=window.__scene; const id = s.addPlaced(sel.kind, sel.variant, {cell:{c,r}, dir:s.placeDir});
-  if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.variant)<=0){ editSel=null; window.__editSel=null; } renderPalette(); } };
+  if(id){ snapLayout(); saveGame(); updateBadge(); toast('設置しました'); if(availN(sel.kind,sel.variant)<=0) clearEditSel(); renderPalette(); } };
 /* ===== 製造機の設定パネル: 中身は🏭製造の一覧と同じ行（machRow）。
        違いは「その下に配置（↻回転 / ✥移動）が付く」ことだけ。編集中に機械をクリックで開く ===== */
 window.__openMachine=(id)=>{
