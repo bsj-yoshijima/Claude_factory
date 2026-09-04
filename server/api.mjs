@@ -21,6 +21,11 @@ const bumpRev = (c, userId) =>
     `UPDATE factories SET rev = rev + 1 WHERE user_id=$1`, [userId]);
 
 /* ============================ 工場の現在値 ============================ */
+/* 【tx の中で呼ばないこと】pool の別接続で読むので、トランザクションの中で呼ぶと
+   自分の書き込みが見えない「コミット前の工場」が返る。それをクライアントに返すと
+   game/net.mjs が applyFactory() で G に写すため、保存した直後に画面の状態が
+   保存前へ巻き戻る（rev も古い版に戻るので、次のポーリングが factory 一式を
+   無駄に受け直す）。書き込みを閉じてから読む。 */
 async function factoryOf(userId) {
   const f = await one(`SELECT * FROM factories WHERE user_id=$1`, [userId]);
   const machines = await all(
@@ -116,8 +121,6 @@ export async function postBuy(user, body) {
   const price = GD.priceOf(kind, id);
   if (price == null) return bad(`買えないものです: ${kind}/${id}`);
 
-  /* factoryOf は pool の別接続で読むので、tx の中で呼ぶとコミット前の古い値が返る。
-     購入直後の画面が1回ぶん遅れて見えるので、書き込みを閉じてから読み直す。 */
   const r = await tx(async (c) => {
     const f = (await c.query(
       `SELECT money, bg_owned, floor_owned, series_owned, skin_owned, stock
@@ -175,7 +178,7 @@ export async function postBuy(user, body) {
 
 export async function postLevelUp(user, body) {
   const id = String(body?.id || '');
-  return tx(async (c) => {
+  const r = await tx(async (c) => {
     const m = (await c.query(
       `SELECT lvl FROM machines WHERE id=$1 AND user_id=$2 FOR UPDATE`, [id, user.id])).rows[0];
     if (!m) return bad('その製造機がありません');
@@ -186,8 +189,10 @@ export async function postLevelUp(user, body) {
     await c.query(`UPDATE factories SET money = money - $2 WHERE user_id=$1`, [user.id, cost]);
     await c.query(`UPDATE machines SET lvl = lvl + 1 WHERE user_id=$1 AND id=$2`, [user.id, id]);
     await bumpRev(c, user.id);
-    return jsonOk({ ok: true, factory: await factoryOf(user.id) });
+    return { leveled: true };
   });
+  if (!r?.leveled) return r;                      // bad() がそのまま返ってきた場合
+  return jsonOk({ ok: true, factory: await factoryOf(user.id) });   // コミット後に読む
 }
 
 /* ============================ レイアウト / 機械 ============================ */
@@ -196,7 +201,7 @@ export async function putLayout(user, body) {
   const machines = Array.isArray(body?.machines) ? body.machines : [];
   const props = Array.isArray(body?.props) ? body.props : [];
 
-  return tx(async (c) => {
+  const r = await tx(async (c) => {
     const f = (await c.query(`SELECT stock FROM factories WHERE user_id=$1 FOR UPDATE`,
       [user.id])).rows[0];
     const stock = f.stock || {};
@@ -227,8 +232,10 @@ export async function putLayout(user, body) {
     await c.query(`UPDATE factories SET props=$2 WHERE user_id=$1`,
       [user.id, JSON.stringify(props)]);
     await bumpRev(c, user.id);
-    return jsonOk({ ok: true, factory: await factoryOf(user.id) });
+    return { saved: true };
   });
+  if (!r?.saved) return r;                        // bad()（在庫不足）がそのまま返ってきた場合
+  return jsonOk({ ok: true, factory: await factoryOf(user.id) });   // コミット後に読む
 }
 
 /** マスに素材をセットする。素材を変えても WP はリセットしない（旧実装と同じ） */
